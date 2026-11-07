@@ -86,6 +86,11 @@ func (a *app) start() {
 	mygo.App.OnQuit(func() { db.Close() })
 	applyTheme(a.atlas.theme(db))
 
+	// Before the windows: the main page loads the wallpaper from it.
+	if err := mygo.Protocol.HandleFunc(wallpaperScheme, a.serveWallpaper); err != nil {
+		log.Println("wallpaper scheme:", err)
+	}
+
 	throttling := mygo.ThrottlingOn
 	if a.smokeReport != "" {
 		throttling = mygo.ThrottlingOff // the smoke test drives hidden pages
@@ -102,6 +107,7 @@ func (a *app) start() {
 		TitleBarStyle:   mygo.TitleBarHidden,
 		TitleBarHeight:  titleBarHeight,
 		BackgroundColor: mainBackground,
+		Opacity:         float64(windowOpacity(db)) / 100,
 		Page:            mygo.PageOptions{BackgroundThrottling: throttling},
 	})
 	capture := mygo.NewWindow(mygo.WindowOptions{

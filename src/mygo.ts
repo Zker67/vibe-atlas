@@ -37,6 +37,20 @@ export interface Counts {
 }
 
 /**
+ * Glass is the frosted glass of the main window's frame (title bar and
+ * sidebar) and of its content panel, over a background or a picture. It
+ * does not change the opacity of the whole window (WindowOpacity).
+ */
+export interface Glass {
+  /** Blur of the content panel, 0 to 60 px; the frame blurs 60 % of it. */
+  blur: number;
+  /** Panel is the opacity of the content panel, 0 to 100 %. */
+  panel: number;
+  /** Frame is the opacity of the frame, 0 to 100 %. */
+  frame: number;
+}
+
+/**
  * Item is one thing to do in a project: an improvement, a bug or a new
  * feature.
  */
@@ -73,6 +87,18 @@ export type ItemStatus = "todo" | "doing" | "done";
 
 /** ItemType is the kind of an item. */
 export type ItemType = "improve" | "bug" | "feature";
+
+/**
+ * LookDefaults are the looks the app has out of the box, which the
+ * settings reset to.
+ */
+export interface LookDefaults {
+  wallpaperLook: WallpaperLook;
+  glass: Glass;
+  windowOpacity: number;
+  /** MinWindowOpacity is the lowest opacity the window takes, in %. */
+  minWindowOpacity: number;
+}
 
 /**
  * Module is a part of a project, such as its weapons, its characters or
@@ -164,6 +190,18 @@ export interface Settings {
   effects: boolean;
   /** Background is the moving background the effects show. */
   background: Background;
+  /**
+   * Wallpaper is the picture behind the main window, under the moving
+   * background; with one, the frame and panel are frosted glass even
+   * while the effects are off.
+   */
+  wallpaper: Wallpaper;
+  /** Glass is the frosted glass of the frame and panel. */
+  glass: Glass;
+  /** WindowOpacity is the opacity of the whole main window, 40 to 100 %. */
+  windowOpacity: number;
+  /** LookDefaults are the looks the app has out of the box. */
+  lookDefaults: LookDefaults;
   /** DataDir is the folder of the database. */
   dataDir: string;
   /** CurrentProjectID is the project open in the main window, or 0. */
@@ -177,6 +215,30 @@ export type Theme = "system" | "light" | "dark";
 export interface TypeStats {
   type: ItemType;
   counts: Counts;
+}
+
+/** Wallpaper is the picture behind the main window. */
+export interface Wallpaper {
+  /** URL is where the page loads the picture from, or "" when there is none. */
+  url: string;
+  /** Name is the name of the file the user picked. */
+  name: string;
+  look: WallpaperLook;
+}
+
+/** WallpaperLook is how the picture behind the main window shows. */
+export interface WallpaperLook {
+  /** Enabled shows the picture; off, it is kept for later. */
+  enabled: boolean;
+  /** Blur of the picture, 0 to 40 px. */
+  blur: number;
+  /** Opacity of the picture over the ground, 0 to 100 %. */
+  opacity: number;
+  /** Scale of the picture: 0 covers the window, else 20 to 300 % of it. */
+  scale: number;
+  /** X and Y place the picture, 0 to 100 % across and down. */
+  x: number;
+  y: number;
 }
 
 // ---- Services ----
@@ -202,9 +264,20 @@ export const Atlas = {
   chooseProjectFolder(id: number): Promise<Project> {
     return call("Atlas.ChooseProjectFolder", id);
   },
+  /**
+   * ChooseWallpaper asks for a picture and puts it behind the main window.
+   * It returns the settings unchanged when the user cancels.
+   */
+  chooseWallpaper(): Promise<Settings> {
+    return call("Atlas.ChooseWallpaper");
+  },
   /** ClearProjectFolder unbinds a project from its folder. */
   clearProjectFolder(id: number): Promise<Project> {
     return call("Atlas.ClearProjectFolder", id);
+  },
+  /** ClearWallpaper removes the picture behind the main window. */
+  clearWallpaper(): Promise<Settings> {
+    return call("Atlas.ClearWallpaper");
   },
   /** CopyItem copies an item's title and notes as Markdown, to paste to an AI. */
   copyItem(id: number): Promise<void> {
@@ -294,6 +367,13 @@ export const Atlas = {
   pauseShortcut(paused: boolean): Promise<void> {
     return call("Atlas.PauseShortcut", paused);
   },
+  /**
+   * PreviewWindowOpacity shows the main window at an opacity, 40 to 100 %,
+   * without saving it, while the user drags its slider.
+   */
+  previewWindowOpacity(percent: number): Promise<void> {
+    return call("Atlas.PreviewWindowOpacity", percent);
+  },
   /** Projects returns every project, in the user's order. */
   projects(): Promise<Project[]> {
     return call("Atlas.Projects");
@@ -328,6 +408,13 @@ export const Atlas = {
   /** SetEffects turns the effects of the main window on or off. */
   setEffects(on: boolean): Promise<Settings> {
     return call("Atlas.SetEffects", on);
+  },
+  /**
+   * SetGlass changes the frosted glass of the main window's frame and panel.
+   * Values out of range are brought into it.
+   */
+  setGlass(g: Glass): Promise<Settings> {
+    return call("Atlas.SetGlass", g);
   },
   /**
    * SetItemDeeplink binds an item to a link, or unbinds it when link is
@@ -373,6 +460,20 @@ export const Atlas = {
   /** SetTheme changes the appearance of every window. */
   setTheme(theme: Theme): Promise<Settings> {
     return call("Atlas.SetTheme", theme);
+  },
+  /**
+   * SetWallpaperLook changes how the picture behind the main window shows.
+   * Values out of range are brought into it.
+   */
+  setWallpaperLook(look: WallpaperLook): Promise<Settings> {
+    return call("Atlas.SetWallpaperLook", look);
+  },
+  /**
+   * SetWindowOpacity changes the opacity of the whole main window, 40 to
+   * 100 %, which shows the desktop through it.
+   */
+  setWindowOpacity(percent: number): Promise<Settings> {
+    return call("Atlas.SetWindowOpacity", percent);
   },
   /** Settings returns the user's preferences. */
   settings(): Promise<Settings> {

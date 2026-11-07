@@ -1,14 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Tabs } from "radix-ui";
 import {
-  AudioWaveform,
   BookOpen,
   Check,
   CircleAlert,
-  CircleOff,
   Database,
   FolderOpen,
-  Grip,
+  Images,
   Keyboard,
   Monitor,
   Moon,
@@ -19,7 +17,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Atlas, type Background, type Settings, type Theme } from "@/mygo";
+import { Atlas, type Settings, type Theme } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
 import { cn } from "@/lib/utils";
@@ -29,6 +27,8 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
+import { LookPanel, WindowOpacitySetting } from "./look-settings";
+import { SettingCard } from "./setting-card";
 import { NAV_ITEM, NavColumn, NavIndicator } from "./side-nav";
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -37,24 +37,10 @@ const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "dark", label: "深色", icon: Moon },
 ];
 
-type EffectsChoice = "off" | Background;
-
-const EFFECTS: { value: EffectsChoice; label: string; icon: typeof Sun }[] = [
-  { value: "off", label: "关闭", icon: CircleOff },
-  { value: "grid", label: "点阵网格", icon: Grip },
-  { value: "waves", label: "点阵信号", icon: AudioWaveform },
-];
-
-/** Turns the effects off, or on with the background picked. */
-async function chooseEffects(choice: EffectsChoice): Promise<Settings> {
-  if (choice === "off") return Atlas.setEffects(false);
-  await Atlas.setBackground(choice);
-  return Atlas.setEffects(true);
-}
-
 const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
   { value: "capture", label: "快速记录", icon: Zap },
   { value: "appearance", label: "外观", icon: Palette },
+  { value: "look", label: "背景与毛玻璃", icon: Images },
   { value: "data", label: "数据", icon: Database },
 ];
 
@@ -75,7 +61,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">快速记录的快捷键、外观、视觉效果和数据位置</DialogDescription>
+              <DialogDescription className="sr-only">快速记录的快捷键、外观、背景与毛玻璃和数据位置</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -102,6 +88,7 @@ export function SettingsDialog() {
                 <div className="flex flex-col gap-3">
                   {t.value === "capture" && <CapturePanel />}
                   {t.value === "appearance" && <AppearancePanel settings={settings} />}
+                  {t.value === "look" && <LookPanel settings={settings} />}
                   {t.value === "data" && <DataPanel settings={settings} />}
                 </div>
               </Tabs.Content>
@@ -109,19 +96,6 @@ export function SettingsDialog() {
         </Tabs.Root>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** One setting: its name and what it does over its control. */
-function SettingCard({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 rounded-lg bg-card p-4 ring-1 ring-foreground/[0.07]">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-medium">{title}</h3>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -163,25 +137,7 @@ function AppearancePanel({ settings }: { settings: Settings }) {
           ))}
         </ToggleGroup>
       </SettingCard>
-      <SettingCard title="视觉效果" description="动态背景和毛玻璃效果，会增加显卡占用。">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          className="self-start"
-          value={settings.effects ? settings.background : "off"}
-          onValueChange={(v) => {
-            if (v) void run(chooseEffects(v as EffectsChoice)).then((s) => s && useAtlas.setState({ settings: s }));
-          }}
-        >
-          {EFFECTS.map((e) => (
-            <ToggleGroupItem key={e.value} value={e.value}>
-              <e.icon />
-              {e.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </SettingCard>
+      <WindowOpacitySetting settings={settings} />
     </>
   );
 }

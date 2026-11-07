@@ -108,10 +108,11 @@
     --glass-border: oklch(0 0 0 / 9%);
     --glass-shadow: inset 0 1px 0 0 oklch(1 0 0 / 80%), 0 12px 32px -18px oklch(0 0 0 / 22%);
     /* The frame (title bar, sidebar) sits on the ground; the content is a
-       panel raised over it. *-glass: the same, see-through, with effects on. */
-    --frame-glass: oklch(0.965 0.003 95 / 66%);
+       panel raised over it. With effects on, both turn to frosted glass of
+       their colors (--frame-tint, --panel), as opaque as the user set
+       (--glass-frame, --glass-panel, see 设置 → 背景与毛玻璃). */
+    --frame-tint: oklch(0.965 0.003 95);
     --panel: oklch(0.995 0.002 95);
-    --panel-glass: oklch(0.995 0.002 95 / 90%);
     /* The light of the effects: the ink of the icon, white on black. */
     --signal: oklch(0.3 0 0);
 
@@ -162,9 +163,8 @@
     --glass: oklch(0.135 0.002 270 / 72%);
     --glass-border: oklch(1 0 0 / 9%);
     --glass-shadow: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 24px 60px -24px oklch(0 0 0 / 85%);
-    --frame-glass: oklch(0.09 0 0 / 62%);
+    --frame-tint: oklch(0.09 0 0);
     --panel: oklch(0.14 0.002 270);
-    --panel-glass: oklch(0.14 0.002 270 / 90%);
     --signal: oklch(0.92 0 0);
 }
 
@@ -280,16 +280,29 @@ textarea,
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Effects: only with 视觉效果 on (html[data-effects]), main window only ---- */
+/*
+ * ---- Effects: only with a moving background or a picture behind the main
+ * window (html[data-effects]), main window only ----
+ * The glass: --glass-blur, --glass-panel and --glass-frame, which the main
+ * window sets from the settings; the frame blurs less than the panel.
+ */
 html[data-effects] .app-frame {
-  background: var(--frame-glass);
-  -webkit-backdrop-filter: blur(20px) saturate(1.1);
-  backdrop-filter: blur(20px) saturate(1.1);
+  background: color-mix(in oklab, var(--frame-tint) var(--glass-frame, 64%), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur, 32px) * 0.6)) saturate(1.1);
+  backdrop-filter: blur(calc(var(--glass-blur, 32px) * 0.6)) saturate(1.1);
 }
 html[data-effects] .app-panel {
-  background: var(--panel-glass);
-  -webkit-backdrop-filter: blur(32px) saturate(1.1);
-  backdrop-filter: blur(32px) saturate(1.1);
+  background: color-mix(in oklab, var(--panel) var(--glass-panel, 90%), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 32px)) saturate(1.1);
+  backdrop-filter: blur(var(--glass-blur, 32px)) saturate(1.1);
+}
+/* While a slider of the look is dragged, the dialog's shade lifts, so
+   that the window behind shows the change. */
+[data-slot="dialog-overlay"] {
+  transition: opacity 200ms ease;
+}
+html[data-tuning] [data-slot="dialog-overlay"] {
+  opacity: 0;
 }
 html[data-effects] [data-slot="dialog-content"],
 html[data-effects] [data-slot="alert-dialog-content"],

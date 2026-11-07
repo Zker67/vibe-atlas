@@ -50,5 +50,7 @@ plans/
 | [2026-11-07-visual-style](./2026-11-07-visual-style/00-overview.md) | 视觉风格：参照 Next-AIGC 的「暗场 + 信号光」，自建顶栏合成一条，耗性能的效果放进默认关闭的开关 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-queue-header](./2026-11-07-queue-header/00-overview.md) | 项目控件从顶栏挪到队列列顶部（两行），新增状态筛选 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-settings-help](./2026-11-07-settings-help/00-overview.md) | 设置改成左侧分页；新增使用说明弹窗（导览目录 + 带样式的说明），固定快捷键分组挪进使用说明 | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-sub-items](./2026-11-07-sub-items/00-overview.md) | 子改进点：拖到上沿 / 下沿移动位置，拖到中间合并成父改进点（标题取第一条的前六个字 + 「等 N 个改进点」），层级不限 | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-look-settings](./2026-11-07-look-settings/00-overview.md) | 自定义背景图片（模糊、不透明度、大小、位置）、可调的毛玻璃（模糊、内容面板和框架的不透明度），以及和毛玻璃分开调的窗口整体透明度 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

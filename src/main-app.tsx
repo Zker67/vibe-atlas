@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { FolderKanban, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
+import { applyGlass, decorated } from "@/lib/look";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
@@ -29,7 +30,8 @@ import {
 import { openHelp, openSettings } from "@/state/dialogs";
 import type { Project } from "@/mygo";
 
-// The effects load only once they are turned on (设置 → 视觉效果).
+// The effects load only once there is something behind the window: a
+// moving background or a picture (设置 → 背景与毛玻璃).
 const EffectsLayer = lazy(() => import("@/components/effects/effects-layer"));
 
 /** The main window: projects on the left, the open project's queue or overview. */
@@ -138,12 +140,20 @@ function LoadError({ message }: { message: string }) {
   );
 }
 
-/** Whether the effects are on; html[data-effects] turns on their CSS. */
+/**
+ * Whether something is behind the window, a moving background or a
+ * picture; html[data-effects] turns on the CSS of the effects, the frosted
+ * glass as the user set it.
+ */
 function useEffects(): boolean {
-  const effects = useAtlas((s) => s.settings?.effects ?? false);
+  const effects = useAtlas((s) => (s.settings ? decorated(s.settings) : false));
+  const glass = useAtlas((s) => s.settings?.glass);
   useEffect(() => {
     document.documentElement.toggleAttribute("data-effects", effects);
   }, [effects]);
+  useEffect(() => {
+    if (glass) applyGlass(glass);
+  }, [glass]);
   return effects;
 }
 

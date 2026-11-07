@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -160,7 +164,121 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		finish(errors.Join(err, errors.New("the effects stay after turning them off")), "effects turn off")
 		return
 	}
+
+	look, err := a.smokeLook(main, capture)
+	report["look"] = look
+	if err != nil {
+		finish(err, "look")
+		return
+	}
 	finish(nil, "")
+}
+
+// smokeLook checks the look of the main window: a picture loads from the
+// wallpaper scheme and frosts the frame and panel by itself, the glass
+// follows its settings, and the window takes its opacity. Quick capture
+// shows none of it.
+func (a *app) smokeLook(main, capture *mygo.Window) (map[string]any, error) {
+	db, err := a.atlas.store()
+	if err != nil {
+		return nil, err
+	}
+	src := filepath.Join(a.dataDir, "smoke-wallpaper.png")
+	img := image.NewRGBA(image.Rect(0, 0, 64, 40))
+	for i := range img.Pix {
+		img.Pix[i] = 0x80
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(src, buf.Bytes(), 0o644); err != nil {
+		return nil, err
+	}
+	defer os.Remove(src)
+	if err := saveWallpaper(db, a.dataDir, src); err != nil {
+		return nil, err
+	}
+	a.atlas.settingsChanged()
+
+	result, err := mygo.EvalAs[map[string]any](main.Page(), `
+		const until = async (check) => {
+			for (let i = 0; i < 100; i++) {
+				if (check()) return true;
+				await new Promise((r) => setTimeout(r, 100));
+			}
+			return false;
+		};
+		const html = document.documentElement;
+		const layer = () => document.querySelector("[data-wallpaper-layer]");
+		const s = await mygo.call("Atlas.Settings");
+		const result = { url: s.wallpaper.url };
+		result.layerShown = await until(() => layer() && html.hasAttribute("data-effects"));
+		try {
+			const res = await fetch(s.wallpaper.url);
+			result.fetched = { status: res.status, type: res.headers.get("content-type"), bytes: (await res.arrayBuffer()).byteLength };
+		} catch (e) {
+			result.fetched = String(e);
+		}
+		const img = new Image();
+		img.src = s.wallpaper.url;
+		try {
+			await img.decode();
+			result.loaded = img.naturalWidth === 64 && img.naturalHeight === 40;
+		} catch (e) {
+			result.loaded = false;
+			result.loadError = String(e);
+		}
+		await mygo.call("Atlas.SetGlass", { blur: 12, panel: 40, frame: 30 });
+		result.glassApplied = await until(() =>
+			html.style.getPropertyValue("--glass-panel") === "40%" && html.style.getPropertyValue("--glass-blur") === "12px");
+		result.panelFilter = getComputedStyle(document.querySelector(".app-panel")).backdropFilter;
+		const clamped = await mygo.call("Atlas.SetGlass", { blur: 500, panel: -1, frame: 30 });
+		result.glassClamped = clamped.glass.blur === 60 && clamped.glass.panel === 0;
+		await mygo.call("Atlas.SetGlass", s.lookDefaults.glass);
+		await mygo.call("Atlas.SetWallpaperLook", { ...s.wallpaper.look, enabled: false });
+		result.hiddenWhenOff = await until(() => !layer() && !html.hasAttribute("data-effects"));
+		await mygo.call("Atlas.SetWallpaperLook", { ...s.wallpaper.look, enabled: true });
+		result.windowOpacity = (await mygo.call("Atlas.SetWindowOpacity", 70)).windowOpacity;
+		return result;
+	`)
+	if err != nil {
+		return result, err
+	}
+	result["nativeOpacity"] = main.Opacity()
+	for _, k := range []string{"layerShown", "loaded", "glassApplied", "glassClamped", "hiddenWhenOff"} {
+		if result[k] != true {
+			return result, errors.New("look: " + k + " failed: " + jsonString(result))
+		}
+	}
+	if result["windowOpacity"] != float64(70) || main.Opacity() < 0.69 || main.Opacity() > 0.71 {
+		return result, errors.New("look: the window did not take its opacity: " + jsonString(result))
+	}
+
+	inCapture, err := mygo.EvalAs[map[string]any](capture.Page(), `
+		return {
+			layer: !!document.querySelector("[data-wallpaper-layer]"),
+			attr: document.documentElement.hasAttribute("data-effects"),
+			glass: document.documentElement.style.getPropertyValue("--glass-panel"),
+		};
+	`)
+	if err != nil {
+		return result, err
+	}
+	result["capture"] = inCapture
+	if inCapture["layer"] != false || inCapture["attr"] != false || inCapture["glass"] != "" {
+		return result, errors.New("look: quick capture took the main window's look: " + jsonString(inCapture))
+	}
+	if _, err := a.atlas.SetWindowOpacity(100); err != nil {
+		return result, err
+	}
+	if _, err := a.atlas.ClearWallpaper(); err != nil {
+		return result, err
+	}
+	if w := wallpaper(db, a.dataDir); w.URL != "" {
+		return result, errors.New("look: the wallpaper stays after clearing it")
+	}
+	return result, nil
 }
 
 func jsonString(v any) string {

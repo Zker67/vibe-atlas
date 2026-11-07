@@ -86,6 +86,16 @@ type Settings struct {
 	Effects bool `json:"effects"`
 	// Background is the moving background the effects show.
 	Background Background `json:"background"`
+	// Wallpaper is the picture behind the main window, under the moving
+	// background; with one, the frame and panel are frosted glass even
+	// while the effects are off.
+	Wallpaper Wallpaper `json:"wallpaper"`
+	// Glass is the frosted glass of the frame and panel.
+	Glass Glass `json:"glass"`
+	// WindowOpacity is the opacity of the whole main window, 40 to 100 %.
+	WindowOpacity int `json:"windowOpacity"`
+	// LookDefaults are the looks the app has out of the box.
+	LookDefaults LookDefaults `json:"lookDefaults"`
 	// DataDir is the folder of the database.
 	DataDir string `json:"dataDir"`
 	// CurrentProjectID is the project open in the main window, or 0.
@@ -477,6 +487,10 @@ func (a *Atlas) Settings() (Settings, error) {
 		Theme:           a.theme(db),
 		Effects:         effectsOn(db),
 		Background:      background(db),
+		Wallpaper:       wallpaper(db, a.app.dataDir),
+		Glass:           glass(db),
+		WindowOpacity:   windowOpacity(db),
+		LookDefaults:    lookDefaults,
 		DataDir:         a.app.dataDir,
 	}
 	s.CurrentProjectID = a.settingID(db, keyCurrentProject)

@@ -61,7 +61,7 @@ bun run build
 VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录>\report.json' "build/windows-amd64/Vibe Atlas.exe"
 ```
 
-退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功，以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）。
+退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功，以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响）。
 
 本机已经开着 Vibe Atlas 时，两个实例会争用同一个 WebView2 数据目录，测试程序报 `creating the WebView2 controller failed (HRESULT 0x8007139f)`。再加一个环境变量 `WEBVIEW2_USER_DATA_FOLDER='<临时目录>\webview'` 即可，不用关掉正在用的程序；这时快捷键会因为被占用而注册失败，属于正常。
 
@@ -71,7 +71,10 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 |---|---|---|
 | 快速记录快捷键 | `Ctrl+Alt+Space` | 设置（`Ctrl+,`） |
 | 主题 | 跟随系统 | 设置，或顶栏的外观按钮 |
-| 视觉效果 | 关闭（背景默认点阵网格） | 设置 |
+| 视觉效果（动态背景） | 关闭（背景默认点阵网格） | 设置 → 背景与毛玻璃 |
+| 背景图片 | 无 | 设置 → 背景与毛玻璃 |
+| 毛玻璃 | 模糊 32px、内容面板 90%、框架 64% | 设置 → 背景与毛玻璃 |
+| 窗口整体透明度 | 100%（最低 40%） | 设置 → 外观 |
 
 设置存在数据库的 `settings` 表里，没有单独的配置文件。环境变量只用于开发和测试：
 
@@ -87,7 +90,7 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 | Windows | `%AppData%\Vibe Atlas\vibe-atlas.db` |
 | 开发模式 | `%AppData%\Vibe Atlas\dev\vibe-atlas.db` |
 
-同一个文件夹里的 `vibe-atlas.db-wal`、`vibe-atlas.db-shm` 是数据库的一部分。手动备份时先从托盘退出程序，再复制整个文件夹。设置里的「打开数据文件夹」直接打开这个位置。
+同一个文件夹里的 `vibe-atlas.db-wal`、`vibe-atlas.db-shm` 是数据库的一部分，`wallpapers/` 里是设置的背景图片（复制过来的，用随机文件名）。手动备份时先从托盘退出程序，再复制整个文件夹。设置里的「打开数据文件夹」直接打开这个位置。
 
 ## 故障排查
 
