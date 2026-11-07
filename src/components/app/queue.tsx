@@ -45,6 +45,7 @@ import {
   createItem,
   deleteItem,
   matchesFilters,
+  matchesStatus,
   moveItemToProject,
   moveTodoItem,
   openDeeplink,
@@ -56,6 +57,8 @@ import {
   toggleItemDoing,
   toggleItemDone,
   useAtlas,
+  type Sections,
+  type StatusFilter,
 } from "@/state/atlas";
 import { askConfirm } from "@/state/dialogs";
 import { IconButton } from "./icon-button";
@@ -77,8 +80,15 @@ function flashRow(id: number) {
 /** The rows the queue shows now, top to bottom: for the keys that move the selection. */
 export function visibleItems(): Item[] {
   const s = useAtlas.getState();
-  const { doing, todo, done } = sections(s.items, s.typeFilter, s.moduleFilter);
-  return [...doing, ...todo, ...(s.doneOpen ? done.slice(0, useQueueUi.getState().doneLimit) : [])];
+  const { doing, todo, done } = shownSections(sections(s.items, s.typeFilter, s.moduleFilter), s.statusFilter);
+  const doneShown = s.statusFilter === "done" || s.doneOpen;
+  return [...doing, ...todo, ...(doneShown ? done.slice(0, useQueueUi.getState().doneLimit) : [])];
+}
+
+/** The sections, emptied of the statuses that the status filter hides. */
+function shownSections(all: Sections, statusFilter: StatusFilter): Sections {
+  const show = (st: ItemStatus) => statusFilter === "all" || statusFilter === st;
+  return { doing: show("doing") ? all.doing : [], todo: show("todo") ? all.todo : [], done: show("done") ? all.done : [] };
 }
 
 export function confirmDeleteItem(item: Item) {
@@ -96,12 +106,16 @@ export function Queue() {
   const modules = useAtlas((s) => s.modules);
   const typeFilter = useAtlas((s) => s.typeFilter);
   const moduleFilter = useAtlas((s) => s.moduleFilter);
+  const statusFilter = useAtlas((s) => s.statusFilter);
   const selectedId = useAtlas((s) => s.selectedId);
   const doneOpen = useAtlas((s) => s.doneOpen);
   const flashId = useQueueUi((s) => s.flashId);
   const doneLimit = useQueueUi((s) => s.doneLimit);
 
-  const { doing, todo, done } = useMemo(() => sections(items, typeFilter, moduleFilter), [items, typeFilter, moduleFilter]);
+  const { doing, todo, done } = useMemo(
+    () => shownSections(sections(items, typeFilter, moduleFilter), statusFilter),
+    [items, typeFilter, moduleFilter, statusFilter],
+  );
   const moduleNames = useMemo(() => new Map(modules.map((m) => [m.id, m.name])), [modules]);
   // The module shows on each row unless the queue shows one module only.
   const moduleOf = (item: Item) => (moduleFilter === "all" ? (moduleNames.get(item.moduleId) ?? "") : "");
@@ -109,11 +123,26 @@ export function Queue() {
     <ItemRow key={item.id} item={item} moduleName={moduleOf(item)} selected={item.id === selectedId} flash={item.id === flashId} />
   );
 
-  const filtered = typeFilter !== "all" || moduleFilter !== "all";
+  const filtered = typeFilter !== "all" || moduleFilter !== "all" || statusFilter !== "all";
   const nothing = doing.length + todo.length + done.length === 0;
+  const doneList = (
+    <div className="flex flex-col">
+      {done.slice(0, doneLimit).map(row)}
+      {done.length > doneLimit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-1 self-start text-muted-foreground"
+          onClick={() => useQueueUi.setState({ doneLimit: doneLimit + DONE_PAGE })}
+        >
+          再显示 {Math.min(DONE_PAGE, done.length - doneLimit)} 条
+        </Button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div
         className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-4"
         onClick={(e) => {
@@ -129,20 +158,27 @@ export function Queue() {
                 {doing.map(row)}
               </Section>
             )}
-            <Section title="待办" count={todo.length}>
-              {todo.length === 0 ? (
-                <p className="px-2 py-1.5 text-xs text-muted-foreground">没有待办了。</p>
-              ) : (
-                <SortableList ids={todo.map((i) => i.id)} onMove={moveTodoItem}>
-                  {todo.map((item) => (
-                    <SortableRow key={item.id} id={item.id}>
-                      {row(item)}
-                    </SortableRow>
-                  ))}
-                </SortableList>
-              )}
-            </Section>
-            {done.length > 0 && (
+            {(statusFilter === "all" || statusFilter === "todo") && (
+              <Section title="待办" count={todo.length}>
+                {todo.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">没有待办了。</p>
+                ) : (
+                  <SortableList ids={todo.map((i) => i.id)} onMove={moveTodoItem}>
+                    {todo.map((item) => (
+                      <SortableRow key={item.id} id={item.id}>
+                        {row(item)}
+                      </SortableRow>
+                    ))}
+                  </SortableList>
+                )}
+              </Section>
+            )}
+            {statusFilter === "done" && (
+              <Section icon={<CircleCheck className="size-3.5 text-done" />} title="已完成" count={done.length}>
+                {doneList}
+              </Section>
+            )}
+            {statusFilter === "all" && done.length > 0 && (
               <section className="mt-2">
                 <button
                   type="button"
@@ -153,21 +189,7 @@ export function Queue() {
                   已完成
                   <span className="meta-mono">{done.length}</span>
                 </button>
-                {doneOpen && (
-                  <div className="flex flex-col">
-                    {done.slice(0, doneLimit).map(row)}
-                    {done.length > doneLimit && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="mt-1 self-start text-muted-foreground"
-                        onClick={() => useQueueUi.setState({ doneLimit: doneLimit + DONE_PAGE })}
-                      >
-                        再显示 {Math.min(DONE_PAGE, done.length - doneLimit)} 条
-                      </Button>
-                    )}
-                  </div>
-                )}
+                {doneOpen && doneList}
               </section>
             )}
           </>
@@ -470,7 +492,7 @@ function NewItemInput() {
       const item = await createItem(text, type, moduleId);
       setError("");
       const s = useAtlas.getState();
-      if (matchesFilters(item, s.typeFilter, s.moduleFilter)) {
+      if (matchesFilters(item, s.typeFilter, s.moduleFilter) && matchesStatus(item, s.statusFilter)) {
         flashRow(item.id);
       } else {
         toast("已记下，但当前筛选不显示它", { action: { label: "清除筛选", onClick: clearFilters } });

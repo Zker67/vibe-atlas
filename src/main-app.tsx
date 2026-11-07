@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog, NameDialog } from "@/components/app/dialogs";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
+import { ProjectBar, QueueFilters } from "@/components/app/project-header";
 import { confirmDeleteItem, Queue, visibleItems } from "@/components/app/queue";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
@@ -25,6 +26,7 @@ import {
   useAtlas,
 } from "@/state/atlas";
 import { openSettings } from "@/state/dialogs";
+import type { Project } from "@/mygo";
 
 // The effects load only once they are turned on (设置 → 视觉效果).
 const EffectsLayer = lazy(() => import("@/components/effects/effects-layer"));
@@ -54,7 +56,14 @@ export function MainApp() {
             <main className="app-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
               {loadError && <LoadError message={loadError} />}
               {!ready ? null : project ? (
-                view === "queue" ? <QueueLayout /> : <Overview project={project} />
+                view === "queue" ? (
+                  <QueueLayout project={project} />
+                ) : (
+                  <>
+                    <ProjectBar project={project} />
+                    <Overview project={project} />
+                  </>
+                )
               ) : (
                 !loadError && <Welcome />
               )}
@@ -76,11 +85,14 @@ export function MainApp() {
   );
 }
 
-function QueueLayout() {
+/** The queue column, with the project's controls atop it, and the detail. */
+function QueueLayout({ project }: { project: Project }) {
   const layout = useDefaultLayout({ id: "vibe-atlas-queue", panelIds: ["queue", "detail"] });
   return (
     <ResizablePanelGroup className="min-h-0 flex-1" defaultLayout={layout.defaultLayout} onLayoutChanged={layout.onLayoutChanged}>
-      <ResizablePanel id="queue" minSize={360}>
+      <ResizablePanel id="queue" minSize={360} className="flex flex-col">
+        <ProjectBar project={project} />
+        <QueueFilters />
         <Queue />
       </ResizablePanel>
       <ResizableHandle />

@@ -17,7 +17,7 @@ React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui，由 Vite 构建，跑在 My
 | `mygo.ts` | `bun run generate` 生成的 Go 端客户端（方法、类型、事件），不要手改 |
 | `state/atlas.ts` | 主窗口的数据和操作：加载、跟随 `changed` 事件刷新、筛选、各种修改 |
 | `state/dialogs.ts` | 改名、确认、设置三种对话框的开关 |
-| `components/app/` | 业务组件：`title-bar`（自建顶栏，含 `project-header` 的项目控件）、`sidebar`、`queue`、`item-detail`、`overview`、`settings-dialog`、`dialogs`，以及几个小部件 |
+| `components/app/` | 业务组件：`title-bar`（自建顶栏）、`project-header`（队列列顶部的项目栏 `ProjectBar` 和筛选栏 `QueueFilters`）、`sidebar`、`queue`、`item-detail`、`overview`、`settings-dialog`、`dialogs`，以及几个小部件 |
 | `components/effects/` | 视觉效果的动态背景，只在主窗口打开效果后加载，见 [README](./components/effects/README.md) |
 | `components/react-bits/` | React Bits 组件源码，保持上游原样，见 [README](./components/react-bits/README.md) |
 | `components/editor/` | Markdown 即时预览编辑器：`live-preview.ts` 负责渲染，`markdown-editor.tsx` 是 React 组件 |

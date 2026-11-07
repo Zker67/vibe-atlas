@@ -4,29 +4,23 @@ import { run } from "@/lib/api";
 import { useAtlas } from "@/state/atlas";
 import appIcon from "@/assets/app-icon.png";
 import { IconButton } from "./icon-button";
-import { ProjectHeader } from "./project-header";
 
 /**
  * The main window's one bar at the top: the window's title bar (the
  * window hides its own, keeping the window buttons, which sit over the
- * right end), the app's icon and name over the sidebar, the open
- * project's controls and the appearance.
+ * right end): the app's icon and name over the sidebar, and the
+ * appearance. The open project's controls are atop the queue column.
  * Its empty parts drag the window; a double click maximizes it.
  */
 export function TitleBar() {
-  const ready = useAtlas((s) => s.ready);
-  const project = useAtlas((s) => s.projects.find((p) => p.id === s.projectId));
   return (
     <header data-titlebar className="titlebar app-frame flex shrink-0 items-center text-sidebar-foreground">
       <div className="flex w-60 shrink-0 items-center gap-2 self-stretch px-3">
         <img src={appIcon} alt="" draggable={false} className="size-6 shrink-0" />
         <span className="font-semibold tracking-tight">Vibe Atlas</span>
       </div>
-      <div className="@container flex min-w-0 flex-1 items-center gap-1 px-2">
-        {ready && project && <ProjectHeader project={project} />}
-        <div className="ml-auto flex shrink-0 items-center">
-          <ThemeButton />
-        </div>
+      <div className="flex min-w-0 flex-1 items-center justify-end px-2">
+        <ThemeButton />
       </div>
     </header>
   );

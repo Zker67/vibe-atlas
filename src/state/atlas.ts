@@ -17,6 +17,7 @@ export type View = "queue" | "overview";
 export type TypeFilter = ItemType | "all";
 /** A module's id, 0 for the items without a module, or all. */
 export type ModuleFilter = number | "all";
+export type StatusFilter = ItemStatus | "all";
 
 interface AtlasState {
   ready: boolean;
@@ -32,6 +33,7 @@ interface AtlasState {
   view: View;
   typeFilter: TypeFilter;
   moduleFilter: ModuleFilter;
+  statusFilter: StatusFilter;
   /** The item shown in the detail panel, 0 for none. */
   selectedId: number;
   doneOpen: boolean;
@@ -51,6 +53,7 @@ export const useAtlas = create<AtlasState>(() => ({
   view: "queue",
   typeFilter: "all",
   moduleFilter: "all",
+  statusFilter: "all",
   selectedId: 0,
   doneOpen: false,
   focusNewItem: 0,
@@ -144,7 +147,7 @@ export async function init() {
 
 export function openProject(id: number) {
   if (id === get().projectId) return;
-  set({ projectId: id, selectedId: 0, typeFilter: "all", moduleFilter: "all", overview: null, modules: [], items: [] });
+  set({ projectId: id, selectedId: 0, typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [] });
   void Atlas.setCurrentProject(id);
   void refresh();
 }
@@ -165,6 +168,7 @@ export function showItem(item: Item) {
     (s.typeFilter !== "all" && s.typeFilter !== item.type) ||
     (s.moduleFilter !== "all" && s.moduleFilter !== item.moduleId);
   set({
+    statusFilter: matchesStatus(item, s.statusFilter) ? s.statusFilter : "all",
     view: "queue",
     selectedId: item.id,
     doneOpen: s.doneOpen || item.status === "done",
@@ -176,12 +180,16 @@ export function setTypeFilter(typeFilter: TypeFilter) {
   set({ typeFilter });
 }
 
+export function setStatusFilter(statusFilter: StatusFilter) {
+  set({ statusFilter });
+}
+
 export function setModuleFilter(moduleFilter: ModuleFilter) {
   set({ moduleFilter });
 }
 
 export function clearFilters() {
-  set({ typeFilter: "all", moduleFilter: "all" });
+  set({ typeFilter: "all", moduleFilter: "all", statusFilter: "all" });
 }
 
 export function toggleDone(open?: boolean) {
@@ -196,6 +204,10 @@ export function focusNewItem() {
 
 export function matchesFilters(item: Item, typeFilter: TypeFilter, moduleFilter: ModuleFilter): boolean {
   return (typeFilter === "all" || item.type === typeFilter) && (moduleFilter === "all" || item.moduleId === moduleFilter);
+}
+
+export function matchesStatus(item: Item, statusFilter: StatusFilter): boolean {
+  return statusFilter === "all" || item.status === statusFilter;
 }
 
 export interface Sections {
