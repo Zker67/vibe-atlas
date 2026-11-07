@@ -3,6 +3,9 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 )
 
 // ItemType is the kind of an item.
@@ -35,10 +38,12 @@ func (s ItemStatus) valid() bool {
 }
 
 // Item is one thing to do in a project: an improvement, a bug or a new
-// feature.
+// feature. Items may sit under another item of their project, to any depth.
 type Item struct {
 	ID        int64 `json:"id"`
 	ProjectID int64 `json:"projectId"`
+	// ParentID is the item this one sits under, or 0 for a top-level item.
+	ParentID int64 `json:"parentId"`
 	// ModuleID is the item's module, or 0 for none (「未分类」).
 	ModuleID int64      `json:"moduleId"`
 	Type     ItemType   `json:"type"`
@@ -49,7 +54,8 @@ type Item struct {
 	// Deeplink is a link the item is bound to, such as the conversation
 	// with an AI where it is worked on, or "".
 	Deeplink string `json:"deeplink"`
-	// SortOrder orders the items to do, as the user dragged them.
+	// SortOrder orders an item among its siblings, as the user dragged
+	// them.
 	SortOrder int64 `json:"sortOrder"`
 	CreatedAt int64 `json:"createdAt"`
 	// StartedAt is when the item became doing, or 0.
@@ -59,12 +65,12 @@ type Item struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
-const itemColumns = `id, project_id, COALESCE(module_id, 0), type, status, title, note, deeplink,
+const itemColumns = `id, project_id, COALESCE(parent_id, 0), COALESCE(module_id, 0), type, status, title, note, deeplink,
 	sort_order, created_at, COALESCE(started_at, 0), COALESCE(done_at, 0), updated_at`
 
 func scanItem(row scanner) (Item, error) {
 	var it Item
-	err := row.Scan(&it.ID, &it.ProjectID, &it.ModuleID, &it.Type, &it.Status, &it.Title, &it.Note, &it.Deeplink,
+	err := row.Scan(&it.ID, &it.ProjectID, &it.ParentID, &it.ModuleID, &it.Type, &it.Status, &it.Title, &it.Note, &it.Deeplink,
 		&it.SortOrder, &it.CreatedAt, &it.StartedAt, &it.DoneAt, &it.UpdatedAt)
 	return it, err
 }
@@ -116,6 +122,9 @@ func itemIn(q queryer, id int64) (Item, error) {
 // NewItem is what a new item starts with.
 type NewItem struct {
 	ProjectID int64 `json:"projectId"`
+	// ParentID is the item it goes under, as its last child, or 0 for the
+	// end of the project's list.
+	ParentID int64 `json:"parentId"`
 	// ModuleID is 0 for no module.
 	ModuleID int64 `json:"moduleId"`
 	// Type is TypeImprove when empty.
@@ -144,7 +153,23 @@ func nextItemOrder(tx *sql.Tx, projectID int64) (int64, error) {
 	return n, err
 }
 
-// CreateItem adds an item to do, at the end of the project's list.
+// checkParent fails unless parentID is 0 or an item of the project.
+func checkParent(tx *sql.Tx, projectID, parentID int64) error {
+	if parentID == 0 {
+		return nil
+	}
+	p, err := itemIn(tx, parentID)
+	if err != nil {
+		return err
+	}
+	if p.ProjectID != projectID {
+		return userErr("上级改进点不属于这个项目")
+	}
+	return nil
+}
+
+// CreateItem adds an item to do, at the end of the project's list or of
+// its parent's children.
 func (s *Store) CreateItem(in NewItem) (Item, error) {
 	title, err := cleanLine(in.Title, "标题", maxTitle)
 	if err != nil {
@@ -164,18 +189,24 @@ func (s *Store) CreateItem(in NewItem) (Item, error) {
 		if err := checkModule(tx, in.ProjectID, in.ModuleID); err != nil {
 			return err
 		}
+		if err := checkParent(tx, in.ProjectID, in.ParentID); err != nil {
+			return err
+		}
 		order, err := nextItemOrder(tx, in.ProjectID)
 		if err != nil {
 			return err
 		}
 		now := s.millis()
-		res, err := tx.Exec(`INSERT INTO items (project_id, module_id, type, status, title, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, 'todo', ?, ?, ?, ?)`, in.ProjectID, nullable(in.ModuleID), in.Type, title, order, now, now)
+		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, sort_order, created_at, updated_at)
+			VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?)`, in.ProjectID, nullable(in.ParentID), nullable(in.ModuleID), in.Type, title, order, now, now)
 		if err != nil {
 			return err
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
+			return err
+		}
+		if err := syncAutoTitles(tx, in.ParentID); err != nil {
 			return err
 		}
 		it, err = itemIn(tx, id)
@@ -202,15 +233,18 @@ func (s *Store) updateItem(id int64, fn func(tx *sql.Tx, it Item) error) (Item, 
 	return it, err
 }
 
-// SetItemTitle changes the title of an item.
+// SetItemTitle changes the title of an item. A title the user gives is
+// theirs: the app no longer makes it from the item's children.
 func (s *Store) SetItemTitle(id int64, title string) (Item, error) {
 	title, err := cleanLine(title, "标题", maxTitle)
 	if err != nil {
 		return Item{}, err
 	}
-	return s.updateItem(id, func(tx *sql.Tx, _ Item) error {
-		_, err := tx.Exec(`UPDATE items SET title = ?, updated_at = ? WHERE id = ?`, title, s.millis(), id)
-		return err
+	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
+		if _, err := tx.Exec(`UPDATE items SET title = ?, auto_title = 0, updated_at = ? WHERE id = ?`, title, s.millis(), id); err != nil {
+			return err
+		}
+		return syncAutoTitles(tx, it.ParentID)
 	})
 }
 
@@ -286,10 +320,49 @@ func (s *Store) SetItemStatus(id int64, status ItemStatus) (Item, error) {
 	})
 }
 
-// MoveTodoItem moves an item to do right before the item to do anchorID,
-// or right after it when after is true. It renumbers the project's items to
-// do, so the order holds however the list was filtered when dragging.
-func (s *Store) MoveTodoItem(id, anchorID int64, after bool) error {
+// Place is where MoveItem puts an item, against its anchor.
+type Place string
+
+// The places.
+const (
+	PlaceBefore Place = "before" // right before the anchor, under the same parent
+	PlaceAfter  Place = "after"  // right after the anchor, under the same parent
+	PlaceInside Place = "inside" // the anchor's last child
+)
+
+// childIDs returns the children of parentID in their order, or the
+// project's top-level items when parentID is 0.
+func childIDs(tx *sql.Tx, projectID, parentID int64) ([]int64, error) {
+	if parentID == 0 {
+		return idsIn(tx, `SELECT id FROM items WHERE project_id = ? AND parent_id IS NULL ORDER BY sort_order, id`, projectID)
+	}
+	return idsIn(tx, `SELECT id FROM items WHERE parent_id = ? ORDER BY sort_order, id`, parentID)
+}
+
+// within reports whether id is root or sits under it, at any depth.
+func within(tx *sql.Tx, id, root int64) (bool, error) {
+	var n int
+	err := tx.QueryRow(`WITH RECURSIVE up(id) AS (
+			SELECT ? UNION SELECT i.parent_id FROM items i JOIN up ON i.id = up.id WHERE i.parent_id IS NOT NULL
+		) SELECT COUNT(*) FROM up WHERE id = ?`, id, root).Scan(&n)
+	return n > 0, err
+}
+
+// subtreeIDs returns id and every item under it.
+func subtreeIDs(tx *sql.Tx, id int64) ([]int64, error) {
+	return idsIn(tx, `WITH RECURSIVE down(id) AS (
+			SELECT ? UNION SELECT i.id FROM items i JOIN down ON i.parent_id = down.id
+		) SELECT id FROM down`, id)
+}
+
+// MoveItem moves an item, with the items under it, right before or after
+// anchorID among the anchor's siblings, or inside the anchor as its last
+// child. It renumbers the siblings, so the order holds however the queue
+// was filtered when dragging.
+func (s *Store) MoveItem(id, anchorID int64, place Place) error {
+	if place != PlaceBefore && place != PlaceAfter && place != PlaceInside {
+		return userErr("未知的位置：%s", place)
+	}
 	return s.inTx(func(tx *sql.Tx) error {
 		it, err := itemIn(tx, id)
 		if err != nil {
@@ -299,39 +372,195 @@ func (s *Store) MoveTodoItem(id, anchorID int64, after bool) error {
 		if err != nil {
 			return err
 		}
-		if it.Status != StatusTodo || anchor.Status != StatusTodo || anchor.ProjectID != it.ProjectID {
-			return userErr("只能在同一个项目的待办里调整顺序")
+		if anchor.ProjectID != it.ProjectID {
+			return userErr("只能在同一个项目里移动")
 		}
-		if id == anchorID {
+		if id == anchorID && place != PlaceInside {
 			return nil
 		}
-		ids, err := idsIn(tx, `SELECT id FROM items WHERE project_id = ? AND status = 'todo' ORDER BY sort_order, id`, it.ProjectID)
+		under, err := within(tx, anchorID, id)
 		if err != nil {
 			return err
 		}
-		order := make([]int64, 0, len(ids))
-		for _, v := range ids {
-			if v != id {
-				order = append(order, v)
+		if under {
+			return userErr("不能移到自己或自己的子改进点里")
+		}
+		parent := anchor.ParentID
+		if place == PlaceInside {
+			parent = anchorID
+		}
+		ids, err := childIDs(tx, it.ProjectID, parent)
+		if err != nil {
+			return err
+		}
+		ids = slices.DeleteFunc(ids, func(v int64) bool { return v == id })
+		at := len(ids)
+		if place != PlaceInside {
+			at = slices.Index(ids, anchorID)
+			if place == PlaceAfter {
+				at++
 			}
 		}
-		at := len(order)
-		for i, v := range order {
-			if v == anchorID {
-				at = i
-				if after {
-					at++
-				}
-				break
+		ids = slices.Insert(ids, at, id)
+		if parent != it.ParentID {
+			if _, err := tx.Exec(`UPDATE items SET parent_id = ?, updated_at = ? WHERE id = ?`, nullable(parent), s.millis(), id); err != nil {
+				return err
 			}
 		}
-		order = append(order[:at], append([]int64{id}, order[at:]...)...)
-		return renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, order)
+		if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, ids); err != nil {
+			return err
+		}
+		return syncAutoTitles(tx, it.ParentID, parent)
 	})
 }
 
-// MoveItemToProject moves an item to another project, at the end of its
-// list and without a module.
+// MergeItems puts the item id and the item targetID under a new parent,
+// which takes the target's place: the target first, then id. The parent
+// takes the target's kind and module; it is done when both are, else to
+// do. Its title comes from autoTitle and follows its children until the
+// user renames it.
+func (s *Store) MergeItems(id, targetID int64) (Item, error) {
+	var parent Item
+	err := s.inTx(func(tx *sql.Tx) error {
+		it, err := itemIn(tx, id)
+		if err != nil {
+			return err
+		}
+		target, err := itemIn(tx, targetID)
+		if err != nil {
+			return err
+		}
+		if target.ProjectID != it.ProjectID {
+			return userErr("只能合并同一个项目里的改进点")
+		}
+		if id == targetID {
+			return userErr("不能和自己合并")
+		}
+		under, err := within(tx, targetID, id)
+		if err != nil {
+			return err
+		}
+		if under {
+			return userErr("不能和自己的子改进点合并")
+		}
+		now := s.millis()
+		status, doneAt := StatusTodo, int64(0)
+		if it.Status == StatusDone && target.Status == StatusDone {
+			status, doneAt = StatusDone, now
+		}
+		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, auto_title, sort_order, created_at, done_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`,
+			target.ProjectID, nullable(target.ParentID), nullable(target.ModuleID), target.Type, status,
+			autoTitle(target.Title, 2), now, nullable(doneAt), now)
+		if err != nil {
+			return err
+		}
+		pid, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		// The parent takes the target's place among its siblings.
+		ids, err := childIDs(tx, target.ProjectID, target.ParentID)
+		if err != nil {
+			return err
+		}
+		ids = slices.DeleteFunc(ids, func(v int64) bool { return v == id || v == pid })
+		ids[slices.Index(ids, targetID)] = pid
+		if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, ids); err != nil {
+			return err
+		}
+		for i, child := range []int64{targetID, id} {
+			if _, err := tx.Exec(`UPDATE items SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ?`, pid, i+1, now, child); err != nil {
+				return err
+			}
+		}
+		if err := syncAutoTitles(tx, it.ParentID); err != nil {
+			return err
+		}
+		parent, err = itemIn(tx, pid)
+		return err
+	})
+	return parent, err
+}
+
+// autoTitleLen is how much of the first child's title a parent the app
+// made takes, in characters.
+const autoTitleLen = 6
+
+// autoTitle is the title of a parent the app made: the first 6 characters
+// of its first child's title, or all of a shorter one, then how many
+// children it has, as in 「修复登录按钮等 3 个改进点」.
+func autoTitle(first string, n int) string {
+	r := []rune(first)
+	if len(r) > autoTitleLen {
+		r = r[:autoTitleLen]
+	}
+	return fmt.Sprintf("%s等 %d 个改进点", strings.TrimSpace(string(r)), n)
+}
+
+// syncAutoTitles brings the titles the app made for the parents ids up to
+// date with their children. Parents the user renamed, those left without
+// children and 0 stay as they are.
+func syncAutoTitles(tx *sql.Tx, ids ...int64) error {
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		var auto bool
+		err := tx.QueryRow(`SELECT auto_title FROM items WHERE id = ?`, id).Scan(&auto)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !auto {
+			continue
+		}
+		var n int
+		var first sql.NullString
+		err = tx.QueryRow(`SELECT COUNT(*), (SELECT title FROM items WHERE parent_id = ?1 ORDER BY sort_order, id LIMIT 1)
+			FROM items WHERE parent_id = ?1`, id).Scan(&n, &first)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE items SET title = ? WHERE id = ?`, autoTitle(first.String, n), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Descendants returns every item under id: each one's children right
+// after it, in their order.
+func (s *Store) Descendants(id int64) ([]Item, error) {
+	all, err := s.queryItems(`WITH RECURSIVE down(id) AS (
+			SELECT id FROM items WHERE parent_id = ? UNION SELECT i.id FROM items i JOIN down ON i.parent_id = down.id
+		) SELECT `+itemColumns+` FROM items WHERE id IN (SELECT id FROM down) ORDER BY sort_order, id`, id)
+	if err != nil {
+		return nil, err
+	}
+	children := map[int64][]Item{}
+	for _, it := range all {
+		children[it.ParentID] = append(children[it.ParentID], it)
+	}
+	out := make([]Item, 0, len(all))
+	var walk func(int64)
+	walk = func(parent int64) {
+		for _, it := range children[parent] {
+			out = append(out, it)
+			walk(it.ID)
+		}
+	}
+	walk(id)
+	return out, nil
+}
+
+// MoveItemToProject moves an item, with the items under it, to another
+// project: at the end of its list, at the top level, all without a module.
 func (s *Store) MoveItemToProject(id, projectID int64) (Item, error) {
 	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
 		if it.ProjectID == projectID {
@@ -344,22 +573,51 @@ func (s *Store) MoveItemToProject(id, projectID int64) (Item, error) {
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE items SET project_id = ?, module_id = NULL, sort_order = ?, updated_at = ? WHERE id = ?`,
-			projectID, order, s.millis(), id)
-		return err
-	})
-}
-
-// DeleteItem deletes an item.
-func (s *Store) DeleteItem(id int64) error {
-	return s.inTx(func(tx *sql.Tx) error {
-		res, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id)
+		ids, err := subtreeIDs(tx, id)
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return ErrNotFound
+		now := s.millis()
+		for _, v := range ids {
+			if _, err := tx.Exec(`UPDATE items SET project_id = ?, module_id = NULL, updated_at = ? WHERE id = ?`, projectID, now, v); err != nil {
+				return err
+			}
 		}
-		return nil
+		if _, err := tx.Exec(`UPDATE items SET parent_id = NULL, sort_order = ? WHERE id = ?`, order, id); err != nil {
+			return err
+		}
+		return syncAutoTitles(tx, it.ParentID)
+	})
+}
+
+// DeleteItem deletes an item. Its children move up a level, into its place.
+func (s *Store) DeleteItem(id int64) error {
+	return s.inTx(func(tx *sql.Tx) error {
+		it, err := itemIn(tx, id)
+		if err != nil {
+			return err
+		}
+		children, err := childIDs(tx, it.ProjectID, id)
+		if err != nil {
+			return err
+		}
+		if len(children) > 0 {
+			siblings, err := childIDs(tx, it.ProjectID, it.ParentID)
+			if err != nil {
+				return err
+			}
+			at := slices.Index(siblings, id)
+			siblings = slices.Concat(siblings[:at], children, siblings[at+1:])
+			if _, err := tx.Exec(`UPDATE items SET parent_id = ? WHERE parent_id = ?`, nullable(it.ParentID), id); err != nil {
+				return err
+			}
+			if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, siblings); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+			return err
+		}
+		return syncAutoTitles(tx, it.ParentID)
 	})
 }

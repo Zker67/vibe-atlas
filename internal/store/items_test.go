@@ -159,7 +159,7 @@ func TestItemsOrder(t *testing.T) {
 	must(s.SetItemStatus(d1.ID, StatusDoing))
 	must(s.SetItemStatus(f1.ID, StatusDone))
 	must(s.SetItemStatus(f2.ID, StatusDone))
-	if err := s.MoveTodoItem(t2.ID, t1.ID, false); err != nil {
+	if err := s.MoveItem(t2.ID, t1.ID, PlaceBefore); err != nil {
 		t.Fatal(err)
 	}
 	// Doing in the order started, to do in the user's order, done the
@@ -170,7 +170,7 @@ func TestItemsOrder(t *testing.T) {
 	}
 }
 
-func TestMoveTodoItem(t *testing.T) {
+func TestMoveItemReorders(t *testing.T) {
 	s, path := newStore(t)
 	p := must(s.CreateProject("规则恐怖"))
 	m := must(s.CreateModule(p.ID, "武器"))
@@ -189,20 +189,20 @@ func TestMoveTodoItem(t *testing.T) {
 	}
 	steps := []struct {
 		id, anchor int64
-		after      bool
+		place      Place
 		want       string
 	}{
-		{e.ID, a.ID, false, "EABCD"}, // to the top
-		{e.ID, d.ID, true, "ABCDE"},  // to the bottom
-		{a.ID, c.ID, true, "BCADE"},  // down
-		{d.ID, b.ID, false, "DBCAE"}, // up
-		{c.ID, c.ID, false, "DBCAE"}, // onto itself
+		{e.ID, a.ID, PlaceBefore, "EABCD"}, // to the top
+		{e.ID, d.ID, PlaceAfter, "ABCDE"},  // to the bottom
+		{a.ID, c.ID, PlaceAfter, "BCADE"},  // down
+		{d.ID, b.ID, PlaceBefore, "DBCAE"}, // up
+		{c.ID, c.ID, PlaceBefore, "DBCAE"}, // onto itself
 		// Dragging in the list filtered to module 武器 (C, A, E): E above C
 		// puts it right before C in the whole list.
-		{e.ID, c.ID, false, "DBECA"},
+		{e.ID, c.ID, PlaceBefore, "DBECA"},
 	}
 	for _, step := range steps {
-		if err := s.MoveTodoItem(step.id, step.anchor, step.after); err != nil {
+		if err := s.MoveItem(step.id, step.anchor, step.place); err != nil {
 			t.Fatal(err)
 		}
 		if got := order(); got != step.want {
@@ -222,18 +222,16 @@ func TestMoveTodoItem(t *testing.T) {
 	}
 }
 
-func TestMoveTodoItemRejects(t *testing.T) {
+func TestMoveItemRejects(t *testing.T) {
 	s, _ := newStore(t)
 	p := must(s.CreateProject("规则恐怖"))
 	other := must(s.CreateProject("另一个"))
 	a := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "A"}))
-	b := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "B"}))
 	x := must(s.CreateItem(NewItem{ProjectID: other.ID, Title: "X"}))
-	must(s.SetItemStatus(b.ID, StatusDone))
-	wantUserErr(t, s.MoveTodoItem(a.ID, b.ID, false), "只能在同一个项目的待办里")
-	wantUserErr(t, s.MoveTodoItem(b.ID, a.ID, false), "只能在同一个项目的待办里")
-	wantUserErr(t, s.MoveTodoItem(a.ID, x.ID, false), "只能在同一个项目的待办里")
-	if err := s.MoveTodoItem(a.ID, 9999, false); !errors.Is(err, ErrNotFound) {
+	wantUserErr(t, s.MoveItem(a.ID, x.ID, PlaceBefore), "只能在同一个项目里")
+	wantUserErr(t, s.MoveItem(a.ID, a.ID, PlaceInside), "不能移到自己")
+	wantUserErr(t, s.MoveItem(a.ID, a.ID, "sideways"), "未知的位置")
+	if err := s.MoveItem(a.ID, 9999, PlaceBefore); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing anchor: %v", err)
 	}
 }
@@ -314,3 +312,6 @@ func TestDeeplinkOnItem(t *testing.T) {
 		t.Fatalf("deeplink not cleared: %q", it.Deeplink)
 	}
 }
+
+// Quick capture saves the notes and the link with the new item, checked as
+// SetItemNote and SetItemDeeplink check them.

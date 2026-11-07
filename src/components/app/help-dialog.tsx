@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow,
   ChevronRight,
+  Combine,
   Copy,
+  CornerDownRight,
   FileText,
   FolderOpen,
   Globe,
@@ -169,7 +171,7 @@ function StartSection() {
           按 <Accel /> 打开快速记录，输入标题后按 <K>Enter</K>。
         </Step>
         <Step n={2} title="安排顺序">
-          在待办中拖动排序，排在上面的先做。
+          在待办中拖动排序，排在上面的先做；拖到另一条上可以合并。
         </Step>
         <Step n={3} title="交给 AI">
           选中一条按 <K>C</K> 复制，粘贴到 AI 对话中。
@@ -207,7 +209,7 @@ function CaptureSection() {
 const STATUS_HINTS: Record<string, string> = {
   todo: "等待处理，可以拖动排序",
   doing: "正在处理",
-  done: "已完成，默认折叠",
+  done: "已完成，默认收起",
 };
 
 function QueueSection() {
@@ -235,9 +237,54 @@ function QueueSection() {
       <Points>
         <li>点击行首的圆圈，标记完成或重新打开。</li>
         <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
-        <li>右键单击改进点，可以修改状态、移动或删除。</li>
+        <li>右键单击改进点，可以修改状态、添加子改进点、移动或删除。</li>
+        <li>点击分区标题，收起或展开进行中、待办、已完成。</li>
+        <li>把改进点拖到另一个分区的标题或空白处，就改成那个状态；分区收起时也可以拖到标题上。</li>
+      </Points>
+      <DropGuide />
+      <Points>
+        <li>子改进点可以一层层往下套，层数不限，每一条都有自己的状态。</li>
+        <li>
+          点击行首的箭头，或按 <K>←</K> <K>→</K>，收起和展开子改进点。
+        </li>
+        <li>删除父改进点时，子改进点会上移一层，不会被一起删除。</li>
       </Points>
     </Section>
+  );
+}
+
+/** Where a row dragged onto another lands, drawn as three rows. */
+function DropGuide() {
+  const row = "relative flex h-9 items-center gap-2 rounded-md px-2.5";
+  return (
+    <div className="flex flex-col gap-3 rounded-lg bg-card p-3.5 ring-1 ring-foreground/[0.07]">
+      <span className="font-medium">拖到另一条改进点上</span>
+      <div className="flex flex-col gap-1.5">
+        <div className={cn(row, "bg-muted/60")}>
+          <span className="absolute -top-px right-2 left-2 h-0.5 rounded-full bg-primary" />
+          <span className="min-w-0 flex-1 truncate">拖到上沿或下沿</span>
+          <span className="text-xs text-muted-foreground">移到它前面或后面</span>
+        </div>
+        <div className={cn(row, "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)]")}>
+          <span className="min-w-0 flex-1 truncate">拖到中间</span>
+          <span className="flex h-5 items-center gap-1 rounded-full bg-primary px-2 text-xs font-medium text-primary-foreground">
+            <Combine className="size-3" />
+            合并
+          </span>
+        </div>
+        <div className={cn(row, "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)]")}>
+          <span className="min-w-0 flex-1 truncate">拖到已有子改进点的那一条中间</span>
+          <span className="flex h-5 items-center gap-1 rounded-full bg-primary px-2 text-xs font-medium text-primary-foreground">
+            <CornerDownRight className="size-3" />
+            放入
+          </span>
+        </div>
+      </div>
+      <span className="leading-relaxed text-muted-foreground">
+        合并后会多出一个父改进点，两条都放到它下面。父改进点的名字是第一条标题的前六个字加上「等 N 个改进点」，比如「修复登录按钮等 2
+        个改进点」；子改进点有增减时数量会跟着变，自己改过名字后就不再自动改。
+      </span>
+    </div>
   );
 }
 
@@ -252,7 +299,7 @@ function DetailSection() {
           可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。
         </Feature>
         <Feature icon={Copy} title="复制给 AI">
-          按 <K>C</K> 复制标题和备注，粘贴给 AI 即可。
+          按 <K>C</K> 复制标题和备注，有子改进点时附上它们的清单，粘贴给 AI 即可。
         </Feature>
         <Feature icon={NotebookPen} title="备注">
           支持 Markdown 格式。
@@ -338,6 +385,8 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["复制给 AI", ["C", "Ctrl+C"]],
       ["打开链接", ["O"]],
       ["编辑标题", ["Enter", "E"]],
+      ["收起子改进点 / 回到上级", ["←"]],
+      ["展开子改进点 / 进入第一条", ["→"]],
       ["删除", ["Delete"]],
     ],
   },

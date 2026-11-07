@@ -339,14 +339,15 @@ func (a *Atlas) editItem(fn func(*store.Store) (store.Item, error)) (store.Item,
 	return it, err
 }
 
-// MoveTodoItem moves an item to do right before the item to do anchorID,
-// or right after it when after is true.
-func (a *Atlas) MoveTodoItem(id, anchorID int64, after bool) error {
+// MoveItem moves an item, with the items under it, right before or after
+// anchorID among the anchor's siblings, or inside the anchor as its last
+// child.
+func (a *Atlas) MoveItem(id, anchorID int64, place store.Place) error {
 	db, err := a.store()
 	if err != nil {
 		return err
 	}
-	if err := db.MoveTodoItem(id, anchorID, after); err != nil {
+	if err := db.MoveItem(id, anchorID, place); err != nil {
 		return err
 	}
 	if it, err := db.Item(id); err == nil {
@@ -355,7 +356,15 @@ func (a *Atlas) MoveTodoItem(id, anchorID int64, after bool) error {
 	return nil
 }
 
-// MoveItemToProject moves an item to another project, without a module.
+// MergeItems puts the item id and the item targetID under a new parent in
+// the target's place, and returns the parent. Its title is the first 6
+// characters of the target's and how many children it has.
+func (a *Atlas) MergeItems(id, targetID int64) (store.Item, error) {
+	return a.editItem(func(db *store.Store) (store.Item, error) { return db.MergeItems(id, targetID) })
+}
+
+// MoveItemToProject moves an item, with the items under it, to another
+// project, at the top level and without a module.
 func (a *Atlas) MoveItemToProject(id, projectID int64) (store.Item, error) {
 	db, err := a.store()
 	if err != nil {
@@ -373,7 +382,7 @@ func (a *Atlas) MoveItemToProject(id, projectID int64) (store.Item, error) {
 	return it, err
 }
 
-// DeleteItem deletes an item.
+// DeleteItem deletes an item. Its children move up a level, into its place.
 func (a *Atlas) DeleteItem(id int64) error {
 	db, err := a.store()
 	if err != nil {
@@ -390,17 +399,32 @@ func (a *Atlas) DeleteItem(id int64) error {
 	return nil
 }
 
-// ItemText is what copying an item puts on the clipboard: its title, then
-// its notes.
-func ItemText(it store.Item) string {
+// ItemText is what copying an item puts on the clipboard: its title, its
+// notes, then the items under it as a task list, done ones ticked.
+// descendants are as Store.Descendants returns them.
+func ItemText(it store.Item, descendants []store.Item) string {
 	text := it.Title
 	if note := strings.TrimSpace(it.Note); note != "" {
 		text += "\n\n" + note
 	}
-	return text
+	if len(descendants) == 0 {
+		return text
+	}
+	depth := map[int64]int{it.ID: -1}
+	var b strings.Builder
+	for _, d := range descendants {
+		depth[d.ID] = depth[d.ParentID] + 1
+		mark := " "
+		if d.Status == store.StatusDone {
+			mark = "x"
+		}
+		fmt.Fprintf(&b, "\n%s- [%s] %s", strings.Repeat("  ", depth[d.ID]), mark, d.Title)
+	}
+	return text + "\n" + b.String()
 }
 
-// CopyItem copies an item's title and notes as Markdown, to paste to an AI.
+// CopyItem copies an item's title and notes, with the items under it, as
+// Markdown, to paste to an AI.
 func (a *Atlas) CopyItem(id int64) error {
 	db, err := a.store()
 	if err != nil {
@@ -410,7 +434,11 @@ func (a *Atlas) CopyItem(id int64) error {
 	if err != nil {
 		return err
 	}
-	mygo.Clipboard.WriteText(ItemText(it))
+	descendants, err := db.Descendants(id)
+	if err != nil {
+		return err
+	}
+	mygo.Clipboard.WriteText(ItemText(it, descendants))
 	return nil
 }
 

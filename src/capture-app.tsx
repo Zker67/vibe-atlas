@@ -129,7 +129,7 @@ export function CaptureApp() {
     if (!text || !project) return;
     setTitle("");
     try {
-      const item = await Atlas.captureItem({ projectId: project.id, moduleId, type, title: text });
+      const item = await Atlas.captureItem({ projectId: project.id, parentId: 0, moduleId, type, title: text });
       setSaved((list) => [{ id: item.id, title: item.title, type: item.type, project: project.name }, ...list].slice(0, 4));
       setError("");
     } catch (e) {

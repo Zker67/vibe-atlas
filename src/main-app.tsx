@@ -12,7 +12,7 @@ import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
 import { ProjectBar, QueueFilters } from "@/components/app/project-header";
-import { confirmDeleteItem, Queue, visibleItems } from "@/components/app/queue";
+import { collapseOrUp, confirmDeleteItem, expandOrDown, Queue, visibleItems } from "@/components/app/queue";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
@@ -250,6 +250,16 @@ function useShortcuts() {
       }
       if (!item) return;
       switch (key) {
+        case "ArrowLeft":
+          if (usesArrows(focus)) return;
+          e.preventDefault();
+          collapseOrUp();
+          break;
+        case "ArrowRight":
+          if (usesArrows(focus)) return;
+          e.preventDefault();
+          expandOrDown();
+          break;
         case " ":
           if (onControl(focus)) return;
           e.preventDefault();

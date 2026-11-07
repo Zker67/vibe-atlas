@@ -69,7 +69,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -112,6 +112,13 @@ CREATE TABLE settings (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
 );`,
+	// Sub-items: an item may sit under another of its project, to any
+	// depth. auto_title marks a parent whose title the app made from its
+	// children, kept up to date until the user renames it.
+	1: `
+ALTER TABLE items ADD COLUMN parent_id INTEGER REFERENCES items (id) ON DELETE SET NULL;
+ALTER TABLE items ADD COLUMN auto_title INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX items_by_parent ON items (parent_id);`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction

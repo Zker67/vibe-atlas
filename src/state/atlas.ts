@@ -8,10 +8,12 @@ import {
   type ItemType,
   type Module,
   type Overview,
+  type Place,
   type Project,
   type Settings,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
+import { ancestors, applyMove, buildForest, queueTrees, subtreeIds, type QueueTrees } from "@/lib/tree";
 
 export type View = "queue" | "overview";
 export type TypeFilter = ItemType | "all";
@@ -36,9 +38,42 @@ interface AtlasState {
   statusFilter: StatusFilter;
   /** The item shown in the detail panel, 0 for none. */
   selectedId: number;
-  doneOpen: boolean;
+  /** Which sections of the queue show their items: 进行中, 待办, 已完成. */
+  sectionOpen: Readonly<Record<ItemStatus, boolean>>;
   /** Bumped to move the keyboard to the field that adds items. */
   focusNewItem: number;
+  /** The items whose children the queue hides. */
+  collapsed: ReadonlySet<number>;
+  /** The item whose detail should open its field that adds a child, once; 0 for none. */
+  newChildFor: number;
+}
+
+const COLLAPSED_KEY = "vibe-atlas-collapsed";
+const SECTIONS_KEY = "vibe-atlas-sections";
+
+function loadSectionOpen(): Record<ItemStatus, boolean> {
+  const open = { doing: true, todo: true, done: false };
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? "{}");
+    if (saved && typeof saved === "object") {
+      for (const k of ["doing", "todo", "done"] as const) {
+        const v = (saved as Record<string, unknown>)[k];
+        if (typeof v === "boolean") open[k] = v;
+      }
+    }
+  } catch {
+    // Keep the defaults.
+  }
+  return open;
+}
+
+function loadCollapsed(): Set<number> {
+  try {
+    const ids: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+    return new Set(Array.isArray(ids) ? ids.filter((v): v is number => typeof v === "number") : []);
+  } catch {
+    return new Set();
+  }
 }
 
 export const useAtlas = create<AtlasState>(() => ({
@@ -55,8 +90,10 @@ export const useAtlas = create<AtlasState>(() => ({
   moduleFilter: "all",
   statusFilter: "all",
   selectedId: 0,
-  doneOpen: false,
+  sectionOpen: loadSectionOpen(),
   focusNewItem: 0,
+  collapsed: loadCollapsed(),
+  newChildFor: 0,
 }));
 
 const get = useAtlas.getState;
@@ -161,8 +198,9 @@ export function select(id: number) {
   set({ selectedId: id });
 }
 
-/** Shows an item in the queue, from the overview: clears filters that hide it. */
+/** Shows an item in the queue, from the overview: clears filters that hide it, opens its parents. */
 export function showItem(item: Item) {
+  expand(ancestors(buildForest(get().items), item.id).map((a) => a.id));
   const s = get();
   const hidden =
     (s.typeFilter !== "all" && s.typeFilter !== item.type) ||
@@ -171,9 +209,27 @@ export function showItem(item: Item) {
     statusFilter: matchesStatus(item, s.statusFilter) ? s.statusFilter : "all",
     view: "queue",
     selectedId: item.id,
-    doneOpen: s.doneOpen || item.status === "done",
     ...(hidden ? { typeFilter: "all" as const, moduleFilter: "all" as const } : {}),
   });
+  const section = sectionOf(item.id);
+  if (section) setSectionOpen(section, true);
+}
+
+/** The queue's trees, by section, as the filters and the collapsed parents leave them. */
+export function layoutQueue(
+  s: Pick<AtlasState, "items" | "typeFilter" | "moduleFilter" | "statusFilter" | "collapsed">,
+): QueueTrees {
+  return queueTrees(
+    buildForest(s.items),
+    (it) => matchesFilters(it, s.typeFilter, s.moduleFilter) && matchesStatus(it, s.statusFilter),
+    s.collapsed,
+  );
+}
+
+/** The section of the queue an item shows in now, or undefined when it does not show. */
+export function sectionOf(id: number): ItemStatus | undefined {
+  const trees = layoutQueue(get());
+  return (["doing", "todo", "done"] as const).find((st) => trees[st].some((t) => t.rows.some((r) => r.item.id === id)));
 }
 
 export function setTypeFilter(typeFilter: TypeFilter) {
@@ -192,12 +248,52 @@ export function clearFilters() {
   set({ typeFilter: "all", moduleFilter: "all", statusFilter: "all" });
 }
 
-export function toggleDone(open?: boolean) {
-  set((s) => ({ doneOpen: open ?? !s.doneOpen }));
+/** Shows or hides the items of a section of the queue; the queue remembers it. */
+export function setSectionOpen(section: ItemStatus, open = !get().sectionOpen[section]) {
+  if (get().sectionOpen[section] === open) return;
+  const sectionOpen = { ...get().sectionOpen, [section]: open };
+  set({ sectionOpen });
+  localStorage.setItem(SECTIONS_KEY, JSON.stringify(sectionOpen));
 }
 
 export function focusNewItem() {
   set((s) => ({ view: "queue", focusNewItem: s.focusNewItem + 1 }));
+}
+
+/** Selects an item and moves the keyboard to the field that adds a child to it. */
+export function focusNewChild(id: number) {
+  set({ view: "queue", selectedId: id, newChildFor: id });
+}
+
+/** The detail took the request of focusNewChild. */
+export function newChildTaken() {
+  set({ newChildFor: 0 });
+}
+
+function saveCollapsed(collapsed: ReadonlySet<number>) {
+  set({ collapsed });
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+}
+
+/** Hides or shows the children of an item in the queue. */
+export function setCollapsed(id: number, hide: boolean) {
+  const { collapsed } = get();
+  if (collapsed.has(id) === hide) return;
+  const next = new Set(collapsed);
+  if (hide) next.add(id);
+  else next.delete(id);
+  saveCollapsed(next);
+}
+
+export function toggleCollapsed(id: number) {
+  setCollapsed(id, !get().collapsed.has(id));
+}
+
+/** Shows the children of the items ids. */
+export function expand(ids: number[]) {
+  const { collapsed } = get();
+  if (!ids.some((id) => collapsed.has(id))) return;
+  saveCollapsed(new Set([...collapsed].filter((id) => !ids.includes(id))));
 }
 
 // ---- Derived lists ----
@@ -321,10 +417,18 @@ export function moveModule(id: number, overId: number) {
   void runOk(Atlas.reorderModules(get().projectId, order));
 }
 
-/** Adds an item to the open project. Throws its error, for the field to show. */
-export async function createItem(title: string, type: ItemType, moduleId: number): Promise<Item> {
-  const item = await Atlas.createItem({ projectId: get().projectId, moduleId, type, title });
+/**
+ * Adds an item to the open project, under parentId unless it is 0. Throws
+ * its error, for the field to show.
+ */
+export async function createItem(title: string, type: ItemType, moduleId: number, parentId = 0): Promise<Item> {
+  const item = await Atlas.createItem({ projectId: get().projectId, parentId, moduleId, type, title });
   mergeItem(item);
+  if (parentId) {
+    expand([parentId]);
+    // The parent's title may follow its children.
+    void refresh();
+  }
   return item;
 }
 
@@ -361,35 +465,89 @@ export function toggleItemDoing(item: Item) {
   void setItemStatus(item.id, item.status === "doing" ? "todo" : "doing");
 }
 
-/** Moves an item to do before or after another, as dragged in the queue. */
-export function moveTodoItem(id: number, anchorId: number, after: boolean) {
-  set((s) => {
-    const todo = s.items.filter((i) => i.status === "todo");
-    const moving = todo.find((i) => i.id === id);
-    if (!moving) return {};
-    const rest = todo.filter((i) => i.id !== id);
-    let at = rest.findIndex((i) => i.id === anchorId);
-    if (at < 0) return {};
-    if (after) at++;
-    rest.splice(at, 0, moving);
-    return {
-      items: [...s.items.filter((i) => i.status === "doing"), ...rest, ...s.items.filter((i) => i.status === "done")],
-    };
-  });
-  void runOk(Atlas.moveTodoItem(id, anchorId, after));
+/**
+ * Moves an item, with those under it, before or after another or inside it,
+ * as dropped in the queue. The queue shows the move at once.
+ */
+export function moveItem(id: number, anchorId: number, place: Place) {
+  void dropItem(id, { anchorId, place }, null);
+}
+
+/** An item as it is once its status became status, as SetItemStatus stamps it. */
+function withStatus(item: Item, status: ItemStatus): Item {
+  if (item.status === status) return item;
+  const now = Date.now();
+  switch (status) {
+    case "doing":
+      return { ...item, status, startedAt: now, doneAt: 0 };
+    case "done":
+      return { ...item, status, doneAt: now };
+    case "todo":
+      return { ...item, status, startedAt: 0, doneAt: 0 };
+  }
+}
+
+/**
+ * The items whose status changes when id is dropped in the section of
+ * status, so that its tree lands there: id itself; for 待办 also those under
+ * it that are doing; for 已完成 everything under it not done yet.
+ */
+export function statusChanges(items: Item[], id: number, status: ItemStatus): number[] {
+  const forest = buildForest(items);
+  const changes = (v: number) => {
+    const it = forest.byId.get(v)?.item;
+    if (!it || it.status === status) return false;
+    if (v === id || status === "done") return true;
+    return status === "todo" && it.status === "doing";
+  };
+  return [...subtreeIds(forest, id)].filter(changes);
+}
+
+/**
+ * What a drop in the queue does: moves the item, then gives it, and what
+ * statusChanges picks under it, the status of the section it was dropped
+ * in; either step is optional. The queue shows both at once; Go applies
+ * them in that order.
+ */
+export async function dropItem(id: number, move: { anchorId: number; place: Place } | null, status: ItemStatus | null) {
+  let items = get().items;
+  const changed = status ? new Set(statusChanges(items, id, status)) : new Set<number>();
+  if (move) items = applyMove(items, id, move.anchorId, move.place) ?? items;
+  if (status) items = items.map((i) => (changed.has(i.id) ? withStatus(i, status) : i));
+  set({ items });
+  if (move?.place === "inside") expand([move.anchorId]);
+  if (move && !(await runOk(Atlas.moveItem(id, move.anchorId, move.place)))) {
+    void refresh();
+    return;
+  }
+  if (!status) return;
+  for (const v of changed) await setItemStatus(v, status);
+}
+
+/** Puts id and targetId under a new parent in the target's place, and selects the parent. */
+export async function mergeItems(id: number, targetId: number): Promise<Item | undefined> {
+  const parent = await run(Atlas.mergeItems(id, targetId));
+  if (!parent) return;
+  await refresh();
+  set({ selectedId: parent.id });
+  return parent;
 }
 
 export async function moveItemToProject(id: number, projectId: number) {
   const item = await run(Atlas.moveItemToProject(id, projectId));
   if (!item) return;
   const project = get().projects.find((p) => p.id === projectId);
-  set((s) => ({ items: s.items.filter((i) => i.id !== id), selectedId: s.selectedId === id ? 0 : s.selectedId }));
+  // The items under it go along.
+  const gone = subtreeIds(buildForest(get().items), id);
+  set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), selectedId: gone.has(s.selectedId) ? 0 : s.selectedId }));
   toast.success(`已移到「${project?.name ?? "另一个项目"}」`);
 }
 
 export async function deleteItem(id: number) {
   if (await runOk(Atlas.deleteItem(id))) {
     set((s) => ({ items: s.items.filter((i) => i.id !== id), selectedId: s.selectedId === id ? 0 : s.selectedId }));
+    // Its children moved up into its place.
+    void refresh();
   }
 }
 

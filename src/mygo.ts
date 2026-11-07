@@ -52,11 +52,13 @@ export interface Glass {
 
 /**
  * Item is one thing to do in a project: an improvement, a bug or a new
- * feature.
+ * feature. Items may sit under another item of their project, to any depth.
  */
 export interface Item {
   id: number;
   projectId: number;
+  /** ParentID is the item this one sits under, or 0 for a top-level item. */
+  parentId: number;
   /** ModuleID is the item's module, or 0 for none (「未分类」). */
   moduleId: number;
   type: ItemType;
@@ -69,7 +71,10 @@ export interface Item {
    * with an AI where it is worked on, or "".
    */
   deeplink: string;
-  /** SortOrder orders the items to do, as the user dragged them. */
+  /**
+   * SortOrder orders an item among its siblings, as the user dragged
+   * them.
+   */
   sortOrder: number;
   createdAt: number;
   /** StartedAt is when the item became doing, or 0. */
@@ -127,6 +132,11 @@ export interface ModuleStats {
 /** NewItem is what a new item starts with. */
 export interface NewItem {
   projectId: number;
+  /**
+   * ParentID is the item it goes under, as its last child, or 0 for the
+   * end of the project's list.
+   */
+  parentId: number;
   /** ModuleID is 0 for no module. */
   moduleId: number;
   /** Type is TypeImprove when empty. */
@@ -151,6 +161,9 @@ export interface Overview {
   /** Done lists the done items, the most recently done first. */
   done: Item[];
 }
+
+/** Place is where MoveItem puts an item, against its anchor. */
+export type Place = "before" | "after" | "inside";
 
 /** Project is a whole project, such as a game, with its modules and items. */
 export interface Project {
@@ -279,7 +292,10 @@ export const Atlas = {
   clearWallpaper(): Promise<Settings> {
     return call("Atlas.ClearWallpaper");
   },
-  /** CopyItem copies an item's title and notes as Markdown, to paste to an AI. */
+  /**
+   * CopyItem copies an item's title and notes, with the items under it, as
+   * Markdown, to paste to an AI.
+   */
   copyItem(id: number): Promise<void> {
     return call("Atlas.CopyItem", id);
   },
@@ -295,7 +311,7 @@ export const Atlas = {
   createProject(name: string): Promise<Project> {
     return call("Atlas.CreateProject", name);
   },
-  /** DeleteItem deletes an item. */
+  /** DeleteItem deletes an item. Its children move up a level, into its place. */
   deleteItem(id: number): Promise<void> {
     return call("Atlas.DeleteItem", id);
   },
@@ -321,20 +337,32 @@ export const Atlas = {
   items(projectID: number): Promise<Item[]> {
     return call("Atlas.Items", projectID);
   },
+  /**
+   * MergeItems puts the item id and the item targetID under a new parent in
+   * the target's place, and returns the parent. Its title is the first 6
+   * characters of the target's and how many children it has.
+   */
+  mergeItems(id: number, targetID: number): Promise<Item> {
+    return call("Atlas.MergeItems", id, targetID);
+  },
   /** Modules returns the modules of a project, in the user's order. */
   modules(projectID: number): Promise<Module[]> {
     return call("Atlas.Modules", projectID);
   },
-  /** MoveItemToProject moves an item to another project, without a module. */
-  moveItemToProject(id: number, projectID: number): Promise<Item> {
-    return call("Atlas.MoveItemToProject", id, projectID);
+  /**
+   * MoveItem moves an item, with the items under it, right before or after
+   * anchorID among the anchor's siblings, or inside the anchor as its last
+   * child.
+   */
+  moveItem(id: number, anchorID: number, place: Place): Promise<void> {
+    return call("Atlas.MoveItem", id, anchorID, place);
   },
   /**
-   * MoveTodoItem moves an item to do right before the item to do anchorID,
-   * or right after it when after is true.
+   * MoveItemToProject moves an item, with the items under it, to another
+   * project, at the top level and without a module.
    */
-  moveTodoItem(id: number, anchorID: number, after: boolean): Promise<void> {
-    return call("Atlas.MoveTodoItem", id, anchorID, after);
+  moveItemToProject(id: number, projectID: number): Promise<Item> {
+    return call("Atlas.MoveItemToProject", id, projectID);
   },
   /** OpenDataFolder opens the folder of the database in the file manager. */
   openDataFolder(): Promise<void> {

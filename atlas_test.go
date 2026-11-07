@@ -74,3 +74,40 @@ func TestBackgroundRejectsUnknown(t *testing.T) {
 		t.Errorf("background = %q for an unknown stored value", got)
 	}
 }
+
+func TestItemTextListsChildren(t *testing.T) {
+	db := openStore(t)
+	p, err := db.CreateProject("规则恐怖")
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(title string, parent int64) store.Item {
+		it, err := db.CreateItem(store.NewItem{ProjectID: p.ID, ParentID: parent, Title: title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return it
+	}
+	x := add("武器手感", 0)
+	if _, err := db.SetItemNote(x.ID, "整体再顺一点"); err != nil {
+		t.Fatal(err)
+	}
+	a := add("切枪卡一帧", x.ID)
+	add("换弹动画", a.ID)
+	b := add("后坐力", x.ID)
+	if _, err := db.SetItemStatus(b.ID, store.StatusDone); err != nil {
+		t.Fatal(err)
+	}
+	x, _ = db.Item(x.ID)
+	desc, err := db.Descendants(x.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "武器手感\n\n整体再顺一点\n\n- [ ] 切枪卡一帧\n  - [ ] 换弹动画\n- [x] 后坐力"
+	if got := ItemText(x, desc); got != want {
+		t.Fatalf("ItemText =\n%s\nwant\n%s", got, want)
+	}
+	if got := ItemText(b, nil); got != "后坐力" {
+		t.Fatalf("ItemText of a leaf = %q", got)
+	}
+}

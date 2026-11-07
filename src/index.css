@@ -353,6 +353,12 @@ html[data-effects] .signal-dot {
   }
 }
 
+/* While a row of the queue is dragged, the pointer holds it everywhere. */
+html.dragging-rows,
+html.dragging-rows * {
+  cursor: grabbing !important;
+}
+
 /* ---- The Markdown editor (CodeMirror), see src/components/editor ---- */
 .cm-editor {
   @apply text-sm;
