@@ -1,26 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, Copy, Ellipsis, ExternalLink, Link2, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, Copy, ExternalLink, Link2, Trash2, X } from "lucide-react";
 import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { useDebouncedSave } from "@/lib/debounce";
 import { isComposing } from "@/lib/keys";
-import { STATUSES, TYPES, UNSORTED } from "@/lib/labels";
+import { statusInfo, TYPES, UNSORTED } from "@/lib/labels";
 import { formatTime, useNow } from "@/lib/time";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   copyItem,
   moveItemToProject,
@@ -78,34 +76,24 @@ function DetailEmpty() {
 function Detail({ item }: { item: Item }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b px-3">
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={item.status}
-          onValueChange={(v) => v && void setItemStatus(item.id, v as ItemStatus)}
-          aria-label="状态"
-        >
-          {STATUSES.map((s) => (
-            <ToggleGroupItem key={s.value} value={s.value}>
-              <s.icon className={s.text} />
-              {s.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <div className="ml-auto flex items-center gap-0.5">
-          <IconButton label="复制给 AI" shortcut="C" onClick={() => void copyItem(item.id)}>
-            <Copy />
-          </IconButton>
-          <MoreMenu item={item} />
-          <IconButton label="关闭" shortcut="Esc" onClick={() => select(0)}>
-            <X />
-          </IconButton>
-        </div>
-      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3">
-        <TitleField item={item} />
+        <div className="flex items-start gap-2">
+          <TitleField item={item} />
+          <div className="-mr-1.5 flex shrink-0 items-center gap-0.5 pt-0.5">
+            <IconButton label="复制给 AI" shortcut="C" onClick={() => void copyItem(item.id)}>
+              <Copy />
+            </IconButton>
+            <MoveMenu item={item} />
+            <IconButton label="删除" shortcut="Delete" className="hover:text-destructive" onClick={() => confirmDeleteItem(item)}>
+              <Trash2 />
+            </IconButton>
+            <IconButton label="关闭" shortcut="Esc" onClick={() => select(0)}>
+              <X />
+            </IconButton>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
+          <StatusCycle item={item} />
           <TypeSelect item={item} />
           <ModuleSelect item={item} />
         </div>
@@ -117,35 +105,50 @@ function Detail({ item }: { item: Item }) {
   );
 }
 
-function MoreMenu({ item }: { item: Item }) {
+/** The order a click on the status steps through. */
+const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { todo: "doing", doing: "done", done: "todo" };
+
+/** The item's status as one button: a click moves it on, 待办 → 进行中 → 完成 → 待办. */
+function StatusCycle({ item }: { item: Item }) {
+  const at = statusInfo(item.status);
+  const next = statusInfo(NEXT_STATUS[item.status]);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`状态：${at.label}，点击改为${next.label}`}
+          className="text-sm [&_svg]:size-4"
+          onClick={() => void setItemStatus(item.id, next.value)}
+        >
+          <at.icon className={at.text} />
+          {at.label}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>点击改为「{next.label}」</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Moves the item to another project, picked from a menu. */
+function MoveMenu({ item }: { item: Item }) {
   const projects = useAtlas((s) => s.projects);
   const others = projects.filter((p) => p.id !== item.projectId);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label="更多">
-          <Ellipsis />
+        <IconButton label={others.length ? "移到其他项目" : "没有其他项目可移"} disabled={others.length === 0}>
+          <ArrowRightLeft />
         </IconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger disabled={others.length === 0}>
-            <ArrowRightLeft />
-            移到其他项目
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-80 w-48 overflow-y-auto">
-            {others.map((p) => (
-              <DropdownMenuItem key={p.id} onSelect={() => void moveItemToProject(item.id, p.id)}>
-                <span className="truncate">{p.name}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => confirmDeleteItem(item)}>
-          <Trash2 />
-          删除
-        </DropdownMenuItem>
+      <DropdownMenuContent align="end" className="max-h-80 w-48 overflow-y-auto">
+        <DropdownMenuLabel>移到其他项目</DropdownMenuLabel>
+        {others.map((p) => (
+          <DropdownMenuItem key={p.id} onSelect={() => void moveItemToProject(item.id, p.id)}>
+            <span className="truncate">{p.name}</span>
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -175,7 +178,7 @@ function TitleField({ item }: { item: Item }) {
       rows={1}
       maxLength={300}
       aria-label="标题"
-      className="field-sizing-content -mx-1.5 resize-none rounded-md bg-transparent px-1.5 py-1 text-base leading-snug font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+      className="field-sizing-content -mx-1.5 min-w-0 flex-1 resize-none rounded-md bg-transparent px-1.5 py-1 text-base leading-snug font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
       onFocus={() => (editing.current = true)}
       onBlur={() => {
         editing.current = false;
