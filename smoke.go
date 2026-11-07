@@ -219,6 +219,9 @@ func (a *app) smokeLook(main, capture *mygo.Window) (map[string]any, error) {
 		const layer = () => document.querySelector("[data-wallpaper-layer]");
 		const s = await mygo.call("Atlas.Settings");
 		const result = { url: s.wallpaper.url };
+		// The app's own scroll bars: the system's hidden, the box still scrolling natively.
+		const viewport = document.querySelector('[data-slot="scroller"] .scroller-viewport');
+		result.scroller = !!viewport && getComputedStyle(viewport).scrollbarWidth === "none" && getComputedStyle(viewport).overflowY === "auto";
 		result.layerShown = await until(() => layer() && html.hasAttribute("data-effects"));
 		try {
 			const res = await fetch(s.wallpaper.url);
@@ -252,7 +255,7 @@ func (a *app) smokeLook(main, capture *mygo.Window) (map[string]any, error) {
 		return result, err
 	}
 	result["nativeOpacity"] = main.Opacity()
-	for _, k := range []string{"layerShown", "loaded", "glassApplied", "glassClamped", "hiddenWhenOff"} {
+	for _, k := range []string{"scroller", "layerShown", "loaded", "glassApplied", "glassClamped", "hiddenWhenOff"} {
 		if result[k] != true {
 			return result, errors.New("look: " + k + " failed: " + jsonString(result))
 		}

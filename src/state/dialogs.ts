@@ -18,7 +18,7 @@ export interface ConfirmRequest {
 }
 
 /** The tabs of 设置. */
-export type SettingsTab = "capture" | "appearance" | "look" | "data";
+export type SettingsTab = "capture" | "appearance" | "data";
 
 interface DialogsState {
   name: NameRequest | null;

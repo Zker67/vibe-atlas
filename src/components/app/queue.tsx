@@ -30,6 +30,7 @@ import { errorMessage } from "@/lib/api";
 import { buildForest, subtreeIds, type Row, type TreeRows } from "@/lib/tree";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { Scroller } from "@/components/ui/scroller";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -401,8 +402,9 @@ export function Queue() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-4"
+      <Scroller
+        className="flex-1"
+        viewportClassName="px-3 pt-2 pb-4"
         onClick={(e) => {
           if (e.target === e.currentTarget) select(0);
         }}
@@ -438,7 +440,7 @@ export function Queue() {
             )}
           </QueueDnd>
         )}
-      </div>
+      </Scroller>
       <NewItemInput />
     </div>
   );

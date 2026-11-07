@@ -110,7 +110,7 @@
     /* The frame (title bar, sidebar) sits on the ground; the content is a
        panel raised over it. With effects on, both turn to frosted glass of
        their colors (--frame-tint, --panel), as opaque as the user set
-       (--glass-frame, --glass-panel, see 设置 → 背景与毛玻璃). */
+       (--glass-frame, --glass-panel, see 设置 → 外观). */
     --frame-tint: oklch(0.965 0.003 95);
     --panel: oklch(0.995 0.002 95);
     /* The light of the effects: the ink of the icon, white on black. */
@@ -209,6 +209,68 @@ textarea,
 * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent;
+}
+
+/*
+ * The app's own scroll bar (src/components/ui/scroller.tsx): the box hides
+ * the system's, and a thin thumb floats over the content's right edge. It
+ * shows while the box scrolls, is pointed at or dragged, then fades.
+ */
+.scroller-viewport {
+  scrollbar-width: none;
+}
+.scroller-viewport::-webkit-scrollbar {
+  display: none;
+}
+.scroller-bar {
+  position: absolute;
+  z-index: 10;
+  top: 3px;
+  right: 1px;
+  bottom: 3px;
+  width: 11px;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+.scroller-bar[data-hidden] {
+  display: none;
+}
+.scroller-bar[data-active],
+.scroller-bar[data-dragging],
+.scroller-bar[data-always],
+.scroller-bar:hover {
+  opacity: 1;
+  transition-duration: 120ms;
+}
+/* Always in sight: over a faint track. */
+.scroller-bar[data-always]::before {
+  content: "";
+  position: absolute;
+  inset: 0 2px 0 auto;
+  width: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 7%, transparent);
+  transition: width 150ms ease;
+}
+.scroller-bar[data-always]:hover::before,
+.scroller-bar[data-always][data-dragging]::before {
+  width: 7px;
+}
+.scroller-thumb {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  width: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 24%, transparent);
+  transition:
+    width 150ms ease,
+    background-color 150ms ease;
+}
+.scroller-bar:hover .scroller-thumb,
+.scroller-bar[data-dragging] .scroller-thumb {
+  width: 7px;
+  background: color-mix(in oklch, var(--foreground) 40%, transparent);
 }
 
 /* ---- 暗场 + 信号光: always on, CSS only ---- */

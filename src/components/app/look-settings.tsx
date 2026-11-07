@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { AudioWaveform, CircleOff, Grip, ImageIcon, ImagePlus, Info, RotateCcw, Trash2 } from "lucide-react";
+import { AudioWaveform, CircleOff, Grip, ImagePlus, Info, RotateCcw, Trash2 } from "lucide-react";
+import { cn } from "cn";
 import { Atlas, type Background, type Glass, type Settings, type WallpaperLook } from "@/mygo";
 import { run } from "@/lib/api";
 import { decorated } from "@/lib/look";
@@ -10,9 +11,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { SettingCard } from "./setting-card";
 
-// 设置 → 背景与毛玻璃, and the opacity of the whole window (设置 → 外观).
-// A slider shows its change at once, while it is dragged, and saves it once
-// let go.
+// The look of the main window in 设置 → 外观, under the theme: the moving
+// background, the picture, the frosted glass and the opacity of the whole
+// window. Options show only once they can do something: the picture's once
+// there is one, the glass's once something is behind it. A slider shows its
+// change at once, while it is dragged, and saves it once let go.
 
 type MotionChoice = "off" | Background;
 
@@ -118,17 +121,29 @@ const sameGlass = (a: Glass, b: Glass) => a.blur === b.blur && a.panel === b.pan
 const sameLook = (a: WallpaperLook, b: WallpaperLook) =>
   a.blur === b.blur && a.opacity === b.opacity && a.scale === b.scale && a.x === b.x && a.y === b.y;
 
-/** 设置 → 背景与毛玻璃. */
-export function LookPanel({ settings }: { settings: Settings }) {
+/** The look's settings, after the theme in 设置 → 外观. */
+export function LookSettings({ settings }: { settings: Settings }) {
   useTuningEnds();
+  const behind = decorated(settings);
   return (
     <>
       <MotionSetting settings={settings} />
       <WallpaperSetting settings={settings} />
-      <GlassSetting settings={settings} />
+      {behind ? (
+        <GlassSetting settings={settings} />
+      ) : (
+        <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+          <Info className="size-3.5 shrink-0" />
+          打开动态背景或设置背景图片后，可以调毛玻璃。
+        </p>
+      )}
+      <WindowOpacitySetting settings={settings} />
     </>
   );
 }
+
+/** A part of a card that shows only on demand, fading in. */
+const APPEAR = "animate-in duration-200 fade-in-0 slide-in-from-top-1";
 
 function MotionSetting({ settings }: { settings: Settings }) {
   return (
@@ -177,43 +192,53 @@ function WallpaperSetting({ settings }: { settings: Settings }) {
   return (
     <SettingCard
       title="背景图片"
-      description="设了图片后，就算不开动态背景，框架和内容面板也会变成毛玻璃。"
-      action={w.url && !sameLook(look, defaults) && <ResetButton onClick={() => setLook({ ...defaults, enabled: look.enabled }, true)} />}
+      description={
+        w.url
+          ? "就算不开动态背景，框架和内容面板也会变成毛玻璃。"
+          : "放在主窗口背后。PNG、JPG、WebP、GIF 或 BMP，不超过 20 MB。"
+      }
+      action={w.url && look.enabled && !sameLook(look, defaults) && <ResetButton onClick={() => setLook({ ...defaults, enabled: true }, true)} />}
     >
-      <div className="flex items-center gap-3">
-        <div className="grid aspect-[16/10] w-32 shrink-0 place-items-center overflow-hidden rounded-md bg-muted ring-1 ring-foreground/10">
-          {w.url ? (
-            <img src={w.url} alt="背景图片预览" className={look.enabled ? "size-full object-cover" : "size-full object-cover opacity-40 grayscale"} />
-          ) : (
-            <ImageIcon className="size-5 text-muted-foreground" />
-          )}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <p className="truncate text-xs text-muted-foreground" title={w.name || undefined}>
-            {w.url ? w.name || "已设置图片" : "PNG、JPG、WebP、GIF 或 BMP，不超过 20 MB"}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => save(Atlas.chooseWallpaper())}>
-              <ImagePlus />
-              {w.url ? "更换图片" : "选择图片"}
-            </Button>
-            {w.url && (
+      {w.url ? (
+        <div className={`flex items-center gap-3 ${APPEAR}`}>
+          <img
+            src={w.url}
+            alt="背景图片预览"
+            className={cn(
+              "aspect-[16/10] w-28 shrink-0 rounded-md object-cover ring-1 ring-foreground/10 transition-[opacity,filter] duration-200",
+              !look.enabled && "opacity-40 grayscale",
+            )}
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="truncate text-xs text-muted-foreground" title={w.name || undefined}>
+              {w.name || "已设置图片"}
+            </p>
+            <div className="flex flex-wrap items-center gap-1">
+              <Button variant="outline" size="sm" onClick={() => save(Atlas.chooseWallpaper())}>
+                <ImagePlus />
+                更换
+              </Button>
               <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => save(Atlas.clearWallpaper())}>
                 <Trash2 />
                 移除
               </Button>
-            )}
+            </div>
           </div>
-        </div>
-        {w.url && (
           <label className="flex shrink-0 items-center gap-2 text-xs">
             <Switch checked={look.enabled} onCheckedChange={(v) => setLook({ enabled: v }, true)} />
             显示
           </label>
-        )}
-      </div>
-      {w.url && (
-        <div className={look.enabled ? "flex flex-col gap-3 pt-1" : "pointer-events-none flex flex-col gap-3 pt-1 opacity-50"} aria-disabled={!look.enabled}>
+        </div>
+      ) : (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => save(Atlas.chooseWallpaper())}>
+            <ImagePlus />
+            选择图片
+          </Button>
+        </div>
+      )}
+      {w.url && look.enabled && (
+        <div className={`flex flex-col gap-3 pt-1 ${APPEAR}`}>
           <SliderRow label="模糊" min={0} max={40} unit="px" {...row("blur")} />
           <SliderRow label="不透明度" min={0} max={100} unit="%" {...row("opacity")} />
           <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3">
@@ -266,13 +291,7 @@ function GlassSetting({ settings }: { settings: Settings }) {
       description="只调框架（顶栏和侧栏）和内容面板，不影响窗口整体透明度。不透明度越低，越能看清背后的背景。"
       action={!sameGlass(g, defaults) && <ResetButton onClick={() => setGlass(defaults, true)} />}
     >
-      {!decorated(settings) && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="size-3.5 shrink-0" />
-          打开动态背景或显示背景图片后才有毛玻璃。
-        </p>
-      )}
-      <div className="flex flex-col gap-3">
+      <div className={`flex flex-col gap-3 ${APPEAR}`}>
         <SliderRow label="模糊" min={0} max={60} unit="px" {...row("blur")} />
         <SliderRow label="内容面板不透明度" min={0} max={100} unit="%" {...row("panel")} />
         <SliderRow label="框架不透明度" min={0} max={100} unit="%" {...row("frame")} />
@@ -281,9 +300,8 @@ function GlassSetting({ settings }: { settings: Settings }) {
   );
 }
 
-/** 设置 → 外观: the opacity of the whole main window. */
-export function WindowOpacitySetting({ settings }: { settings: Settings }) {
-  useTuningEnds();
+/** The opacity of the whole main window. */
+function WindowOpacitySetting({ settings }: { settings: Settings }) {
   const { windowOpacity: def, minWindowOpacity: lowest } = settings.lookDefaults;
   return (
     <SettingCard

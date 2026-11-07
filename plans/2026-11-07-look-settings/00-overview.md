@@ -30,7 +30,7 @@
 |---|---|
 | Go | `look.go`：`Wallpaper` / `WallpaperLook` / `Glass` / `LookDefaults` 类型；`ChooseWallpaper`、`ClearWallpaper`、`SetWallpaperLook`、`SetGlass`、`SetWindowOpacity`、`PreviewWindowOpacity`；图片校验（扩展名白名单、内容类型嗅探、最大 20 MB），保存时用随机文件名、删除旧图；`wallpaper` 协议只提供 `wallpapers/` 里符合命名规则的文件。所有数值在 Go 里限制到合法范围，读到坏值时用默认值 |
 | 设置 | `Settings` 新增 `wallpaper`、`glass`、`windowOpacity`、`lookDefaults`；存在 `settings` 表的 `wallpaperFile`、`wallpaperName`、`wallpaperLook`、`glass`、`windowOpacity` 键里 |
-| 页面 | 设置新增「背景与毛玻璃」分页（动态背景、背景图片、毛玻璃），「外观」分页新增「窗口整体透明度」；`src/lib/look.ts` 判断是否开启毛玻璃并写入 CSS 变量；`effects-layer.tsx` 把图片放在动态背景下面 |
+| 页面 | 设置的「外观」分页依次是主题、动态背景、背景图片、毛玻璃、窗口整体透明度，选项按需出现；`src/lib/look.ts` 判断是否开启毛玻璃并写入 CSS 变量；`effects-layer.tsx` 把图片放在动态背景下面 |
 | CSS | `--frame-tint` 加上 `--glass-frame` / `--glass-panel` / `--glass-blur` 变量；`html[data-tuning]` 让设置弹窗的遮罩淡出 |
 | 组件 | 用 shadcn CLI 加入 `slider`、`switch`（基于已有的 `radix-ui`，没有新依赖） |
 
@@ -42,6 +42,11 @@
 ## 回滚
 
 改动集中在 `look.go`、`src/components/app/look-settings.tsx`、`src/lib/look.ts`、`effects-layer.tsx` 和 `index.css` 的毛玻璃规则。回滚后，数据库里新增的设置键和 `wallpapers/` 文件夹不影响旧版本，可以手动删除。
+
+## 第二轮（2026-11-07，用户反馈）
+
+- 「背景与毛玻璃」分页并回「外观」。选项按需出现：没有图片时只有「选择图片」；有图片才出现预览、显示开关、更换、移除；图片显示时才出现 5 个调节项；有动态背景或显示图片时才出现毛玻璃，否则只显示一行提示。
+- 自建滚动条 `src/components/ui/scroller.tsx`：内容仍用原生方式滚动（dnd-kit 的自动滚动、`scrollIntoView`、键盘都照常工作），只隐藏系统滚动条，改成浮在右边的细滑块。滚动或指针移进区域时出现，停下后淡出，指针移到上面会变粗，可以拖动，点轨道翻页。设置和使用说明用 `always`：只要能滚动，滑块和浅色轨道就一直显示（用户要求，让人看出内容还有多少）。已替换侧栏两个列表、队列、详情、总览、设置和使用说明（队列等子条目会话重写完再换，`onClick` 和 `data-queue-section` 都没动）。菜单和 Markdown 编辑器仍用系统的细滚动条。
 
 ## 实施记录（2026-11-07）
 

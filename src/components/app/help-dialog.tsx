@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
+import { Scroller } from "@/components/ui/scroller";
 import { useAtlas } from "@/state/atlas";
 import { closeHelp, showSettingsTab, useDialogs } from "@/state/dialogs";
 import { TypeChip } from "./item-marks";
@@ -139,7 +140,7 @@ function HelpBody() {
           <span className="meta-mono opacity-70">Ctrl+,</span>
         </button>
       </NavColumn>
-      <div ref={scroller} onScroll={onScroll} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <Scroller ref={scroller} onScroll={onScroll} always className="min-w-0 flex-1" viewportClassName="relative">
         <article className="selectable flex flex-col gap-10 px-8 pt-7 pb-10">
           <StartSection />
           <CaptureSection />
@@ -149,7 +150,7 @@ function HelpBody() {
           <OverviewSection />
           <KeysSection />
         </article>
-      </div>
+      </Scroller>
     </>
   );
 }

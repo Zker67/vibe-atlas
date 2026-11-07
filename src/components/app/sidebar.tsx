@@ -9,6 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { Scroller } from "@/components/ui/scroller";
 import {
   createModule,
   createProject,
@@ -122,7 +123,7 @@ function Projects() {
   return (
     <section className="flex max-h-[45%] min-h-0 flex-col">
       <SectionHeader title="项目" addLabel="新建项目" onAdd={newProject} />
-      <div className="min-h-0 overflow-y-auto px-2 pb-2">
+      <Scroller viewportClassName="flex-initial px-2 pb-2">
         <SortableList ids={projects.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
           {projects.map((p) => (
             <SortableRow key={p.id} id={p.id}>
@@ -154,7 +155,7 @@ function Projects() {
             </SortableRow>
           ))}
         </SortableList>
-      </div>
+      </Scroller>
     </section>
   );
 }
@@ -185,7 +186,7 @@ function Modules() {
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t">
       <SectionHeader title="模块" addLabel="新建模块" onAdd={newModule} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <Scroller className="flex-1" viewportClassName="px-2 pb-3">
         <Row icon={LayoutList} label="全部" count={open.length} active={filter === "all"} onClick={() => setModuleFilter("all")} />
         <SortableList ids={modules.map((m) => m.id)} onMove={(id, overId) => moveModule(id, overId)}>
           {modules.map((m) => (
@@ -223,7 +224,7 @@ function Modules() {
         {unsortedTotal > 0 && (
           <Row icon={Inbox} label={UNSORTED} count={unsortedOpen} active={filter === 0} onClick={() => pick(0)} />
         )}
-      </div>
+      </Scroller>
     </section>
   );
 }

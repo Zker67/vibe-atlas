@@ -7,6 +7,7 @@ import { TYPES, UNSORTED } from "@/lib/labels";
 import { dayKey, dayLabel, elapsed, useNow } from "@/lib/time";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { Button } from "@/components/ui/button";
+import { Scroller } from "@/components/ui/scroller";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   openLink,
@@ -27,7 +28,7 @@ const HISTORY_PAGE = 100;
 export function Overview({ project }: { project: Project }) {
   const overview = useAtlas((s) => (s.overview?.projectId === project.id ? s.overview : null));
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <Scroller className="flex-1">
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-5">
         <Description key={project.id} project={project} />
         {!overview ? null : overview.totals.todo + overview.totals.doing + overview.totals.done === 0 ? (
@@ -40,7 +41,7 @@ export function Overview({ project }: { project: Project }) {
           <Summary overview={overview} />
         )}
       </div>
-    </div>
+    </Scroller>
   );
 }
 

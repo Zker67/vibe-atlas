@@ -32,7 +32,7 @@ import { openHelp, openSettings } from "@/state/dialogs";
 import type { Project } from "@/mygo";
 
 // The effects load only once there is something behind the window: a
-// moving background or a picture (设置 → 背景与毛玻璃).
+// moving background or a picture (设置 → 外观).
 const EffectsLayer = lazy(() => import("@/components/effects/effects-layer"));
 
 /** The main window: projects on the left, the open project's queue or overview. */

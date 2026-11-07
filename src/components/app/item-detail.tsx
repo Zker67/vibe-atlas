@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Scroller } from "@/components/ui/scroller";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -93,7 +94,7 @@ function DetailEmpty() {
 function Detail({ item }: { item: Item }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3">
+      <Scroller className="flex-1" viewportClassName="flex flex-col gap-3 px-4 pt-3">
         {item.parentId !== 0 && <ParentPath item={item} />}
         <div className="flex items-start gap-2">
           <TitleField item={item} />
@@ -118,7 +119,7 @@ function Detail({ item }: { item: Item }) {
         <LinkField item={item} />
         <SubItems item={item} />
         <NoteField item={item} />
-      </div>
+      </Scroller>
       <Times item={item} />
     </div>
   );
