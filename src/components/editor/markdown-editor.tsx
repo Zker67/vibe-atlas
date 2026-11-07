@@ -91,6 +91,7 @@ interface MarkdownEditorProps {
  */
 export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholder, autoFocus, className }: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onBlur, onOpenLink });
   callbacks.current = { onChange, onBlur, onOpenLink };
 
@@ -133,11 +134,29 @@ export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholde
         ],
       }),
     });
+    viewRef.current = view;
     if (autoFocus) view.focus();
-    return () => view.destroy();
+    return () => {
+      viewRef.current = null;
+      view.destroy();
+    };
     // The editor keeps its own text: it starts once, from the first value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={host} className={cn("min-h-0", className)} />;
+  // A click in the box around the text, below or beside it, starts typing
+  // at the end, as in a text field.
+  return (
+    <div
+      ref={host}
+      className={cn("min-h-0 cursor-text", className)}
+      onMouseDown={(e) => {
+        const view = viewRef.current;
+        if (!view || e.button !== 0 || view.dom.contains(e.target as Node)) return;
+        e.preventDefault();
+        view.focus();
+        view.dispatch({ selection: { anchor: view.state.doc.length } });
+      }}
+    />
+  );
 }

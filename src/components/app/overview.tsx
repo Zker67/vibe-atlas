@@ -51,15 +51,14 @@ function Description({ project }: { project: Project }) {
   return (
     <section>
       <SectionTitle>项目说明</SectionTitle>
-      <div className="min-h-20 rounded-lg border px-3 py-1.5 transition-colors focus-within:border-ring">
-        <MarkdownEditor
-          value={project.description}
-          placeholder="这个项目是什么、目标和约定……用 Markdown 写，边写边预览"
-          onChange={schedule}
-          onBlur={flush}
-          onOpenLink={openLink}
-        />
-      </div>
+      <MarkdownEditor
+        className="min-h-24 rounded-lg border px-3 py-1.5 transition-colors hover:border-ring/60 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30"
+        value={project.description}
+        placeholder="这个项目是什么、目标和约定……用 Markdown 写，边写边预览"
+        onChange={schedule}
+        onBlur={flush}
+        onOpenLink={openLink}
+      />
     </section>
   );
 }

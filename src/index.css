@@ -209,7 +209,11 @@ textarea,
   color: var(--muted-foreground);
 }
 .cm-editor .cm-cursor {
-  border-left-color: var(--foreground);
+  border-left: 2px solid var(--foreground);
+}
+/* Clicking in shows at once: the hint goes away while the editor is focused. */
+.cm-editor.cm-focused .cm-placeholder {
+  display: none;
 }
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground,

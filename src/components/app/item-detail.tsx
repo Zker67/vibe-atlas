@@ -332,16 +332,14 @@ function NoteField({ item }: { item: Item }) {
   });
 
   return (
-    <div className="-mx-1 flex min-h-40 flex-1 flex-col border-t pt-2">
-      <MarkdownEditor
-        value={item.note}
-        className="flex-1 px-1"
-        placeholder="备注：用 Markdown 写，边写边预览"
-        onChange={schedule}
-        onBlur={flush}
-        onOpenLink={openLink}
-      />
-    </div>
+    <MarkdownEditor
+      value={item.note}
+      className="mb-3 min-h-40 flex-1 rounded-lg border px-2.5 py-1.5 transition-colors hover:border-ring/60 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30"
+      placeholder="备注：用 Markdown 写，边写边预览"
+      onChange={schedule}
+      onBlur={flush}
+      onOpenLink={openLink}
+    />
   );
 }
 
