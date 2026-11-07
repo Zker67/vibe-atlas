@@ -17,6 +17,7 @@
 - 已实现的功能：[docs/product.md](./docs/product.md#已实现的功能)
 - 验收清单：[第一期计划 · 用户验收场景](./plans/2026-11-07-prototype/00-overview.md#用户验收场景)
 - 实施报告：[09-implementation-report.md](./plans/2026-11-07-prototype/09-implementation-report.md)
+- 代码仓库：GitHub 私有仓库 [Zker67/vibe-atlas](https://github.com/Zker67/vibe-atlas)，在指挥室索引 `../REPOS.md` 中登记
 
 - 产品概念与规则：[docs/product.md](./docs/product.md)
 - 第一期计划（可测试原型）：[plans/2026-11-07-prototype/](./plans/2026-11-07-prototype/00-overview.md)
