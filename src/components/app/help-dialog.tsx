@@ -110,7 +110,7 @@ function HelpBody() {
       <NavColumn>
         <DialogHeader className="px-2.5 pt-1">
           <DialogTitle>使用说明</DialogTitle>
-          <DialogDescription className="sr-only">Vibe Atlas 的用法和全部快捷键</DialogDescription>
+          <DialogDescription className="sr-only">Vibe Atlas 的用法和快捷键</DialogDescription>
         </DialogHeader>
         <nav aria-label="导览" className="flex flex-col gap-1.5">
           <NavLabel>导览</NavLabel>
@@ -156,26 +156,26 @@ function HelpBody() {
 
 function StartSection() {
   return (
-    <Section id="start" lead="按「项目 → 模块 → 改进点」整理你的 vibe 项目。状态全部由你手动切换，软件不联网，也不内置 AI。">
+    <Section id="start" lead="Vibe Atlas 用项目、模块、改进点三层来整理工作。">
       <div className="flex flex-wrap items-center gap-2">
-        <Node title="项目" hint="比如「规则恐怖」" />
+        <Node title="项目" hint="一个完整的项目" />
         <ChevronRight className="size-4 text-muted-foreground" />
-        <Node title="模块" hint="武器系统、关卡……可以不挂" />
+        <Node title="模块" hint="项目的一部分，可选" />
         <ChevronRight className="size-4 text-muted-foreground" />
-        <Node title="改进点" hint="一件具体要做的事" />
+        <Node title="改进点" hint="一件要做的事" />
       </div>
       <ol className="grid grid-cols-2 gap-2.5">
-        <Step n={1} title="记下">
-          看到运行结果时按 <Accel /> 呼出小窗，连记几条改进、bug、新需求。
+        <Step n={1} title="记录改进点">
+          按 <Accel /> 打开快速记录，输入标题后按 <K>Enter</K>。
         </Step>
-        <Step n={2} title="挑一条">
-          在待办里拖动排序，选中一条按 <K>C</K> 复制，自己粘贴给 AI。
+        <Step n={2} title="安排顺序">
+          在待办中拖动排序，排在上面的先做。
         </Step>
-        <Step n={3} title="标进度">
-          开始做时按 <K>S</K> 标为进行中，做完按 <K>Space</K> 打勾。
+        <Step n={3} title="交给 AI">
+          选中一条按 <K>C</K> 复制，粘贴到 AI 对话中。
         </Step>
-        <Step n={4} title="看全貌">
-          积累下来的记录，在项目总览里汇总成模块进度和完成历史。
+        <Step n={4} title="标记进度">
+          开始时按 <K>S</K>，完成后按 <K>Space</K>。
         </Step>
       </ol>
     </Section>
@@ -184,36 +184,35 @@ function StartSection() {
 
 function CaptureSection() {
   return (
-    <Section id="capture" lead="在任何软件里按下全局快捷键，屏幕上方弹出小窗，记完一条就能回去干活。">
+    <Section id="capture" lead="在任何软件中按快捷键，都能打开快速记录窗口。">
       <div className="flex items-center gap-3 rounded-lg bg-card p-3.5 ring-1 ring-foreground/[0.07]">
-        <span className="text-muted-foreground">当前快捷键</span>
+        <span className="text-muted-foreground">快捷键</span>
         <Accel />
         <Button variant="outline" size="sm" className="ml-auto" onClick={() => showSettingsTab("capture")}>
           <Settings />
-          在设置里修改
+          修改
         </Button>
       </div>
       <Points>
-        <li>默认记到主窗口当前打开的项目；没有打开时，用上次记录用的项目。</li>
+        <li>改进点会记录到主窗口当前打开的项目。</li>
         <li>
-          输入标题按 <K>Enter</K> 保存，可以接着记下一条；记过的会在小窗里列出「已记到 某项目」。
+          按 <K>Enter</K> 保存后，可以继续输入下一条。
         </li>
-        <li>点到别处，小窗自动隐藏。</li>
+        <li>点击窗口外部即可关闭。</li>
       </Points>
-      <Tip>主窗口队列底部也有一样的输入框。在某个模块或类型的筛选下新增，会自动用这个模块和类型。</Tip>
     </Section>
   );
 }
 
 const STATUS_HINTS: Record<string, string> = {
-  todo: "打算做的，拖动排序表示先后",
-  doing: "正在做的，不限数量",
-  done: "做完的，默认折叠，最近的在上面",
+  todo: "等待处理，可以拖动排序",
+  doing: "正在处理",
+  done: "已完成，默认折叠",
 };
 
 function QueueSection() {
   return (
-    <Section id="queue" lead="每个项目一条队列，三种类型混放，按状态分成三块。">
+    <Section id="queue" lead="每个项目有一个队列，改进点按状态分组显示。">
       <div className="grid grid-cols-3 gap-2.5">
         {STATUSES.map((s) => (
           <div key={s.value} className="flex flex-col gap-1.5 rounded-lg bg-card p-3 ring-1 ring-foreground/[0.07]">
@@ -230,13 +229,13 @@ function QueueSection() {
           <TypeChip key={t.value} type={t.value} />
         ))}
         <span className="ml-1 text-muted-foreground">
-          三种类型，新增时按 <K>Tab</K> 切换
+          新增时按 <K>Tab</K> 切换类型
         </span>
       </div>
       <Points>
-        <li>点行首的圆圈标为完成或重新打开。状态可以在三种之间随意切换，切换时自动记下开始和完成时间。</li>
-        <li>队列顶部按状态和类型筛选，侧栏点模块按模块筛选；可以组合，一键清除。</li>
-        <li>右键一条：改状态、复制、打开链接、移到模块或其他项目、删除。</li>
+        <li>点击行首的圆圈，标记完成或重新打开。</li>
+        <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
+        <li>右键单击改进点，可以修改状态、移动或删除。</li>
       </Points>
     </Section>
   );
@@ -244,20 +243,19 @@ function QueueSection() {
 
 function DetailSection() {
   return (
-    <Section id="detail" lead="选中一条，右边显示它的详情。所有改动立即保存，没有保存按钮。">
+    <Section id="detail" lead="选中改进点后，右侧显示详情，修改会自动保存。">
       <div className="flex flex-col gap-2.5">
         <Feature icon={Repeat} title="状态">
-          类型前面的状态按钮，点一下按「待办 → 进行中 → 完成 → 待办」轮换。标题同一行右边是复制给 AI、移到其他项目、删除和关闭。
+          点击状态按钮，在待办、进行中、完成之间切换。
         </Feature>
-        <Feature icon={Link2} title="deeplink">
-          绑定 AI 对话、<Code>vscode://</Code> 链接、网页或本地文件。粘贴本地路径会自动转成 <Code>file:</Code> 链接；点行内图标或按{" "}
-          <K>O</K> 打开。
+        <Feature icon={Link2} title="链接">
+          可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。
         </Feature>
         <Feature icon={Copy} title="复制给 AI">
-          按 <K>C</K> 把标题和备注复制成一段 Markdown，自己粘贴发送。
+          按 <K>C</K> 复制标题和备注，粘贴给 AI 即可。
         </Feature>
         <Feature icon={NotebookPen} title="备注">
-          用 Markdown 写，停顿 0.5 秒或离开编辑器时自动保存。
+          支持 Markdown 格式。
         </Feature>
       </div>
     </Section>
@@ -266,40 +264,37 @@ function DetailSection() {
 
 function MarkdownSection() {
   return (
-    <Section id="markdown" lead="备注和项目说明用同一个编辑器：光标所在的行显示源码，其他行直接显示渲染效果。">
+    <Section id="markdown" lead="备注和项目说明支持 Markdown，输入时直接显示效果。">
       <div className="grid grid-cols-2 overflow-hidden rounded-lg ring-1 ring-foreground/[0.07]">
         <div className="flex flex-col gap-2 bg-muted/60 p-3.5">
-          <span className="text-xs text-muted-foreground">你输入的</span>
+          <span className="text-xs text-muted-foreground">输入</span>
           <pre className="font-mono text-xs leading-6 whitespace-pre-wrap">
-            {"## 手感\n- [x] 射速调慢\n- [ ] **先改**后坐力\n> 参考 `weapon.ts`"}
+            {"## 登录页\n- [x] 调整按钮颜色\n- [ ] **修复**输入框错位\n> 参考 `login.tsx`"}
           </pre>
         </div>
         <div className="flex flex-col gap-2 bg-card p-3.5">
-          <span className="text-xs text-muted-foreground">看到的</span>
+          <span className="text-xs text-muted-foreground">显示</span>
           <div className="flex flex-col gap-1 leading-6">
-            <span className="text-base font-semibold">手感</span>
+            <span className="text-base font-semibold">登录页</span>
             <span className="flex items-center gap-1.5 text-muted-foreground line-through">
               <SquareCheck className="size-3.5 text-done" />
-              射速调慢
+              调整按钮颜色
             </span>
             <span className="flex items-center gap-1.5">
               <span className="size-3.5 rounded-[3px] ring-1 ring-muted-foreground/60" />
               <span>
-                <strong>先改</strong>后坐力
+                <strong>修复</strong>输入框错位
               </span>
             </span>
             <span className="border-l-2 pl-2 text-muted-foreground">
-              参考 <Code>weapon.ts</Code>
+              参考 <Code>login.tsx</Code>
             </span>
           </div>
         </div>
       </div>
       <Points>
-        <li>支持标题、粗体、斜体、删除线、行内代码、链接、引用、代码块（带语法高亮）、列表、任务框和分隔线。</li>
-        <li>任务框可以直接点击勾选；列表里回车自动续写下一项。</li>
-        <li>
-          点链接直接打开；光标正在编辑的那一行，用 <K>Ctrl</K>+点击打开。
-        </li>
+        <li>支持标题、列表、任务框、链接、引用、代码块等常用格式。</li>
+        <li>点击任务框可以直接勾选。</li>
       </Points>
     </Section>
   );
@@ -307,14 +302,14 @@ function MarkdownSection() {
 
 function OverviewSection() {
   return (
-    <Section id="overview" lead="在队列顶部切到「总览」，看这个项目的全貌。">
+    <Section id="overview" lead="在队列顶部切换到「总览」，查看项目进度。">
       <Points>
-        <li>项目说明（Markdown），以及全部、待办、进行中、完成的数量和总进度。</li>
-        <li>模块进度和类型分布，点一项跳到按它筛选的队列。</li>
-        <li>进行中列表和按天分组的完成记录，点一条跳到队列里的那一条。</li>
+        <li>编写项目说明。</li>
+        <li>查看各模块的进度和类型分布，点击可以跳到对应的队列。</li>
+        <li>查看进行中的改进点和每天的完成记录。</li>
       </Points>
       <Feature icon={FolderOpen} title="绑定文件夹">
-        项目栏的文件夹按钮可以绑定一个本地文件夹，之后一键在资源管理器打开。
+        为项目绑定本地文件夹后，可以一键打开。
       </Feature>
     </Section>
   );
@@ -327,19 +322,19 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
     icon: AppWindow,
     title: "主窗口",
     rows: [
-      ["新增一条", ["N"]],
-      ["选择上一条、下一条", ["↑ ↓", "K J"]],
+      ["新增改进点", ["N"]],
+      ["上一条 / 下一条", ["↑ ↓", "K J"]],
       ["取消选择", ["Esc"]],
-      ["打开设置", ["Ctrl+,"]],
-      ["打开使用说明", ["F1"]],
+      ["设置", ["Ctrl+,"]],
+      ["使用说明", ["F1"]],
     ],
   },
   {
     icon: MousePointerClick,
     title: "选中的改进点",
     rows: [
-      ["标为完成，或重新打开", ["Space"]],
-      ["开始进行，或退回待办", ["S"]],
+      ["完成 / 重新打开", ["Space"]],
+      ["开始 / 退回待办", ["S"]],
       ["复制给 AI", ["C", "Ctrl+C"]],
       ["打开链接", ["O"]],
       ["编辑标题", ["Enter", "E"]],
@@ -348,21 +343,21 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
   },
   {
     icon: TextCursorInput,
-    title: "队列底部的输入框",
+    title: "队列输入框",
     rows: [
-      ["新增到待办最后", ["Enter"]],
+      ["新增", ["Enter"]],
       ["切换类型", ["Tab", "Shift+Tab"]],
     ],
   },
   {
     icon: Zap,
-    title: "快速记录小窗",
+    title: "快速记录窗口",
     rows: [
-      ["保存，接着记下一条", ["Enter"]],
+      ["保存", ["Enter"]],
       ["切换类型", ["Tab", "Shift+Tab"]],
       ["切换项目", ["↑ ↓"]],
       ["切换模块", ["Ctrl+↑ ↓"]],
-      ["关闭小窗", ["Esc"]],
+      ["关闭", ["Esc"]],
     ],
   },
   {
@@ -374,7 +369,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["行内代码", ["Ctrl+E"]],
       ["删除线", ["Ctrl+Shift+X"]],
       ["插入链接", ["Ctrl+K"]],
-      ["缩进、取消缩进", ["Tab", "Shift+Tab"]],
+      ["缩进 / 取消缩进", ["Tab", "Shift+Tab"]],
       ["撤销", ["Ctrl+Z"]],
       ["重做", ["Ctrl+Y", "Ctrl+Shift+Z"]],
     ],
@@ -383,9 +378,9 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
 
 function KeysSection() {
   return (
-    <Section id="keys" lead="只有呼出快速记录的全局快捷键可以在设置里改，其他按键都是固定的。">
-      <KeyCard icon={Globe} title="全局" hint="在任何软件里">
-        <KeyLine what="呼出快速记录小窗">
+    <Section id="keys" lead="快速记录的快捷键可以在设置中修改。">
+      <KeyCard icon={Globe} title="全局" hint="在任何软件中">
+        <KeyLine what="打开快速记录">
           <Accel />
         </KeyLine>
       </KeyCard>
@@ -403,7 +398,7 @@ function KeysSection() {
           ))}
         </KeyCard>
       ))}
-      <Tip>单个字母、Space、Enter 这些键只在没有输入框获得焦点时生效，不会打断打字；输入法正在选词时也不会触发。</Tip>
+      <Tip>输入文字时，单键快捷键不会生效。</Tip>
     </Section>
   );
 }

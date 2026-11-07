@@ -3,6 +3,8 @@ import { Tabs } from "radix-ui";
 import {
   AudioWaveform,
   BookOpen,
+  Check,
+  CircleAlert,
   CircleOff,
   Database,
   FolderOpen,
@@ -11,6 +13,8 @@ import {
   Monitor,
   Moon,
   Palette,
+  Pencil,
+  RotateCcw,
   Sun,
   Zap,
   type LucideIcon,
@@ -48,23 +52,10 @@ async function chooseEffects(choice: EffectsChoice): Promise<Settings> {
   return Atlas.setEffects(true);
 }
 
-function Keys({ accelerator }: { accelerator: string }) {
-  return (
-    <KbdGroup>
-      {acceleratorKeys(accelerator).map((k, i) => (
-        <Kbd key={i} className="h-6 min-w-6 px-1.5 text-foreground ring-1 ring-foreground/10">
-          {k}
-        </Kbd>
-      ))}
-    </KbdGroup>
-  );
-}
-
-
-const TABS: { value: SettingsTab; label: string; icon: LucideIcon; description: string }[] = [
-  { value: "capture", label: "快速记录", icon: Zap, description: "在任何软件里呼出小窗，记下一条就回去干活" },
-  { value: "appearance", label: "外观", icon: Palette, description: "主题和视觉效果" },
-  { value: "data", label: "数据", icon: Database, description: "所有内容只保存在这台电脑上，不联网" },
+const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
+  { value: "capture", label: "快速记录", icon: Zap },
+  { value: "appearance", label: "外观", icon: Palette },
+  { value: "data", label: "数据", icon: Database },
 ];
 
 export function SettingsDialog() {
@@ -106,9 +97,8 @@ export function SettingsDialog() {
               <Tabs.Content
                 key={t.value}
                 value={t.value}
-                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 pt-5 pb-6 outline-none data-[state=active]:animate-in data-[state=active]:duration-200 data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1"
+                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 pt-12 pb-6 outline-none data-[state=active]:animate-in data-[state=active]:duration-200 data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1"
               >
-                <PanelHeader icon={t.icon} title={t.label} description={t.description} />
                 <div className="flex flex-col gap-3">
                   {t.value === "capture" && <CapturePanel />}
                   {t.value === "appearance" && <AppearancePanel settings={settings} />}
@@ -119,20 +109,6 @@ export function SettingsDialog() {
         </Tabs.Root>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function PanelHeader({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
-  return (
-    <header className="mb-5 flex items-center gap-3 pr-8">
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-foreground/[0.06]">
-        <Icon className="size-4.5" />
-      </span>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <h2 className="text-base leading-tight font-semibold">{title}</h2>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-    </header>
   );
 }
 
@@ -153,11 +129,11 @@ function CapturePanel() {
   return (
     <>
       <ShortcutSetting />
-      <SettingCard title="其他快捷键" description="主窗口、快速记录小窗和 Markdown 编辑器的按键是固定的，按用途分好组放在使用说明里。">
+      <SettingCard title="其他快捷键">
         <div>
           <Button variant="outline" size="sm" onClick={() => openHelp("keys")}>
             <Keyboard />
-            查看全部快捷键
+            在使用说明中查看
           </Button>
         </div>
       </SettingCard>
@@ -168,7 +144,7 @@ function CapturePanel() {
 function AppearancePanel({ settings }: { settings: Settings }) {
   return (
     <>
-      <SettingCard title="主题" description="顶栏右上角的按钮也能切换。">
+      <SettingCard title="主题">
         <ToggleGroup
           type="single"
           variant="outline"
@@ -187,7 +163,7 @@ function AppearancePanel({ settings }: { settings: Settings }) {
           ))}
         </ToggleGroup>
       </SettingCard>
-      <SettingCard title="视觉效果" description="动态背景、毛玻璃和悬停辉光，会多占用显卡。">
+      <SettingCard title="视觉效果" description="动态背景和毛玻璃效果，会增加显卡占用。">
         <ToggleGroup
           type="single"
           variant="outline"
@@ -212,7 +188,7 @@ function AppearancePanel({ settings }: { settings: Settings }) {
 
 function DataPanel({ settings }: { settings: Settings }) {
   return (
-    <SettingCard title="数据文件夹" description="项目、模块和改进点都存在这里的 SQLite 文件里，每次修改立即写入。">
+    <SettingCard title="数据文件夹">
       <p className="selectable rounded-md bg-muted px-2.5 py-2 font-mono text-xs break-all">{settings.dataDir}</p>
       <div>
         <Button variant="outline" size="sm" onClick={() => void runOk(Atlas.openDataFolder())}>
@@ -224,14 +200,49 @@ function DataPanel({ settings }: { settings: Settings }) {
   );
 }
 
+/** The modifiers held in a key event, as key caps. */
+function heldModifiers(e: KeyboardEvent): string[] {
+  const mods: string[] = [];
+  if (e.ctrlKey) mods.push("Ctrl");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+  if (e.metaKey) mods.push(navigator.platform.startsWith("Mac") ? "Cmd" : "Win");
+  return mods;
+}
+
+/** Key caps, each popping in as it appears. */
+function KeyCaps({ keys }: { keys: string[] }) {
+  return (
+    <KbdGroup className="gap-1">
+      {keys.map((k, i) => (
+        <Kbd
+          key={`${i}-${k}`}
+          className="h-6 min-w-6 bg-background px-1.5 text-foreground shadow-xs ring-1 ring-foreground/10 animate-in duration-150 fade-in-0 zoom-in-90"
+        >
+          {k}
+        </Kbd>
+      ))}
+    </KbdGroup>
+  );
+}
+
 /**
- * The global shortcut of quick capture. While recording, the shortcut is
- * released, so that pressing the same keys again reaches the page.
+ * The global shortcut of quick capture, as a field that records the keys
+ * pressed. While recording, the shortcut is released, so that pressing the
+ * same keys again reaches the page.
  */
 function ShortcutSetting() {
   const settings = useAtlas((s) => s.settings)!;
   const [recording, setRecording] = useState(false);
+  const [held, setHeld] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!saved) return;
+    const t = window.setTimeout(() => setSaved(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [saved]);
 
   useEffect(() => {
     if (!recording) return;
@@ -241,14 +252,22 @@ function ShortcutSetting() {
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (e.type === "keyup") {
+        setHeld(heldModifiers(e));
+        return;
+      }
       if (e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         setRecording(false);
         return;
       }
       const accelerator = acceleratorOf(e);
-      if (!accelerator) return; // only modifiers so far
+      if (!accelerator) {
+        setHeld(heldModifiers(e)); // only modifiers so far
+        return;
+      }
       if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-        setError("快捷键需要包含 Ctrl、Alt 或 Win 键");
+        setHeld([]);
+        setError("需要包含 Ctrl、Alt 或 Win 键");
         return;
       }
       saving = true;
@@ -257,6 +276,7 @@ function ShortcutSetting() {
         (s) => {
           useAtlas.setState({ settings: s });
           setError("");
+          setSaved(true);
         },
         (err: unknown) => setError(errorMessage(err)),
       );
@@ -264,9 +284,11 @@ function ShortcutSetting() {
     // Leaving the window, or closing the dialog, gives the recording up.
     const onBlur = () => setRecording(false);
     window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
     window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
       window.removeEventListener("blur", onBlur);
       if (!saving) void Atlas.pauseShortcut(false);
     };
@@ -277,37 +299,76 @@ function ShortcutSetting() {
       (s) => {
         useAtlas.setState({ settings: s });
         setError("");
+        setSaved(true);
       },
       (err: unknown) => setError(errorMessage(err)),
     );
   };
 
+  const message = error || settings.shortcutError;
   return (
-    <SettingCard title="全局快捷键" description="在任何软件里按下它，呼出快速记录小窗。">
-      <div className="flex min-w-0 flex-col gap-1.5">
+    <SettingCard title="快速记录快捷键" description="在任何软件中打开快速记录。">
+      <div className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          {recording ? (
-            <span className="flex h-7 items-center rounded-md border border-dashed border-ring px-2.5 text-xs">请按下新的组合键，Esc 取消</span>
-          ) : (
-            <Keys accelerator={settings.shortcut} />
-          )}
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
+            aria-label={recording ? "正在录制快捷键，按 Esc 取消" : `快速记录快捷键 ${settings.shortcut}，点击修改`}
             onClick={() => {
               setError("");
+              setHeld([]);
               setRecording(!recording);
             }}
+            onBlur={() => setRecording(false)}
+            className={cn(
+              "flex h-10 w-72 max-w-full items-center gap-2.5 rounded-lg bg-muted/60 px-3 text-left ring-1 ring-foreground/10 transition-[box-shadow,background-color] duration-200 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60",
+              recording && "bg-background ring-2 ring-ring/70 hover:bg-background",
+              !recording && message && "ring-destructive/50",
+            )}
           >
-            {recording ? "取消" : "修改"}
-          </Button>
+            {recording ? (
+              <>
+                <span className="signal-dot size-2 shrink-0 animate-pulse rounded-full [--chip:var(--bug)]" />
+                {held.length > 0 ? (
+                  <KeyCaps keys={held} />
+                ) : (
+                  <span className="text-muted-foreground animate-in fade-in-0">按下新的快捷键</span>
+                )}
+                <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  <Kbd>Esc</Kbd>
+                  取消
+                </span>
+              </>
+            ) : (
+              <>
+                <Keyboard className="size-4 shrink-0 text-muted-foreground" />
+                <KeyCaps keys={acceleratorKeys(settings.shortcut)} />
+                {saved ? (
+                  <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-done animate-in fade-in-0">
+                    <Check className="size-3.5" />
+                    已保存
+                  </span>
+                ) : (
+                  <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Pencil className="size-3.5" />
+                    修改
+                  </span>
+                )}
+              </>
+            )}
+          </button>
           {!recording && settings.shortcut !== settings.defaultShortcut && (
-            <Button variant="ghost" size="sm" onClick={reset}>
-              恢复默认（{settings.defaultShortcut}）
+            <Button variant="ghost" size="sm" className="text-muted-foreground" title={`恢复为 ${settings.defaultShortcut}`} onClick={reset}>
+              <RotateCcw />
+              恢复默认
             </Button>
           )}
         </div>
-        {(error || settings.shortcutError) && <p className="text-xs text-destructive">{error || settings.shortcutError}</p>}
+        {message && (
+          <p className="flex items-center gap-1.5 text-xs text-destructive animate-in fade-in-0">
+            <CircleAlert className="size-3.5 shrink-0" />
+            {message}
+          </p>
+        )}
       </div>
     </SettingCard>
   );
