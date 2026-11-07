@@ -265,7 +265,7 @@ export function focusNewChild(id: number) {
   set({ view: "queue", selectedId: id, newChildFor: id });
 }
 
-/** The detail took the request of focusNewChild. */
+/** The field under the queue stops adding children (focusNewChild). */
 export function newChildTaken() {
   set({ newChildFor: 0 });
 }

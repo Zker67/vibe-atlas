@@ -20,6 +20,7 @@ import {
   Play,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { cn } from "@/lib/utils";
@@ -58,11 +59,13 @@ import {
   mergeItems,
   moveItem,
   moveItemToProject,
+  newChildTaken,
   openDeeplink,
   select,
   setCollapsed,
   setItemModule,
   setItemStatus,
+  setItemTitle,
   setSectionOpen,
   statusChanges,
   toggleCollapsed,
@@ -583,6 +586,7 @@ const ItemRow = memo(function ItemRow({
   const becomesCount = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.count : 0));
   const moving = useDrag((s) => s.moving.has(item.id));
   const isDone = item.status === "done";
+  const [renaming, setRenaming] = useState(false);
   // Where the content starts: the arrow's column of this level.
   const left = PAD + depth * INDENT;
 
@@ -599,6 +603,11 @@ const ItemRow = memo(function ItemRow({
           data-item-id={item.id}
           aria-current={selected || undefined}
           onClick={() => select(item.id)}
+          onDoubleClick={(e) => {
+            // The circle, the arrow and the row's buttons keep their own clicks.
+            if ((e.target as HTMLElement).closest("button, a, input")) return;
+            setRenaming(true);
+          }}
           style={{ paddingLeft: left }}
           className={cn(
             "signal-row group relative flex h-9 items-center gap-2 rounded-md pr-2 transition-[background-color,opacity,box-shadow] duration-100",
@@ -637,7 +646,11 @@ const ItemRow = memo(function ItemRow({
           <div className={cn("flex min-w-0 flex-1 items-center gap-2", context && "opacity-50")}>
             <StatusButton item={item} onToggle={() => toggleItemDone(item)} />
             <TypeIcon type={item.type} />
-            <span className={cn("min-w-0 flex-1 truncate", isDone && "text-muted-foreground")}>{item.title}</span>
+            {renaming ? (
+              <RowTitleInput item={item} onDone={() => setRenaming(false)} />
+            ) : (
+              <span className={cn("min-w-0 flex-1 truncate", isDone && "text-muted-foreground")}>{item.title}</span>
+            )}
             {hasChildren && <TreeProgress done={done} total={total} />}
             {moduleName && (
               <span className="max-w-32 shrink-0 truncate rounded-sm bg-muted px-1.5 text-xs leading-5 text-muted-foreground">
@@ -652,7 +665,13 @@ const ItemRow = memo(function ItemRow({
           {zone && <DropMark zone={zone} status={becomes} count={becomesCount} left={left + (nested ? 24 : 0)} />}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
+      <ContextMenuContent
+        className="w-52"
+        // 「添加子改进点」 moves the keyboard to the field under the queue: keep it there.
+        onCloseAutoFocus={(e) => {
+          if (useAtlas.getState().newChildFor) e.preventDefault();
+        }}
+      >
         <ItemMenuItems item={item} />
       </ContextMenuContent>
     </ContextMenu>
@@ -901,14 +920,63 @@ function ItemMenuItems({ item }: { item: Item }) {
   );
 }
 
+/** The title, renamed in its row after a double click: Enter or leaving saves, Escape gives it up. */
+function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
+  const [draft, setDraft] = useState(item.title);
+  const field = useRef<HTMLInputElement>(null);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  const finish = () => {
+    const text = draft.trim();
+    if (!cancelled.current && text && text !== item.title) void setItemTitle(item.id, text);
+    onDone();
+  };
+
+  return (
+    <input
+      ref={field}
+      value={draft}
+      maxLength={300}
+      aria-label="标题"
+      spellCheck={false}
+      className="-mx-1 h-7 min-w-0 flex-1 rounded-sm bg-background px-1 ring-1 ring-ring/50 outline-none"
+      onChange={(e) => setDraft(e.target.value)}
+      // Selecting text in the field must not drag the row.
+      onPointerDown={(e) => e.stopPropagation()}
+      onBlur={finish}
+      onKeyDown={(e) => {
+        if (isComposing(e)) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelled.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 // ---- Adding ----
 
-/** The field under the queue: a title and Enter add an item to do. */
+/**
+ * The field under the queue: a title and Enter add an item to do. After
+ * 「添加子改进点」 in an item's menu, it adds children to that item, in its
+ * module, until Escape or the × on the mark of the parent.
+ */
 function NewItemInput() {
   const typeFilter = useAtlas((s) => s.typeFilter);
   const moduleFilter = useAtlas((s) => s.moduleFilter);
   const modules = useAtlas((s) => s.modules);
   const focusSignal = useAtlas((s) => s.focusNewItem);
+  const parentId = useAtlas((s) => s.newChildFor);
+  const parent = useAtlas((s) => (s.newChildFor ? s.items.find((i) => i.id === s.newChildFor) : undefined));
   const [title, setTitle] = useState("");
   const [type, setType] = useState<ItemType>(typeFilter === "all" ? "improve" : typeFilter);
   const [error, setError] = useState("");
@@ -924,6 +992,20 @@ function NewItemInput() {
     if (focusSignal) input.current?.focus();
   }, [focusSignal]);
 
+  // Children start in their parent's kind.
+  const [seenParent, setSeenParent] = useState(0);
+  if (parentId !== seenParent) {
+    setSeenParent(parentId);
+    if (parent) setType(parent.type);
+  }
+  useEffect(() => {
+    if (parentId) input.current?.focus();
+  }, [parentId]);
+  // The parent was deleted or moved to another project meanwhile.
+  useEffect(() => {
+    if (parentId && !parent) newChildTaken();
+  }, [parentId, parent]);
+
   const moduleId = typeof moduleFilter === "number" ? moduleFilter : 0;
   const moduleName = moduleFilter === "all" ? "" : moduleFilter === 0 ? UNSORTED : (modules.find((m) => m.id === moduleFilter)?.name ?? "");
 
@@ -934,12 +1016,14 @@ function NewItemInput() {
     if (!text) return;
     setTitle("");
     try {
-      const item = await createItem(text, type, moduleId);
+      const item = await createItem(text, type, parent ? parent.moduleId : moduleId, parent?.id);
       setError("");
       const s = useAtlas.getState();
       if (matchesFilters(item, s.typeFilter, s.moduleFilter) && matchesStatus(item, s.statusFilter)) {
-        // A new item goes to 待办: show it there even if the user closed it.
-        setSectionOpen("todo", true);
+        // A new child shows under its parent, opened; a new top-level item
+        // goes to 待办: show it there even if the user closed it.
+        if (parent) setCollapsed(parent.id, false);
+        else setSectionOpen("todo", true);
         flashRow(item.id);
       } else {
         toast("已记下，但当前筛选不显示它", { action: { label: "清除筛选", onClick: clearFilters } });
@@ -958,6 +1042,30 @@ function NewItemInput() {
           error && "border-destructive",
         )}
       >
+        {parent && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex h-6 max-w-36 shrink-0 items-center gap-1 rounded-md bg-muted pr-0.5 pl-1.5 text-xs text-muted-foreground">
+                <CornerDownRight className="size-3 shrink-0" />
+                <span className="truncate">{parent.title}</span>
+                <button
+                  type="button"
+                  aria-label="不再添加子改进点"
+                  className="grid size-4 shrink-0 place-items-center rounded-sm transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={() => {
+                    newChildTaken();
+                    input.current?.focus();
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              添加为「{parent.title}」的子改进点<span className="ml-1.5 opacity-60">Esc 取消</span>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="shrink-0 rounded-md" onClick={() => setType(nextType(type))}>
@@ -972,8 +1080,8 @@ function NewItemInput() {
           ref={input}
           value={title}
           maxLength={300}
-          placeholder="记一条改进点，按 Enter 保存"
-          aria-label="新改进点的标题"
+          placeholder={parent ? "子改进点的标题，按 Enter 添加" : "记一条改进点，按 Enter 保存"}
+          aria-label={parent ? "新子改进点的标题" : "新改进点的标题"}
           aria-invalid={!!error}
           className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
           onChange={(e) => {
@@ -991,11 +1099,12 @@ function NewItemInput() {
             } else if (e.key === "Escape") {
               e.preventDefault();
               setError("");
-              input.current?.blur();
+              if (parent) newChildTaken();
+              else input.current?.blur();
             }
           }}
         />
-        {moduleName && (
+        {moduleName && !parent && (
           <span className="flex max-w-40 shrink-0 items-center gap-1 text-xs text-muted-foreground">
             <Boxes className="size-3 shrink-0" />
             <span className="truncate">{moduleName}</span>

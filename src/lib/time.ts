@@ -52,6 +52,13 @@ export function formatTime(ms: number, now = Date.now()): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
+/** The whole time, for tooltips: 2026-11-07 21:45:12. */
+export function fullTime(ms: number): string {
+  const d = new Date(ms);
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${dayKey(ms)} ${hhmm(d)}:${s}`;
+}
+
 /** The day a time falls on, as a key: 2026-11-07, in local time. */
 export function dayKey(ms: number): string {
   const d = new Date(ms);
@@ -80,4 +87,10 @@ export function elapsed(ms: number, now = Date.now()): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h} 小时`;
   return `${Math.floor(h / 24)} 天`;
+}
+
+/** How long from one time to another: 不到 1 分钟, 5 分钟, 2 小时, 3 天. */
+export function duration(from: number, to: number): string {
+  const span = elapsed(from, to);
+  return span === "刚刚" ? "不到 1 分钟" : span;
 }

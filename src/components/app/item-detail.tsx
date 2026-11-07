@@ -1,22 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  AppWindow,
   ArrowRightLeft,
   ChevronRight,
+  CircleDashed,
+  Clock,
   Copy,
-  CornerDownRight,
   CornerLeftUp,
-  ExternalLink,
+  FileText,
+  Folder,
+  Globe,
   Link2,
+  NotebookPen,
+  Pencil,
   Plus,
+  Shapes,
   Trash2,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { useDebouncedSave } from "@/lib/debounce";
 import { isComposing } from "@/lib/keys";
-import { nextType, statusInfo, TYPES, UNSORTED } from "@/lib/labels";
-import { formatTime, useNow } from "@/lib/time";
+import { statusInfo, STATUSES, TYPES, UNSORTED } from "@/lib/labels";
+import { duration, formatTime, fullTime, useNow } from "@/lib/time";
 import { ancestors, buildForest } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
@@ -28,16 +36,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Scroller } from "@/components/ui/scroller";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   copyItem,
-  createItem,
   moveItemToProject,
-  newChildTaken,
   openDeeplink,
   openLink,
   select,
@@ -47,11 +53,10 @@ import {
   setItemStatus,
   setItemTitle,
   setItemType,
-  toggleItemDone,
   useAtlas,
 } from "@/state/atlas";
 import { IconButton } from "./icon-button";
-import { StatusButton, TypeChip, TypeIcon } from "./item-marks";
+import { TypeChip } from "./item-marks";
 import { confirmDeleteItem } from "./queue";
 
 /** The panel beside the queue: the selected item, to edit. */
@@ -98,7 +103,7 @@ function Detail({ item }: { item: Item }) {
         {item.parentId !== 0 && <ParentPath item={item} />}
         <div className="flex items-start gap-2">
           <TitleField item={item} />
-          <div className="-mr-1.5 flex shrink-0 items-center gap-0.5 pt-0.5">
+          <div className="-mr-1.5 flex shrink-0 items-center gap-0.5 pt-1">
             <IconButton label="复制给 AI" shortcut="C" onClick={() => void copyItem(item.id)}>
               <Copy />
             </IconButton>
@@ -106,21 +111,44 @@ function Detail({ item }: { item: Item }) {
             <IconButton label="删除" shortcut="Delete" className="hover:text-destructive" onClick={() => confirmDeleteItem(item)}>
               <Trash2 />
             </IconButton>
+            <span aria-hidden className="mx-1 h-4 w-px bg-border" />
             <IconButton label="关闭" shortcut="Esc" onClick={() => select(0)}>
               <X />
             </IconButton>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusCycle item={item} />
-          <TypeSelect item={item} />
-          <ModuleSelect item={item} />
-        </div>
-        <LinkField item={item} />
-        <SubItems item={item} />
+        <dl className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 pb-1">
+          <Prop label="状态" icon={CircleDashed}>
+            <StatusSegments item={item} />
+          </Prop>
+          <Prop label="类型" icon={Shapes}>
+            <TypeSelect item={item} />
+          </Prop>
+          <Prop label="模块" icon={Folder}>
+            <ModuleSelect item={item} />
+          </Prop>
+          <Prop label="链接" icon={Link2}>
+            <LinkField item={item} />
+          </Prop>
+          <Prop label="时间" icon={Clock} top>
+            <Timeline item={item} />
+          </Prop>
+        </dl>
         <NoteField item={item} />
       </Scroller>
-      <Times item={item} />
+    </div>
+  );
+}
+
+/** One row of the properties: its name, faint, on the left; its value on the right. */
+function Prop({ label, icon: Icon, top, children }: { label: string; icon: LucideIcon; top?: boolean; children: ReactNode }) {
+  return (
+    <div className="contents">
+      <dt className={cn("flex h-7 items-center gap-1.5 text-xs text-muted-foreground", top && "self-start")}>
+        <Icon className="size-3.5 shrink-0" />
+        {label}
+      </dt>
+      <dd className="min-w-0">{children}</dd>
     </div>
   );
 }
@@ -149,176 +177,99 @@ function ParentPath({ item }: { item: Item }) {
   );
 }
 
-/**
- * The item's children: each opens with a click, its circle marks it done.
- * The field under them adds more, in the item's kind and module.
- */
-function SubItems({ item }: { item: Item }) {
-  const items = useAtlas((s) => s.items);
-  const newChildFor = useAtlas((s) => s.newChildFor);
-  const children = useMemo(
-    () => buildForest(items).byId.get(item.id)?.children.map((n) => n.item) ?? [],
-    [items, item.id],
-  );
-  const [opened, setOpened] = useState(false);
-  // 「添加子改进点」 in the queue's menu opens the field too.
-  const adding = opened || newChildFor === item.id;
-  const setAdding = (open: boolean) => {
-    setOpened(open);
-    if (!open && useAtlas.getState().newChildFor === item.id) newChildTaken();
-  };
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<ItemType>(item.type);
-  const [error, setError] = useState("");
-  const input = useRef<HTMLInputElement>(null);
+/** The signal color each status fills its segment with. */
+const STATUS_CHIP: Record<ItemStatus, string> = {
+  todo: "[--chip:var(--muted-foreground)]",
+  doing: "[--chip:var(--doing)]",
+  done: "[--chip:var(--done)]",
+};
 
-  useEffect(() => {
-    if (adding) input.current?.focus();
-  }, [adding]);
-
-  const submit = async () => {
-    const text = title.trim();
-    if (!text) return;
-    setTitle("");
-    try {
-      await createItem(text, type, item.moduleId, item.id);
-      setError("");
-    } catch (e) {
-      setError(errorMessage(e));
-      setTitle((now) => now || text);
-    }
-  };
-
-  const done = children.filter((c) => c.status === "done").length;
-  if (children.length === 0 && !adding) {
-    return (
-      <Button variant="ghost" size="sm" className="-ml-2 self-start text-muted-foreground" onClick={() => setAdding(true)}>
-        <CornerDownRight />
-        添加子改进点
-      </Button>
-    );
-  }
+/** The item's status as three segments, 待办 | 进行中 | 完成: a click picks one. */
+function StatusSegments({ item }: { item: Item }) {
   return (
-    <section aria-label="子改进点" className="flex flex-col gap-1">
-      <h3 className="flex h-6 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        子改进点
-        {children.length > 0 && (
-          <span className="meta-mono">
-            {done}/{children.length}
-          </span>
-        )}
-        <IconButton label="添加子改进点" size="icon-xs" className="ml-auto" onClick={() => setAdding(true)}>
-          <Plus />
-        </IconButton>
-      </h3>
-      {children.length > 0 && (
-        <ul className="-mx-1.5 flex flex-col">
-          {children.map((c) => (
-            <li key={c.id}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => select(c.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") select(c.id);
-                }}
-                className="flex h-8 cursor-default items-center gap-2 rounded-md px-1.5 transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <StatusButton item={c} onToggle={() => toggleItemDone(c)} />
-                <TypeIcon type={c.type} />
-                <span className={cn("min-w-0 flex-1 truncate", c.status === "done" && "text-muted-foreground line-through decoration-muted-foreground/40")}>
-                  {c.title}
-                </span>
-                {items.some((i) => i.parentId === c.id) && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {adding && (
-        <div className="flex flex-col gap-1">
-          <div
+    <div role="group" aria-label="状态" className="inline-flex h-7 max-w-full items-center gap-0.5 rounded-lg bg-muted p-0.5">
+      {STATUSES.map((s) => {
+        const on = s.value === item.status;
+        return (
+          <button
+            key={s.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => {
+              if (!on) void setItemStatus(item.id, s.value);
+            }}
             className={cn(
-              "flex h-8 items-center gap-2 rounded-md border bg-background px-1.5 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
-              error && "border-destructive",
+              "inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] duration-200 hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+              on && cn("signal-chip hover:bg-transparent", STATUS_CHIP[s.value]),
             )}
           >
-            <button type="button" className="shrink-0 rounded-md" title="切换类型（Tab）" onClick={() => setType(nextType(type))}>
-              <TypeChip type={type} />
-            </button>
-            <input
-              ref={input}
-              value={title}
-              maxLength={300}
-              placeholder="子改进点的标题，按 Enter 添加"
-              aria-label="新子改进点的标题"
-              aria-invalid={!!error}
-              className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setError("");
-              }}
-              onBlur={() => {
-                if (!title.trim()) setAdding(false);
-              }}
-              onKeyDown={(e) => {
-                if (isComposing(e)) return;
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void submit();
-                } else if (e.key === "Tab") {
-                  e.preventDefault();
-                  setType(nextType(type, e.shiftKey));
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  setTitle("");
-                  setError("");
-                  setAdding(false);
-                }
-              }}
-            />
-          </div>
-          {error && <p className="px-1 text-xs text-destructive">{error}</p>}
-        </div>
-      )}
-    </section>
+            <s.icon className={cn("size-3.5 transition-opacity", !on && "opacity-60")} />
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
-/** The order a click on the status steps through. */
-const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { todo: "doing", doing: "done", done: "todo" };
+/**
+ * When the item was made, started and done, as a small timeline: each step
+ * with how long it took since the one before, and how long it has been
+ * going while it is in progress. A time shows in full under the pointer.
+ */
+function Timeline({ item }: { item: Item }) {
+  const now = useNow();
+  const steps: { label: string; at: number; icon: LucideIcon; text: string; note?: string }[] = [
+    { label: "创建", at: item.createdAt, icon: statusInfo("todo").icon, text: "text-muted-foreground" },
+  ];
+  if (item.startedAt) {
+    steps.push({ ...STEP_LOOK.doing, label: "开始", at: item.startedAt, note: `等了 ${duration(item.createdAt, item.startedAt)}` });
+  }
+  if (item.doneAt) {
+    const from = item.startedAt || item.createdAt;
+    steps.push({ ...STEP_LOOK.done, label: "完成", at: item.doneAt, note: `${item.startedAt ? "用时" : "历时"} ${duration(from, item.doneAt)}` });
+  } else if (item.status === "doing" && item.startedAt) {
+    steps.push({ label: "现在", at: 0, icon: CircleDashed, text: "text-doing", note: `已进行 ${duration(item.startedAt, now)}` });
+  }
 
-/** The item's status as one button: a click moves it on, 待办 → 进行中 → 完成 → 待办. */
-function StatusCycle({ item }: { item: Item }) {
-  const at = statusInfo(item.status);
-  const next = statusInfo(NEXT_STATUS[item.status]);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`状态：${at.label}，点击改为${next.label}`}
-          className="text-sm [&_svg]:size-4"
-          onClick={() => void setItemStatus(item.id, next.value)}
-        >
-          <at.icon className={at.text} />
-          {at.label}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>点击改为「{next.label}」</TooltipContent>
-    </Tooltip>
+    <ol aria-label="时间" className="flex flex-col text-xs">
+      {steps.map((s, i) => (
+        <li key={s.label} className="relative flex h-7 items-center gap-2 px-1.5">
+          {i < steps.length - 1 && <span aria-hidden className="absolute top-[22px] left-[12.5px] h-3 w-px bg-border" />}
+          <s.icon className={cn("size-3.5 shrink-0", s.text)} />
+          <span className="shrink-0 text-muted-foreground">{s.label}</span>
+          {s.at > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <time dateTime={new Date(s.at).toISOString()} className="meta-mono shrink-0 text-foreground/90">
+                  {formatTime(s.at, now)}
+                </time>
+              </TooltipTrigger>
+              <TooltipContent className="meta-mono">{fullTime(s.at)}</TooltipContent>
+            </Tooltip>
+          )}
+          {s.note && <span className="ml-auto min-w-0 truncate text-muted-foreground">{s.note}</span>}
+        </li>
+      ))}
+    </ol>
   );
 }
 
-/** Moves the item to another project, picked from a menu. */
+const STEP_LOOK = {
+  doing: { icon: statusInfo("doing").icon, text: statusInfo("doing").text },
+  done: { icon: statusInfo("done").icon, text: statusInfo("done").text },
+};
+
+/** Moves the item to another project, picked from a menu; gone when there is none. */
 function MoveMenu({ item }: { item: Item }) {
   const projects = useAtlas((s) => s.projects);
   const others = projects.filter((p) => p.id !== item.projectId);
+  if (others.length === 0) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label={others.length ? "移到其他项目" : "没有其他项目可移"} disabled={others.length === 0}>
+        <IconButton label="移到其他项目">
           <ArrowRightLeft />
         </IconButton>
       </DropdownMenuTrigger>
@@ -358,7 +309,7 @@ function TitleField({ item }: { item: Item }) {
       rows={1}
       maxLength={300}
       aria-label="标题"
-      className="field-sizing-content -mx-1.5 min-w-0 flex-1 resize-none rounded-md bg-transparent px-1.5 py-1 text-base leading-snug font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+      className="field-sizing-content -mx-1.5 min-w-0 flex-1 resize-none rounded-md bg-transparent px-1.5 py-1 text-lg leading-snug font-semibold outline-none transition-[background-color,box-shadow] duration-200 hover:bg-muted/60 focus-visible:bg-transparent focus-visible:ring-3 focus-visible:ring-ring/30"
       onFocus={() => (editing.current = true)}
       onBlur={() => {
         editing.current = false;
@@ -383,11 +334,17 @@ function TitleField({ item }: { item: Item }) {
   );
 }
 
+/** A select that reads as its value, and shows it is one under the pointer. */
+const QUIET_TRIGGER =
+  "h-7 max-w-full border-transparent bg-transparent px-1.5 hover:bg-muted aria-expanded:bg-muted dark:bg-transparent dark:hover:bg-muted [&>svg:last-child]:opacity-50";
+
 function TypeSelect({ item }: { item: Item }) {
   return (
     <Select value={item.type} onValueChange={(v) => void setItemType(item.id, v as ItemType)}>
-      <SelectTrigger size="sm" aria-label="类型">
-        <SelectValue />
+      <SelectTrigger size="sm" aria-label="类型" className={QUIET_TRIGGER}>
+        <SelectValue>
+          <TypeChip type={item.type} />
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {TYPES.map((t) => (
@@ -403,10 +360,11 @@ function TypeSelect({ item }: { item: Item }) {
 
 function ModuleSelect({ item }: { item: Item }) {
   const modules = useAtlas((s) => s.modules);
+  const name = modules.find((m) => m.id === item.moduleId)?.name;
   return (
     <Select value={String(item.moduleId)} onValueChange={(v) => void setItemModule(item.id, Number(v))}>
-      <SelectTrigger size="sm" aria-label="模块" className="max-w-56">
-        <SelectValue />
+      <SelectTrigger size="sm" aria-label="模块" className={QUIET_TRIGGER}>
+        <SelectValue>{name ? <span className="truncate">{name}</span> : <span className="text-muted-foreground">选择模块</span>}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="0">{UNSORTED}</SelectItem>
@@ -420,13 +378,41 @@ function ModuleSelect({ item }: { item: Item }) {
   );
 }
 
+function decoded(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** How a link shows: a web link as its site and path, a local file as its name, others as they are. */
+function linkLook(link: string): { icon: LucideIcon; text: string } {
+  if (/^file:/i.test(link)) {
+    const path = decoded(link.replace(/^file:\/*/i, "")).replace(/\/+$/, "");
+    return { icon: FileText, text: path.split("/").pop() || path };
+  }
+  if (/^https?:/i.test(link)) {
+    try {
+      const u = new URL(link);
+      return { icon: Globe, text: u.host + decoded(u.pathname.replace(/\/$/, "")) };
+    } catch {
+      // Not a URL the browser reads: shown as it is.
+    }
+  }
+  return { icon: AppWindow, text: link };
+}
+
 /**
- * The link the item is bound to. It saves on Enter or when the field loses
- * the keyboard; a link the app refuses stays in the field, with why.
+ * The link the item is bound to. Unbound, it is a faint 「添加链接」; bound,
+ * a card that opens it, with edit and unbind under the pointer. The field
+ * saves on Enter or when it loses the keyboard; a link the app refuses
+ * stays in the field, with why.
  */
 function LinkField({ item }: { item: Item }) {
   const [draft, setDraft] = useState(item.deeplink);
   const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
   const editing = useRef(false);
   useEffect(() => {
     if (!editing.current) setDraft(item.deeplink);
@@ -436,26 +422,73 @@ function LinkField({ item }: { item: Item }) {
     if (value.trim() === item.deeplink) {
       setDraft(item.deeplink);
       setError("");
+      setOpen(false);
       return;
     }
     try {
       const saved = await setItemDeeplink(item.id, value);
       setDraft(saved.deeplink);
       setError("");
+      setOpen(false);
     } catch (e) {
       setError(errorMessage(e));
     }
   };
 
+  if (!open && !error) {
+    if (!item.deeplink) {
+      return (
+        <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setOpen(true)}>
+          <Plus />
+          添加链接
+        </Button>
+      );
+    }
+    const look = linkLook(item.deeplink);
+    return (
+      <div className="group/link relative flex min-w-0 items-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => openDeeplink(item.id)}
+              className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 pr-14 text-left transition-colors duration-200 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <look.icon className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{look.text}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-80 break-all">
+            打开 {item.deeplink}
+            <span className="ml-1.5 opacity-60">O</span>
+          </TooltipContent>
+        </Tooltip>
+        <div className="absolute right-0.5 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-focus-within/link:opacity-100 group-hover/link:opacity-100">
+          <IconButton size="icon-xs" label="编辑链接" onClick={() => setOpen(true)}>
+            <Pencil />
+          </IconButton>
+          <IconButton
+            size="icon-xs"
+            label="解除链接"
+            onClick={() => {
+              setDraft("");
+              void save("");
+            }}
+          >
+            <X />
+          </IconButton>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
-      <InputGroup className="h-8">
-        <InputGroupAddon>
-          <Link2 />
-        </InputGroupAddon>
+      <InputGroup className="h-7">
         <InputGroupInput
+          autoFocus
           value={draft}
-          placeholder="可选：绑定一个链接，比如 AI 对话、文档或本地文件"
+          placeholder="AI 对话、网页或本地文件的链接"
           aria-label="链接"
           aria-invalid={!!error}
           spellCheck={false}
@@ -483,24 +516,6 @@ function LinkField({ item }: { item: Item }) {
             }
           }}
         />
-        {item.deeplink && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton size="icon-xs" aria-label="打开链接" title="打开链接（O）" onClick={() => openDeeplink(item.id)}>
-              <ExternalLink />
-            </InputGroupButton>
-            <InputGroupButton
-              size="icon-xs"
-              aria-label="解除链接"
-              title="解除链接"
-              onClick={() => {
-                setDraft("");
-                void save("");
-              }}
-            >
-              <X />
-            </InputGroupButton>
-          </InputGroupAddon>
-        )}
       </InputGroup>
       {error && <p className="px-1 text-xs text-destructive">{error}</p>}
     </div>
@@ -515,21 +530,19 @@ function NoteField({ item }: { item: Item }) {
   });
 
   return (
-    <MarkdownEditor
-      value={item.note}
-      className="mb-3 min-h-40 flex-1 rounded-lg border px-2.5 py-1.5 transition-colors hover:border-ring/60 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30"
-      placeholder="备注：用 Markdown 写，边写边预览"
-      onChange={schedule}
-      onBlur={flush}
-      onOpenLink={openLink}
-    />
+    <section aria-label="备注" className="mb-3 flex min-h-40 flex-1 flex-col gap-1">
+      <h3 className="flex h-6 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <NotebookPen className="size-3.5" />
+        备注
+      </h3>
+      <MarkdownEditor
+        value={item.note}
+        className="-mx-2.5 flex-1 rounded-lg border border-transparent px-2.5 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 hover:bg-muted/50 focus-within:border-ring focus-within:bg-transparent focus-within:ring-3 focus-within:ring-ring/30"
+        placeholder="用 Markdown 写，边写边预览"
+        onChange={schedule}
+        onBlur={flush}
+        onOpenLink={openLink}
+      />
+    </section>
   );
-}
-
-function Times({ item }: { item: Item }) {
-  const now = useNow();
-  const parts = [`创建于 ${formatTime(item.createdAt, now)}`];
-  if (item.startedAt) parts.push(`开始于 ${formatTime(item.startedAt, now)}`);
-  if (item.doneAt) parts.push(`完成于 ${formatTime(item.doneAt, now)}`);
-  return <p className="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground">{parts.join(" · ")}</p>;
 }

@@ -53,5 +53,6 @@ plans/
 | [2026-11-07-sub-items](./2026-11-07-sub-items/00-overview.md) | 子改进点：拖到上沿 / 下沿移动位置，拖到中间合并成父改进点（标题取第一条的前六个字 + 「等 N 个改进点」），层级不限 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-look-settings](./2026-11-07-look-settings/00-overview.md) | 自定义背景图片（模糊、不透明度、大小、位置）、可调的毛玻璃（模糊、内容面板和框架的不透明度），以及和毛玻璃分开调的窗口整体透明度 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-quick-capture](./2026-11-07-quick-capture/00-overview.md) | 快速记录小窗改版：高度随内容伸缩；`Shift+Enter` 展开 Markdown 备注和 deeplink；底栏的项目、模块可以搜索和直接新建 | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-detail-panel](./2026-11-07-detail-panel/00-overview.md) | 详情面板改版：两列属性区、带耗时的时间线、三段式状态、彩色类型、轻量的链接和无边框备注 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

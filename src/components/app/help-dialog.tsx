@@ -240,6 +240,7 @@ function QueueSection() {
       </div>
       <Points>
         <li>点击行首的圆圈，标记完成或重新打开。</li>
+        <li>单击改进点打开详情，双击直接在行内改名（Enter 保存，Esc 放弃）。</li>
         <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
         <li>右键单击改进点，可以修改状态、添加子改进点、移动或删除。</li>
         <li>点击分区标题，收起或展开进行中、待办、已完成。</li>
@@ -297,7 +298,7 @@ function DetailSection() {
     <Section id="detail" lead="选中改进点后，右侧显示详情，修改会自动保存。">
       <div className="flex flex-col gap-2.5">
         <Feature icon={Repeat} title="状态">
-          点击状态按钮，在待办、进行中、完成之间切换。
+          直接点选待办、进行中或完成；下方的时间线记下创建、开始、完成的时间和各段用时。
         </Feature>
         <Feature icon={Link2} title="链接">
           可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。
