@@ -222,6 +222,16 @@ func (a *app) smokeLook(main, capture *mygo.Window) (map[string]any, error) {
 		// The app's own scroll bars: the system's hidden, the box still scrolling natively.
 		const viewport = document.querySelector('[data-slot="scroller"] .scroller-viewport');
 		result.scroller = !!viewport && getComputedStyle(viewport).scrollbarWidth === "none" && getComputedStyle(viewport).overflowY === "auto";
+		// 使用说明 is longer than its dialog: its bar is in sight, with a thumb.
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", bubbles: true, cancelable: true }));
+		const helpBar = () => document.querySelector('[data-slot="dialog-content"] .scroller-bar[data-always]');
+		result.helpBarShown = await until(() => {
+			const bar = helpBar();
+			if (!bar || bar.hasAttribute("data-hidden") || getComputedStyle(bar).visibility !== "visible") return false;
+			return bar.querySelector(".scroller-thumb").getBoundingClientRect().height >= 24;
+		});
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		result.helpClosed = await until(() => !helpBar());
 		result.layerShown = await until(() => layer() && html.hasAttribute("data-effects"));
 		try {
 			const res = await fetch(s.wallpaper.url);
@@ -255,7 +265,7 @@ func (a *app) smokeLook(main, capture *mygo.Window) (map[string]any, error) {
 		return result, err
 	}
 	result["nativeOpacity"] = main.Opacity()
-	for _, k := range []string{"scroller", "layerShown", "loaded", "glassApplied", "glassClamped", "hiddenWhenOff"} {
+	for _, k := range []string{"scroller", "helpBarShown", "helpClosed", "layerShown", "loaded", "glassApplied", "glassClamped", "hiddenWhenOff"} {
 		if result[k] != true {
 			return result, errors.New("look: " + k + " failed: " + jsonString(result))
 		}

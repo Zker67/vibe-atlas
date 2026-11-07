@@ -232,8 +232,10 @@ textarea,
   opacity: 0;
   transition: opacity 400ms ease;
 }
+/* Hidden, not taken out: the bar keeps its height, which sizes the thumb. */
 .scroller-bar[data-hidden] {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 .scroller-bar[data-active],
 .scroller-bar[data-dragging],
