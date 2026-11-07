@@ -18,6 +18,8 @@
 | 数据 | SQLite，纯 Go 驱动 `modernc.org/sqlite` 1.61 | 频繁改状态和排序，适合用事务；不依赖 cgo，打包 Windows 和 macOS 都省事 | 已实测能和 MyGo 一起打包 |
 | 设置 | 存在同一个 SQLite 的 `settings` 表 | 只有快捷键、主题、当前项目等几项，不值得另开配置文件 | 已实现 |
 | lint | oxlint 1.92 | 快，自带 React 规则 | 已接入 |
+| 窗口顶栏 | MyGo 隐藏标题栏（`TitleBarStyle: TitleBarHidden`，高 40） | 页面自己画顶栏，系统窗口按钮、贴靠布局、顶边缩放和阴影都保留；macOS 上自动是红绿灯 | 已实现，待用户验收 |
+| 视觉效果 | React Bits 的 `DotGrid`、`PatternWaves`（源码拷入 `src/components/react-bits/`），`ogl` 1.0 | 参照 Next-AIGC；默认关闭，打开后才按需加载，`ogl` 只给「点阵信号」用 | 已实现，待用户验收 |
 
 ## 开发环境要求
 
@@ -65,6 +67,7 @@ Go 1.27 以上、Bun；Windows 10 需要 WebView2 Runtime，Windows 11 自带。
 | Tailwind CSS | [tailwindcss.com](https://tailwindcss.com/) |
 | shadcn/ui | [ui.shadcn.com](https://ui.shadcn.com/) |
 | dnd-kit | [dndkit.com](https://dndkit.com/) |
+| React Bits | [reactbits.dev](https://reactbits.dev/) |
 | SQLite | [sqlite.org](https://sqlite.org/) |
 
 外部资料的访问记录见 [references/external-docs/](../../references/external-docs/README.md)。

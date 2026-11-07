@@ -54,83 +54,113 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Colors follow Next-AIGC's「暗场 + 信号光」: near-black (or warm paper)
+ * ground, near-solid panels with a highlight on their top edge, and color
+ * only where it means something: the types and statuses below.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --background: oklch(0.965 0.003 95);
+    --foreground: oklch(0.18 0 0);
+    --card: oklch(1 0 0 / 82%);
+    --card-foreground: oklch(0.18 0 0);
+    --popover: oklch(0.99 0.002 95 / 94%);
+    --popover-foreground: oklch(0.18 0 0);
+    --primary: oklch(0.18 0 0);
+    --primary-foreground: oklch(0.98 0 0);
+    --secondary: oklch(0 0 0 / 5%);
+    --secondary-foreground: oklch(0.22 0 0);
+    --muted: oklch(0 0 0 / 4%);
+    --muted-foreground: oklch(0.47 0 0);
+    --accent: oklch(0 0 0 / 6%);
+    --accent-foreground: oklch(0.18 0 0);
+    --destructive: oklch(0.56 0.21 25);
+    --border: oklch(0 0 0 / 10%);
+    --input: oklch(0 0 0 / 13%);
+    --ring: oklch(0.45 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --radius: 0.5rem;
+    --sidebar: oklch(0.99 0.002 95 / 80%);
+    --sidebar-foreground: oklch(0.18 0 0);
+    --sidebar-primary: oklch(0.18 0 0);
+    --sidebar-primary-foreground: oklch(0.98 0 0);
+    --sidebar-accent: oklch(0 0 0 / 6%);
+    --sidebar-accent-foreground: oklch(0.18 0 0);
+    --sidebar-border: oklch(0 0 0 / 10%);
+    --sidebar-ring: oklch(0.45 0 0);
     --improve: oklch(0.55 0.15 245);
     --bug: oklch(0.58 0.2 25);
     --feature: oklch(0.55 0.18 295);
     --doing: oklch(0.68 0.16 65);
     --done: oklch(0.6 0.14 155);
+
+    /* Panels: a highlight along the top edge over a soft drop shadow. */
+    --glass: oklch(0.995 0.002 95 / 74%);
+    --glass-border: oklch(0 0 0 / 9%);
+    --glass-shadow: inset 0 1px 0 0 oklch(1 0 0 / 80%), 0 12px 32px -18px oklch(0 0 0 / 22%);
+    /* The frame (title bar, sidebar) sits on the ground; the content is a
+       panel raised over it. *-glass: the same, see-through, with effects on. */
+    --frame-glass: oklch(0.965 0.003 95 / 66%);
+    --panel: oklch(0.995 0.002 95);
+    --panel-glass: oklch(0.995 0.002 95 / 90%);
+    /* The light of the effects: the ink of the icon, white on black. */
+    --signal: oklch(0.3 0 0);
+
+    --spring-pop: linear(0, 0.0251, 0.0892, 0.1779, 0.2798, 0.3862, 0.4908, 0.5891, 0.6782, 0.7567, 0.8239, 0.8798, 0.9252, 0.9609, 0.9881, 1.0079, 1.0215, 1.0302, 1.0349, 1.0366, 1.036, 1.0339, 1.0308, 1.0272, 1.0233, 1.0194, 1.0158, 1.0124, 1.0095, 1.0069, 1.0048, 1.0031, 1);
+    --spring-pop-duration: 380ms;
+    --spring-dialog: linear(0, 0.0324, 0.1078, 0.2033, 0.3043, 0.4025, 0.4934, 0.5747, 0.6458, 0.7069, 0.7588, 0.8024, 0.8387, 0.8688, 0.8936, 0.9138, 0.9304, 0.9439, 0.9548, 0.9637, 0.9708, 0.9766, 0.9812, 0.985, 0.988, 0.9904, 0.9923, 0.9939, 0.9951, 0.9961, 0.9969, 0.9975, 1);
+    --spring-dialog-duration: 520ms;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --background: oklch(0.09 0 0);
+    --foreground: oklch(0.95 0 0);
+    --card: oklch(0.16 0.002 270 / 82%);
+    --card-foreground: oklch(0.95 0 0);
+    --popover: oklch(0.15 0.003 270 / 94%);
+    --popover-foreground: oklch(0.95 0 0);
+    --primary: oklch(0.95 0 0);
+    --primary-foreground: oklch(0.14 0 0);
+    --secondary: oklch(1 0 0 / 7%);
+    --secondary-foreground: oklch(0.93 0 0);
+    --muted: oklch(1 0 0 / 5%);
+    --muted-foreground: oklch(0.66 0 0);
+    --accent: oklch(1 0 0 / 8%);
+    --accent-foreground: oklch(0.95 0 0);
+    --destructive: oklch(0.68 0.2 24);
+    --border: oklch(1 0 0 / 9%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.72 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar: oklch(0.13 0.002 270 / 80%);
+    --sidebar-foreground: oklch(0.95 0 0);
+    --sidebar-primary: oklch(0.95 0 0);
+    --sidebar-primary-foreground: oklch(0.14 0 0);
+    --sidebar-accent: oklch(1 0 0 / 7%);
+    --sidebar-accent-foreground: oklch(0.95 0 0);
+    --sidebar-border: oklch(1 0 0 / 9%);
+    --sidebar-ring: oklch(0.72 0 0);
     --improve: oklch(0.72 0.13 245);
     --bug: oklch(0.7 0.17 25);
     --feature: oklch(0.72 0.15 295);
     --doing: oklch(0.78 0.15 75);
     --done: oklch(0.72 0.14 155);
+
+    --glass: oklch(0.135 0.002 270 / 72%);
+    --glass-border: oklch(1 0 0 / 9%);
+    --glass-shadow: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 24px 60px -24px oklch(0 0 0 / 85%);
+    --frame-glass: oklch(0.09 0 0 / 62%);
+    --panel: oklch(0.14 0.002 270);
+    --panel-glass: oklch(0.14 0.002 270 / 90%);
+    --signal: oklch(0.92 0 0);
 }
 
 @layer base {
@@ -165,6 +195,120 @@ textarea,
 * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent;
+}
+
+/* ---- 暗场 + 信号光: always on, CSS only ---- */
+
+/*
+ * Layers of the main window: the frame (title bar, sidebar) is the ground
+ * itself, and the content is one panel raised over it, inset by a gutter.
+ * Text never sits right on the moving background: with effects on, the
+ * frame and the panel frost it, the panel the most; only the gutters show
+ * it sharp.
+ */
+.app-frame {
+  background: var(--background);
+}
+.app-panel {
+  background: var(--panel);
+  box-shadow: var(--glass-shadow), 0 0 0 1px var(--glass-border);
+}
+
+/* Floating panels: the highlight along the top edge. */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="context-menu-content"],
+[data-slot="context-menu-sub-content"],
+[data-slot="select-content"] {
+  box-shadow: var(--glass-shadow);
+}
+/* They open on a spring, and close as fast as before. */
+[data-slot="popover-content"][data-state="open"],
+[data-slot="dropdown-menu-content"][data-state="open"],
+[data-slot="context-menu-content"][data-state="open"],
+[data-slot="select-content"][data-state="open"] {
+  animation-timing-function: var(--spring-pop);
+  animation-duration: 260ms;
+}
+[data-slot="dialog-content"][data-state="open"],
+[data-slot="alert-dialog-content"][data-state="open"] {
+  animation-timing-function: var(--spring-dialog);
+  animation-duration: var(--spring-dialog-duration);
+}
+
+/* The title bar the page draws, which drags the window, clear of the window buttons. */
+.titlebar {
+  --app-region: drag;
+  height: var(--mygo-titlebar-height, 40px);
+  padding-left: var(--mygo-titlebar-inset-left, 0px);
+  padding-right: var(--mygo-titlebar-inset-right, 0px);
+}
+
+/* A label in a signal color: --chip, its text, a faint fill and a thin line. */
+.signal-chip {
+  color: color-mix(in oklch, var(--chip) 82%, var(--foreground));
+  background: color-mix(in oklch, var(--chip) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--chip) 30%, transparent);
+}
+/* A dot that glows in its signal color. */
+.signal-dot {
+  background: var(--chip, var(--doing));
+  box-shadow: 0 0 6px color-mix(in oklch, var(--chip, var(--doing)) 70%, transparent);
+}
+/* Readouts: counts and times. */
+.meta-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Effects: only with 视觉效果 on (html[data-effects]), main window only ---- */
+html[data-effects] .app-frame {
+  background: var(--frame-glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  backdrop-filter: blur(20px) saturate(1.1);
+}
+html[data-effects] .app-panel {
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(32px) saturate(1.1);
+  backdrop-filter: blur(32px) saturate(1.1);
+}
+html[data-effects] [data-slot="dialog-content"],
+html[data-effects] [data-slot="alert-dialog-content"],
+html[data-effects] [data-slot="popover-content"],
+html[data-effects] [data-slot="dropdown-menu-content"],
+html[data-effects] [data-slot="context-menu-content"],
+html[data-effects] [data-slot="select-content"] {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+html[data-effects] .signal-row {
+  transition: box-shadow 0.25s ease, background-color 150ms ease;
+}
+html[data-effects] .signal-row:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--signal) 22%, transparent),
+    0 0 24px -10px color-mix(in oklch, var(--signal) 45%, transparent);
+}
+html[data-effects] .signal-dot {
+  animation: signal-blink 1.6s ease-in-out infinite;
+}
+@keyframes signal-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot][data-state="open"] {
+    animation-timing-function: ease-out;
+  }
+  html[data-effects] .signal-dot {
+    animation: none;
+  }
 }
 
 /* A row just added to the queue lights up for a moment. */

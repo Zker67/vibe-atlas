@@ -60,6 +60,16 @@ const (
 	ThemeDark   Theme = "dark"   // 暗色
 )
 
+// Background is the moving background of the main window while the
+// effects are on.
+type Background string
+
+// The backgrounds.
+const (
+	BackgroundGrid  Background = "grid"  // 点阵网格
+	BackgroundWaves Background = "waves" // 点阵信号
+)
+
 // Settings are the user's preferences.
 type Settings struct {
 	// Shortcut is the global shortcut of quick capture, such as
@@ -70,6 +80,12 @@ type Settings struct {
 	// ShortcutError says why Shortcut does not work, or "".
 	ShortcutError string `json:"shortcutError"`
 	Theme         Theme  `json:"theme"`
+	// Effects turns on the effects that cost the GPU in the main window: the
+	// moving background, blurred panels and glowing rows. Off by default;
+	// quick capture never shows them.
+	Effects bool `json:"effects"`
+	// Background is the moving background the effects show.
+	Background Background `json:"background"`
 	// DataDir is the folder of the database.
 	DataDir string `json:"dataDir"`
 	// CurrentProjectID is the project open in the main window, or 0.
@@ -80,6 +96,8 @@ type Settings struct {
 const (
 	keyShortcut       = "shortcut"
 	keyTheme          = "theme"
+	keyEffects        = "effects"
+	keyBackground     = "background"
 	keyCurrentProject = "currentProject"
 	keyLastCapture    = "lastCaptureProject"
 )
@@ -457,6 +475,8 @@ func (a *Atlas) Settings() (Settings, error) {
 		DefaultShortcut: defaultShortcut,
 		ShortcutError:   shortcutErr,
 		Theme:           a.theme(db),
+		Effects:         effectsOn(db),
+		Background:      background(db),
 		DataDir:         a.app.dataDir,
 	}
 	s.CurrentProjectID = a.settingID(db, keyCurrentProject)
@@ -470,6 +490,19 @@ func (a *Atlas) theme(db *store.Store) Theme {
 		return Theme(v)
 	}
 	return ThemeSystem
+}
+
+func effectsOn(db *store.Store) bool {
+	v, _, _ := db.Setting(keyEffects)
+	return v == "on"
+}
+
+func background(db *store.Store) Background {
+	v, _, _ := db.Setting(keyBackground)
+	if Background(v) == BackgroundWaves {
+		return BackgroundWaves
+	}
+	return BackgroundGrid
 }
 
 func (a *Atlas) settingID(db *store.Store, key string) int64 {
@@ -527,6 +560,49 @@ func (a *Atlas) SetTheme(theme Theme) (Settings, error) {
 	applyTheme(theme)
 	a.settingsChanged()
 	return a.Settings()
+}
+
+// SetEffects turns the effects of the main window on or off.
+func (a *Atlas) SetEffects(on bool) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := setEffects(db, on); err != nil {
+		return Settings{}, err
+	}
+	a.settingsChanged()
+	return a.Settings()
+}
+
+func setEffects(db *store.Store, on bool) error {
+	v := "off"
+	if on {
+		v = "on"
+	}
+	return db.SetSetting(keyEffects, v)
+}
+
+// SetBackground picks the moving background the effects show.
+func (a *Atlas) SetBackground(bg Background) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := setBackground(db, bg); err != nil {
+		return Settings{}, err
+	}
+	a.settingsChanged()
+	return a.Settings()
+}
+
+func setBackground(db *store.Store, bg Background) error {
+	switch bg {
+	case BackgroundGrid, BackgroundWaves:
+	default:
+		return fmt.Errorf("未知的背景：%s", bg)
+	}
+	return db.SetSetting(keyBackground, string(bg))
 }
 
 // SetCurrentProject records the project open in the main window, which

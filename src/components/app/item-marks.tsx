@@ -15,7 +15,7 @@ export function TypeChip({ type, className }: { type: ItemType; className?: stri
   const info = typeInfo(type);
   const Icon = info.icon;
   return (
-    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium", info.soft, info.text, className)}>
+    <span className={cn("signal-chip inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium", info.chip, className)}>
       <Icon className="size-3" />
       {info.label}
     </span>

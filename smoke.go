@@ -97,6 +97,69 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 	report["capture"] = captured
+
+	// The effects are off out of the box; turned on, the main window loads
+	// the background picked, and quick capture never does.
+	effects, err := mygo.EvalAs[map[string]any](main.Page(), `
+		const until = async (check) => {
+			for (let i = 0; i < 100; i++) {
+				if (check()) return true;
+				await new Promise((r) => setTimeout(r, 100));
+			}
+			return false;
+		};
+		const layer = (id) => document.querySelector('[data-effects-layer="' + id + '"] canvas');
+		const before = await mygo.call("Atlas.Settings");
+		const result = {
+			titleBar: !!document.querySelector("[data-titlebar]"),
+			offByDefault: before.effects === false,
+			noLayerWhenOff: !document.querySelector("[data-effects-layer]") && !document.documentElement.hasAttribute("data-effects"),
+		};
+		await mygo.call("Atlas.SetEffects", true);
+		result.gridShown = await until(() => layer("grid") && document.documentElement.hasAttribute("data-effects"));
+		await mygo.call("Atlas.SetBackground", "waves");
+		result.wavesShown = await until(() => layer("waves"));
+		return result;
+	`)
+	if err != nil {
+		finish(err, "effects turn on")
+		return
+	}
+	report["effects"] = effects
+	for _, k := range []string{"titleBar", "offByDefault", "noLayerWhenOff", "gridShown", "wavesShown"} {
+		if effects[k] != true {
+			finish(errors.New("effects: "+k+" failed: "+jsonString(effects)), "effects turn on")
+			return
+		}
+	}
+	captureEffects, err := mygo.EvalAs[map[string]any](capture.Page(), `
+		return {
+			layer: !!document.querySelector("[data-effects-layer]"),
+			attr: document.documentElement.hasAttribute("data-effects"),
+			reactBits: performance.getEntriesByType("resource").some((e) => /DotGrid|PatternWaves|effects-layer/.test(e.name)),
+		};
+	`)
+	if err != nil {
+		finish(err, "capture stays without effects")
+		return
+	}
+	report["captureEffects"] = captureEffects
+	if captureEffects["layer"] != false || captureEffects["attr"] != false || captureEffects["reactBits"] != false {
+		finish(errors.New("quick capture loaded effects: "+jsonString(captureEffects)), "capture stays without effects")
+		return
+	}
+	off, err := mygo.EvalAs[bool](main.Page(), `
+		await mygo.call("Atlas.SetEffects", false);
+		for (let i = 0; i < 100; i++) {
+			if (!document.querySelector("[data-effects-layer]") && !document.documentElement.hasAttribute("data-effects")) return true;
+			await new Promise((r) => setTimeout(r, 100));
+		}
+		return false;
+	`)
+	if err != nil || !off {
+		finish(errors.Join(err, errors.New("the effects stay after turning them off")), "effects turn off")
+		return
+	}
 	finish(nil, "")
 }
 

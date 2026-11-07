@@ -47,5 +47,6 @@ plans/
 | 计划 | 内容 | 状态 |
 |---|---|---|
 | [2026-11-07-prototype](./2026-11-07-prototype/00-overview.md) | 第一期：Windows 上可测试的原型，共 8 步（技术验证 → 应用底座 → 项目与模块 → 改进点与队列 → Markdown 编辑 → 快速记录 → 项目总览 → 打磨交付）；[实施报告](./2026-11-07-prototype/09-implementation-report.md) | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-visual-style](./2026-11-07-visual-style/00-overview.md) | 视觉风格：参照 Next-AIGC 的「暗场 + 信号光」，自建顶栏合成一条，耗性能的效果放进默认关闭的开关 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

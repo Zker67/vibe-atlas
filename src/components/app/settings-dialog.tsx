@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { FolderOpen, Monitor, Moon, Sun } from "lucide-react";
-import { Atlas, type Theme } from "@/mygo";
+import { AudioWaveform, CircleOff, FolderOpen, Grip, Monitor, Moon, Sun } from "lucide-react";
+import { Atlas, type Background, type Settings, type Theme } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,21 @@ const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
 ];
+
+type EffectsChoice = "off" | Background;
+
+const EFFECTS: { value: EffectsChoice; label: string; icon: typeof Sun }[] = [
+  { value: "off", label: "关闭", icon: CircleOff },
+  { value: "grid", label: "点阵网格", icon: Grip },
+  { value: "waves", label: "点阵信号", icon: AudioWaveform },
+];
+
+/** Turns the effects off, or on with the background picked. */
+async function chooseEffects(choice: EffectsChoice): Promise<Settings> {
+  if (choice === "off") return Atlas.setEffects(false);
+  await Atlas.setBackground(choice);
+  return Atlas.setEffects(true);
+}
 
 const MAIN_KEYS: [string, string][] = [
   ["N", "新增一条"],
@@ -55,7 +70,7 @@ export function SettingsDialog() {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription className="sr-only">快速记录的快捷键、外观和数据位置</DialogDescription>
+          <DialogDescription className="sr-only">快速记录的快捷键、外观、视觉效果和数据位置</DialogDescription>
         </DialogHeader>
         {settings && (
           <div className="flex flex-col gap-5">
@@ -77,6 +92,27 @@ export function SettingsDialog() {
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
+            </Row>
+            <Row title="视觉效果">
+              <div className="flex min-w-0 flex-col items-start gap-1.5">
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={settings.effects ? settings.background : "off"}
+                  onValueChange={(v) => {
+                    if (v) void run(chooseEffects(v as EffectsChoice)).then((s) => s && useAtlas.setState({ settings: s }));
+                  }}
+                >
+                  {EFFECTS.map((e) => (
+                    <ToggleGroupItem key={e.value} value={e.value}>
+                      <e.icon />
+                      {e.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <p className="text-xs text-muted-foreground">动态背景、毛玻璃和悬停辉光，会多占用显卡</p>
+              </div>
             </Row>
             <Row title="数据">
               <div className="flex min-w-0 flex-col items-start gap-1.5">

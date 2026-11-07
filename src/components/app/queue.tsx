@@ -151,7 +151,7 @@ export function Queue() {
                 >
                   <ChevronRight className={cn("size-3.5 transition-transform duration-150", doneOpen && "rotate-90")} />
                   已完成
-                  <span className="tabular-nums">{done.length}</span>
+                  <span className="meta-mono">{done.length}</span>
                 </button>
                 {doneOpen && (
                   <div className="flex flex-col">
@@ -184,7 +184,7 @@ function Section({ icon, title, count, children }: { icon?: ReactNode; title: st
       <h2 className="flex h-7 items-center gap-1.5 px-2 text-xs font-medium text-muted-foreground">
         {icon}
         {title}
-        <span className="tabular-nums">{count}</span>
+        <span className="meta-mono">{count}</span>
       </h2>
       <div className="flex flex-col">{children}</div>
     </section>
@@ -239,7 +239,7 @@ const ItemRow = memo(function ItemRow({ item, moduleName, selected, flash }: Ite
           aria-current={selected || undefined}
           onClick={() => select(item.id)}
           className={cn(
-            "group flex h-9 items-center gap-2 rounded-md px-2 transition-colors duration-100",
+            "signal-row group flex h-9 items-center gap-2 rounded-md px-2 transition-colors duration-100",
             selected ? "bg-accent" : "hover:bg-accent/50",
             flash && "row-flash",
           )}
@@ -300,7 +300,7 @@ function RowTime({ item }: { item: Item }) {
     text = formatTime(item.doneAt, now);
   }
   if (!text) return null;
-  return <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{text}</span>;
+  return <span className="meta-mono shrink-0 text-muted-foreground">{text}</span>;
 }
 
 function RowActions({ item, shown }: { item: Item; shown: boolean }) {

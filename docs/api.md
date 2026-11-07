@@ -19,7 +19,7 @@
 | 改进点 | `items`、`createItem`、`setItemTitle`、`setItemType`、`setItemModule`、`setItemNote`、`setItemDeeplink`、`setItemStatus`、`moveTodoItem`、`moveItemToProject`、`deleteItem` | `items` 的顺序：进行中（按开始时间）、待办（按用户排序）、完成（最近完成的在前） |
 | 复制与链接 | `copyItem`、`openDeeplink`、`openLink` | `copyItem` 复制标题和备注；`file:` 链接打开前先检查文件是否存在 |
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
-| 设置 | `settings`、`setShortcut`、`pauseShortcut`、`setTheme`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；`pauseShortcut` 在录制新快捷键时临时释放全局快捷键 |
+| 设置 | `settings`、`setShortcut`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；`pauseShortcut` 在录制新快捷键时临时释放全局快捷键 |
 | 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目 |
 
 ## 事件
@@ -40,7 +40,7 @@
 | `Module` | `id`、`projectId`、`name`、`sortOrder`、`counts` |
 | `Item` | `id`、`projectId`、`moduleId`（`0` 是未分类）、`type`（`improve` / `bug` / `feature`）、`status`（`todo` / `doing` / `done`）、`title`、`note`、`deeplink`、`sortOrder`、`createdAt`、`startedAt`、`doneAt`、`updatedAt` |
 | `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done` |
-| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`theme`、`dataDir`、`currentProjectId` |
+| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`theme`、`effects`（视觉效果，默认 `false`）、`background`（`grid` / `waves`，默认 `grid`）、`dataDir`、`currentProjectId` |
 
 状态切换时的时间规则：变成进行中记录 `startedAt` 并清空 `doneAt`；变成完成记录 `doneAt`；退回待办两者都清空。
 

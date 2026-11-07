@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { FolderKanban, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
@@ -9,10 +9,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog, NameDialog } from "@/components/app/dialogs";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
-import { ProjectHeader } from "@/components/app/project-header";
 import { confirmDeleteItem, Queue, visibleItems } from "@/components/app/queue";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
+import { TitleBar } from "@/components/app/title-bar";
 import {
   copyItem,
   focusNewItem,
@@ -26,6 +26,9 @@ import {
 } from "@/state/atlas";
 import { openSettings } from "@/state/dialogs";
 
+// The effects load only once they are turned on (设置 → 视觉效果).
+const EffectsLayer = lazy(() => import("@/components/effects/effects-layer"));
+
 /** The main window: projects on the left, the open project's queue or overview. */
 export function MainApp() {
   const ready = useAtlas((s) => s.ready);
@@ -37,23 +40,33 @@ export function MainApp() {
     void init();
   }, []);
   useShortcuts();
+  const effects = useEffects();
 
   return (
     <TooltipProvider delayDuration={500}>
-      <div className="flex h-full" data-atlas-ready={ready ? "" : undefined}>
-        <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col">
-          {loadError && <LoadError message={loadError} />}
-          {!ready ? null : project ? (
-            <>
-              <ProjectHeader project={project} />
-              {view === "queue" ? <QueueLayout /> : <Overview project={project} />}
-            </>
-          ) : (
-            !loadError && <Welcome />
-          )}
-        </main>
+      <div className="flex h-full flex-col" data-atlas-ready={ready ? "" : undefined}>
+        <TitleBar />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          {/* The gutter is bare ground (the frame's color with effects off); no
+              blur of its own, so the panel's frosts the background itself. */}
+          <div className="flex min-w-0 flex-1 pr-2 pb-2">
+            <main className="app-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
+              {loadError && <LoadError message={loadError} />}
+              {!ready ? null : project ? (
+                view === "queue" ? <QueueLayout /> : <Overview project={project} />
+              ) : (
+                !loadError && <Welcome />
+              )}
+            </main>
+          </div>
+        </div>
       </div>
+      {effects && (
+        <Suspense fallback={null}>
+          <EffectsLayer />
+        </Suspense>
+      )}
       <NameDialog />
       <ConfirmDialog />
       <SettingsDialog />
@@ -109,6 +122,15 @@ function LoadError({ message }: { message: string }) {
       </Button>
     </div>
   );
+}
+
+/** Whether the effects are on; html[data-effects] turns on their CSS. */
+function useEffects(): boolean {
+  const effects = useAtlas((s) => s.settings?.effects ?? false);
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-effects", effects);
+  }, [effects]);
+  return effects;
 }
 
 // ---- Keys ----

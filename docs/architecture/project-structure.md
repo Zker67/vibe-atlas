@@ -75,11 +75,13 @@
 | `src/capture-app.tsx` | 快速记录小窗 |
 | `src/mygo.ts` | MyGo 生成的 TypeScript 客户端，不要手改 |
 | `src/state/` | Zustand 状态：数据加载与修改、对话框 |
-| `src/components/app/` | 业务组件：侧栏、项目头部、队列、详情、总览、设置、对话框 |
+| `src/components/app/` | 业务组件：顶栏、侧栏、项目头部、队列、详情、总览、设置、对话框 |
+| `src/components/effects/` | 视觉效果的动态背景，打开效果后才加载 |
+| `src/components/react-bits/` | React Bits 组件源码（上游原样，带许可证） |
 | `src/components/editor/` | Markdown 即时预览编辑器（CodeMirror 6） |
 | `src/components/ui/` | shadcn/ui 生成的基础组件 |
 | `src/lib/` | 工具：调用与报错、按键、时间、主题、类型和状态的文案与图标 |
-| `src/index.css` | 主题色、类型色、编辑器样式 |
+| `src/index.css` | 主题色、类型色、框架与内容面板、视觉效果的 CSS、编辑器样式 |
 
 各目录职责的细节见 [src/README.md](../../src/README.md)。
 

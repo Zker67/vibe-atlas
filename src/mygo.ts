@@ -4,6 +4,12 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/**
+ * Background is the moving background of the main window while the
+ * effects are on.
+ */
+export type Background = "grid" | "waves";
+
 /** CaptureState is how the quick capture panel starts. */
 export interface CaptureState {
   /**
@@ -150,6 +156,14 @@ export interface Settings {
   /** ShortcutError says why Shortcut does not work, or "". */
   shortcutError: string;
   theme: Theme;
+  /**
+   * Effects turns on the effects that cost the GPU in the main window: the
+   * moving background, blurred panels and glowing rows. Off by default;
+   * quick capture never shows them.
+   */
+  effects: boolean;
+  /** Background is the moving background the effects show. */
+  background: Background;
   /** DataDir is the folder of the database. */
   dataDir: string;
   /** CurrentProjectID is the project open in the main window, or 0. */
@@ -300,12 +314,20 @@ export const Atlas = {
   reorderProjects(ids: number[]): Promise<void> {
     return call("Atlas.ReorderProjects", ids);
   },
+  /** SetBackground picks the moving background the effects show. */
+  setBackground(bg: Background): Promise<Settings> {
+    return call("Atlas.SetBackground", bg);
+  },
   /**
    * SetCurrentProject records the project open in the main window, which
    * quick capture adds items to unless the user picks another.
    */
   setCurrentProject(id: number): Promise<void> {
     return call("Atlas.SetCurrentProject", id);
+  },
+  /** SetEffects turns the effects of the main window on or off. */
+  setEffects(on: boolean): Promise<Settings> {
+    return call("Atlas.SetEffects", on);
   },
   /**
    * SetItemDeeplink binds an item to a link, or unbinds it when link is

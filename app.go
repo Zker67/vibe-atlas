@@ -22,11 +22,16 @@ var trayIcon []byte
 // to the window menu and launchers, Ctrl+Space to input methods.
 const defaultShortcut = "Ctrl+Alt+Space"
 
-// The windows' colors until their pages paint: the pages' backgrounds.
+// The windows' colors until their pages paint: the pages' backgrounds
+// (--background in src/index.css).
 const (
-	mainBackground    = "light-dark(#ffffff, #0a0a0a)"
-	captureBackground = "light-dark(#ffffff, #171717)"
+	mainBackground    = "light-dark(#f4f3f1, #020202)"
+	captureBackground = "light-dark(#f4f3f1, #020202)"
 )
+
+// titleBarHeight is the height of the main window's title bar, which the
+// page draws (src/components/app/title-bar.tsx) under the window buttons.
+const titleBarHeight = 40
 
 // app is the running Vibe Atlas: its windows, its tray icon and its global
 // shortcut.
@@ -94,6 +99,8 @@ func (a *app) start() {
 		MinHeight:       600,
 		StateKey:        "main",
 		Hidden:          true,
+		TitleBarStyle:   mygo.TitleBarHidden,
+		TitleBarHeight:  titleBarHeight,
 		BackgroundColor: mainBackground,
 		Page:            mygo.PageOptions{BackgroundThrottling: throttling},
 	})

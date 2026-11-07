@@ -17,6 +17,16 @@
     "builtin": true,
     "browser": true
   },
+  "overrides": [
+    {
+      "files": ["src/components/react-bits/**"],
+      "rules": {
+        "react/refs": "off",
+        "react/hooks": "off",
+        "react/exhaustive-effect-dependencies": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "dist",
     "build",

@@ -52,18 +52,20 @@ export function promptRenameProject(project: Project) {
 
 export function Sidebar() {
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <span className="grid size-6 place-items-center rounded-md bg-primary text-primary-foreground">
-          <FolderKanban className="size-3.5" />
-        </span>
-        <span className="font-semibold tracking-tight">Vibe Atlas</span>
-        <IconButton label="设置" shortcut="Ctrl+," className="ml-auto" onClick={() => openSettings()}>
-          <Settings />
-        </IconButton>
-      </header>
+    <aside className="app-frame flex w-60 shrink-0 flex-col text-sidebar-foreground">
       <Projects />
       <Modules />
+      <div className="mt-auto shrink-0 border-t p-2">
+        <button
+          type="button"
+          onClick={() => openSettings()}
+          className="signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+        >
+          <Settings className="size-4 shrink-0" />
+          <span className="flex-1">设置</span>
+          <span className="meta-mono opacity-70">Ctrl+,</span>
+        </button>
+      </div>
     </aside>
   );
 }
@@ -95,14 +97,14 @@ function Row({ icon: Icon, label, count, active, onClick, doing }: RowProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
+        "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
         active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60",
       )}
     >
       <Icon className={cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {doing && <span className="size-1.5 shrink-0 rounded-full bg-doing" aria-label="有进行中的改进点" />}
-      {count !== undefined && count > 0 && <span className="text-xs tabular-nums text-muted-foreground">{count}</span>}
+      {doing && <span className="signal-dot size-1.5 shrink-0 rounded-full" aria-label="有进行中的改进点" />}
+      {count !== undefined && count > 0 && <span className="meta-mono text-muted-foreground">{count}</span>}
     </button>
   );
 }

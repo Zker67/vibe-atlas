@@ -61,14 +61,17 @@ bun run build
 VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录>\report.json' "build/windows-amd64/Vibe Atlas.exe"
 ```
 
-退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）和快捷键是否注册成功。
+退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功，以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）。
+
+本机已经开着 Vibe Atlas 时，两个实例会争用同一个 WebView2 数据目录，测试程序报 `creating the WebView2 controller failed (HRESULT 0x8007139f)`。再加一个环境变量 `WEBVIEW2_USER_DATA_FOLDER='<临时目录>\webview'` 即可，不用关掉正在用的程序；这时快捷键会因为被占用而注册失败，属于正常。
 
 ## 配置
 
 | 设置 | 默认值 | 修改位置 |
 |---|---|---|
 | 快速记录快捷键 | `Ctrl+Alt+Space` | 设置（`Ctrl+,`） |
-| 主题 | 跟随系统 | 设置 |
+| 主题 | 跟随系统 | 设置，或顶栏的外观按钮 |
+| 视觉效果 | 关闭（背景默认点阵网格） | 设置 |
 
 设置存在数据库的 `settings` 表里，没有单独的配置文件。环境变量只用于开发和测试：
 

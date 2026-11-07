@@ -35,9 +35,9 @@ function FolderButton({ project }: { project: Project }) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void chooseProjectFolder(project.id)}>
+          <Button variant="ghost" size="sm" aria-label="绑定文件夹" className="text-muted-foreground" onClick={() => void chooseProjectFolder(project.id)}>
             <FolderPlus />
-            绑定文件夹
+            <span className="hidden @min-[760px]:inline">绑定文件夹</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>可选：绑定后可以一键打开项目文件夹</TooltipContent>
@@ -50,11 +50,12 @@ function FolderButton({ project }: { project: Project }) {
         <Button
           variant="ghost"
           size="sm"
-          className={cn("max-w-56", !project.folderExists && "text-destructive")}
+          aria-label={folderName(project.folderPath)}
+          className={cn("max-w-40", !project.folderExists && "text-destructive")}
           onClick={() => openProjectFolder(project.id)}
         >
           {project.folderExists ? <FolderOpen /> : <TriangleAlert />}
-          <span className="truncate">{folderName(project.folderPath)}</span>
+          <span className="hidden truncate @min-[760px]:inline">{folderName(project.folderPath)}</span>
         </Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-96 break-all">
@@ -64,6 +65,7 @@ function FolderButton({ project }: { project: Project }) {
   );
 }
 
+/** The open project's controls, in the title bar: narrow bars show icons only. */
 export function ProjectHeader({ project }: { project: Project }) {
   const view = useAtlas((s) => s.view);
   const typeFilter = useAtlas((s) => s.typeFilter);
@@ -71,10 +73,10 @@ export function ProjectHeader({ project }: { project: Project }) {
   const filtered = typeFilter !== "all" || moduleFilter !== "all";
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+    <div className="flex min-w-0 flex-1 items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="max-w-72 px-2 text-base font-semibold">
+          <Button variant="ghost" size="sm" className="max-w-48 px-2 text-sm font-semibold">
             <span className="truncate">{project.name}</span>
             <ChevronDown className="text-muted-foreground" />
           </Button>
@@ -109,24 +111,24 @@ export function ProjectHeader({ project }: { project: Project }) {
         size="sm"
         value={view}
         onValueChange={(v) => v && setView(v as View)}
-        className="ml-2"
+        className="ml-1"
       >
         <ToggleGroupItem value="queue" aria-label="队列">
           <ListTodo />
-          队列
+          <span className="hidden @min-[600px]:inline">队列</span>
         </ToggleGroupItem>
         <ToggleGroupItem value="overview" aria-label="总览">
           <ChartPie />
-          总览
+          <span className="hidden @min-[600px]:inline">总览</span>
         </ToggleGroupItem>
       </ToggleGroup>
 
       {view === "queue" && (
         <div className="ml-auto flex items-center gap-1">
           {filtered && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearFilters}>
+            <Button variant="ghost" size="sm" aria-label="清除筛选" title="清除筛选" className="text-muted-foreground" onClick={clearFilters}>
               <X />
-              清除筛选
+              <span className="hidden @min-[760px]:inline">清除筛选</span>
             </Button>
           )}
           <ToggleGroup
@@ -137,14 +139,14 @@ export function ProjectHeader({ project }: { project: Project }) {
           >
             <ToggleGroupItem value="all">全部</ToggleGroupItem>
             {TYPES.map((t) => (
-              <ToggleGroupItem key={t.value} value={t.value} aria-label={t.label}>
+              <ToggleGroupItem key={t.value} value={t.value} aria-label={t.label} title={t.label}>
                 <t.icon className={t.text} />
-                {t.label}
+                <span className="hidden @min-[760px]:inline">{t.label}</span>
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
         </div>
       )}
-    </header>
+    </div>
   );
 }

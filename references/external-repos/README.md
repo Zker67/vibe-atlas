@@ -20,7 +20,7 @@ references/external-repos/
 
 | 仓库 | commit/release | license | 参考范围 | 状态 |
 |---|---|---|---|---|
-| - | - | - | - | 待补充 |
+| [Zker67/Next-AIGC](./Zker67__Next-AIGC/README.md) | `374b650` | 用户本人；React Bits 为 MIT + Commons Clause | 视觉风格「暗场 + 信号光」、React Bits 背景组件 | 已采纳一部分 |
 
 ## 使用边界
 

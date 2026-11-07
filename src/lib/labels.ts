@@ -7,14 +7,14 @@ export interface TypeInfo {
   icon: LucideIcon;
   /** Text color, from the theme tokens. */
   text: string;
-  /** A light background of the same color. */
-  soft: string;
+  /** Sets --chip, the color of .signal-chip and .signal-dot. */
+  chip: string;
 }
 
 export const TYPES: TypeInfo[] = [
-  { value: "improve", label: "改进", icon: Sparkles, text: "text-improve", soft: "bg-improve/10" },
-  { value: "bug", label: "bug", icon: Bug, text: "text-bug", soft: "bg-bug/10" },
-  { value: "feature", label: "新需求", icon: Lightbulb, text: "text-feature", soft: "bg-feature/10" },
+  { value: "improve", label: "改进", icon: Sparkles, text: "text-improve", chip: "[--chip:var(--improve)]" },
+  { value: "bug", label: "bug", icon: Bug, text: "text-bug", chip: "[--chip:var(--bug)]" },
+  { value: "feature", label: "新需求", icon: Lightbulb, text: "text-feature", chip: "[--chip:var(--feature)]" },
 ];
 
 export function typeInfo(t: ItemType): TypeInfo {
