@@ -21,7 +21,7 @@
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
 | 设置 | `settings`、`setShortcut`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；`pauseShortcut` 在录制新快捷键时临时释放全局快捷键 |
 | 背景与透明度 | `chooseWallpaper`、`clearWallpaper`、`setWallpaperLook`、`setGlass`、`setWindowOpacity`、`previewWindowOpacity` | `chooseWallpaper` 打开系统的选择文件窗口，取消时返回原设置；图片只收 PNG、JPG、WebP、GIF、BMP，最大 20 MB，并按内容校验类型。数值超出范围时由 Go 限制到范围内。`previewWindowOpacity` 只改窗口，不保存 |
-| 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目 |
+| 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目；小窗会一起传可选的 `note`、`deeplink` |
 
 ## 事件
 

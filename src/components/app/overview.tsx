@@ -33,7 +33,8 @@ export function Overview({ project }: { project: Project }) {
         {!overview ? null : overview.totals.todo + overview.totals.doing + overview.totals.done === 0 ? (
           <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
             <Inbox className="size-8 opacity-50" />
-            <p>还没有改进点。记下的改进点会自动汇总到这里。</p>
+            <p className="max-w-full break-words text-base font-medium text-foreground">「{project.name}」的故事，从第一条开始</p>
+            <p>记下的每一条都会汇总到这里</p>
           </div>
         ) : (
           <Summary overview={overview} />

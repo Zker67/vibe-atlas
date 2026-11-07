@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
-import { FolderKanban, Plus, RefreshCw, TriangleAlert } from "lucide-react";
+import { Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import { useDefaultLayout } from "react-resizable-panels";
+import appIcon from "@/assets/app-icon.png";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
 import { applyGlass, decorated } from "@/lib/look";
 import { Button } from "@/components/ui/button";
@@ -108,21 +109,25 @@ function QueueLayout({ project }: { project: Project }) {
 }
 
 function Welcome() {
-  const shortcut = useAtlas((s) => s.settings?.shortcut);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-8 text-center">
-      <span className="grid size-12 place-items-center rounded-xl bg-primary text-primary-foreground">
-        <FolderKanban className="size-6" />
+    <div className="flex flex-1 flex-col items-center justify-center gap-8 p-8 text-center">
+      <span className="relative isolate">
+        <span
+          aria-hidden
+          className="absolute -inset-10 -z-10 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--signal)_16%,transparent),transparent)]"
+        />
+        <img
+          src={appIcon}
+          alt=""
+          draggable={false}
+          className="size-20 rounded-[22%] shadow-[0_18px_40px_-16px_oklch(0_0_0/60%)] ring-1 ring-foreground/10"
+        />
       </span>
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-lg font-semibold">欢迎使用 Vibe Atlas</h1>
-        <p className="text-muted-foreground">先建一个项目，再把它的改进点、bug 和新需求记进来。</p>
-      </div>
-      <Button autoFocus onClick={newProject}>
+      <h1 className="text-xl font-semibold tracking-tight">故事从第一个项目开始</h1>
+      <Button autoFocus variant="outline" onClick={newProject}>
         <Plus />
         新建项目
       </Button>
-      {shortcut && <p className="text-xs text-muted-foreground">以后在任何软件里按 {shortcut}，都能快速记一条。</p>}
     </div>
   );
 }

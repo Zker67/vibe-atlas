@@ -315,3 +315,22 @@ func TestDeeplinkOnItem(t *testing.T) {
 
 // Quick capture saves the notes and the link with the new item, checked as
 // SetItemNote and SetItemDeeplink check them.
+func TestCreateItemWithDetails(t *testing.T) {
+	s, _ := newStore(t)
+	p := must(s.CreateProject("规则恐怖"))
+	it := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "切枪卡一帧", Note: "## 复现\n- 连按 Q", Deeplink: "  https://chatgpt.com/c/abc  "}))
+	if it.Note != "## 复现\n- 连按 Q" || it.Deeplink != "https://chatgpt.com/c/abc" {
+		t.Fatalf("item = %+v", it)
+	}
+	if got := must(s.Item(it.ID)); got.Note != it.Note || got.Deeplink != it.Deeplink {
+		t.Fatalf("saved = %+v", got)
+	}
+
+	_, err := s.CreateItem(NewItem{ProjectID: p.ID, Title: "x", Deeplink: "随便写的文字"})
+	wantUserErr(t, err, "完整的链接")
+	_, err = s.CreateItem(NewItem{ProjectID: p.ID, Title: "x", Note: strings.Repeat("字", maxText+1)})
+	wantUserErr(t, err, "太长")
+	if items := must(s.Items(p.ID)); len(items) != 1 {
+		t.Fatalf("rejected items were saved: %s", titles(items))
+	}
+}

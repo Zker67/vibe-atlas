@@ -196,11 +196,14 @@ function CaptureSection() {
         </Button>
       </div>
       <Points>
-        <li>改进点会记录到主窗口当前打开的项目。</li>
+        <li>改进点会记录到主窗口当前打开的项目；点底栏的项目和模块，可以搜索、切换或直接新建。</li>
         <li>
           按 <K>Enter</K> 保存后，可以继续输入下一条。
         </li>
-        <li>点击窗口外部即可关闭。</li>
+        <li>
+          按 <K>Shift+Enter</K> 展开详情，写 Markdown 备注、贴 deeplink，和标题一起保存。
+        </li>
+        <li>点击窗口外部即可关闭，没保存的内容下次还在。</li>
       </Points>
     </Section>
   );
@@ -403,10 +406,14 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
     title: "快速记录窗口",
     rows: [
       ["保存", ["Enter"]],
+      ["展开详情（备注和链接）", ["Shift+Enter"]],
+      ["在详情里保存", ["Ctrl+Enter"]],
       ["切换类型", ["Tab", "Shift+Tab"]],
-      ["切换项目", ["↑ ↓"]],
-      ["切换模块", ["Ctrl+↑ ↓"]],
-      ["关闭", ["Esc"]],
+      ["搜索或新建项目", ["Ctrl+P"]],
+      ["搜索或新建模块", ["Ctrl+M"]],
+      ["轮换项目", ["↑ ↓"]],
+      ["轮换模块", ["Ctrl+↑ ↓"]],
+      ["返回标题 / 关闭", ["Esc"]],
     ],
   },
   {

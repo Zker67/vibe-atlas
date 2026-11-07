@@ -130,6 +130,11 @@ type NewItem struct {
 	// Type is TypeImprove when empty.
 	Type  ItemType `json:"type"`
 	Title string   `json:"title"`
+	// Note is the item's notes, in Markdown, or "" for none.
+	Note string `json:"note,omitempty"`
+	// Deeplink is the link the item is bound to, or "" for none. See
+	// NormalizeDeeplink for the links it takes.
+	Deeplink string `json:"deeplink,omitempty"`
 }
 
 // checkModule fails unless moduleID is 0 or a module of the project.
@@ -181,6 +186,13 @@ func (s *Store) CreateItem(in NewItem) (Item, error) {
 	if !in.Type.valid() {
 		return Item{}, userErr("未知的类型：%s", in.Type)
 	}
+	if err := checkText(in.Note, "备注"); err != nil {
+		return Item{}, err
+	}
+	link, err := NormalizeDeeplink(in.Deeplink)
+	if err != nil {
+		return Item{}, err
+	}
 	var it Item
 	err = s.inTx(func(tx *sql.Tx) error {
 		if _, err := projectIn(tx, in.ProjectID); err != nil {
@@ -197,8 +209,8 @@ func (s *Store) CreateItem(in NewItem) (Item, error) {
 			return err
 		}
 		now := s.millis()
-		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?)`, in.ProjectID, nullable(in.ParentID), nullable(in.ModuleID), in.Type, title, order, now, now)
+		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, note, deeplink, sort_order, created_at, updated_at)
+			VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?)`, in.ProjectID, nullable(in.ParentID), nullable(in.ModuleID), in.Type, title, in.Note, link, order, now, now)
 		if err != nil {
 			return err
 		}

@@ -518,7 +518,7 @@ function QueueSection({ section, count, collapsible, empty, children }: QueueSec
 }
 
 function QueueEmpty({ filtered }: { filtered: boolean }) {
-  const shortcut = useAtlas((s) => s.settings?.shortcut);
+  const name = useAtlas((s) => s.projects.find((p) => p.id === s.projectId)?.name ?? "");
   if (filtered) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
@@ -530,11 +530,10 @@ function QueueEmpty({ filtered }: { filtered: boolean }) {
     );
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
       <Inbox className="mb-1 size-8 opacity-50" />
-      <p className="text-foreground">这里还没有改进点</p>
-      <p>在下面输入标题，按 Enter 记下一条。</p>
-      {shortcut && <p>在任何地方按 {shortcut}，也能快速记录。</p>}
+      <p className="max-w-full break-words text-base font-medium text-foreground">「{name}」的故事，从第一条开始</p>
+      <p>在下方写下第一条</p>
     </div>
   );
 }

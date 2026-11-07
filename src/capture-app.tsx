@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Check, FolderKanban, Plus } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Boxes, Check, ChevronsUpDown, FolderKanban, Inbox, Link2, Plus, Search, type LucideIcon } from "lucide-react";
 import { Atlas, events, type ItemType, type Module, type Project } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { nextType, typeInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { TypeChip, TypeIcon } from "@/components/app/item-marks";
+import { TypeChip } from "@/components/app/item-marks";
+
+// The notes' editor loads once the panel is up, so that it never delays
+// the field taking the first keys.
+const loadEditor = () => import("@/components/editor/markdown-editor");
+const MarkdownEditor = lazy(() => loadEditor().then((m) => ({ default: m.MarkdownEditor })));
 
 /** The choice after current in list, or before it, going round. */
 function step<T>(list: T[], current: T, delta: number): T {
@@ -16,16 +20,22 @@ function step<T>(list: T[], current: T, delta: number): T {
   return list[(Math.max(at, 0) + delta + list.length) % list.length]!;
 }
 
-interface Saved {
-  id: number;
-  title: string;
-  type: ItemType;
-  project: string;
+type Picking = "project" | "module" | null;
+
+/** What the panel says for a moment after an item is saved. */
+interface Flash {
+  key: number;
+  where: string;
+  count: number;
 }
+
+const keepFocus = (e: { preventDefault(): void }) => e.preventDefault();
 
 /**
  * The quick capture panel, which the global shortcut shows over any app.
- * Everything works from the keyboard: the field never loses it.
+ * It is one line to type a title in; Shift+Enter opens the details below
+ * it, and the project and module are picked or created from its bottom
+ * bar. The window takes the height of what it shows (FitContent in app.go).
  */
 export function CaptureApp() {
   const [ready, setReady] = useState(false);
@@ -36,14 +46,21 @@ export function CaptureApp() {
   const [moduleId, setModuleId] = useState(0);
   const [type, setType] = useState<ItemType>("improve");
   const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [link, setLink] = useState("");
+  const [details, setDetails] = useState(false);
+  const [picking, setPicking] = useState<Picking>(null);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState<Saved[]>([]);
+  const [flash, setFlash] = useState<Flash | null>(null);
+  const savedCount = useRef(0);
   const input = useRef<HTMLInputElement>(null);
-  // The draft, for the handler of the panel showing again.
-  const titleRef = useRef(title);
+  const detailsBox = useRef<HTMLDivElement>(null);
+  // The draft, for the handlers of the panel showing again and of a save
+  // that failed.
+  const draft = useRef({ title, note, link });
   useEffect(() => {
-    titleRef.current = title;
-  }, [title]);
+    draft.current = { title, note, link };
+  }, [title, note, link]);
 
   /** Fetches the projects, keeping the one picked when it still exists. */
   const loadProjects = useCallback(async (want?: number) => {
@@ -67,23 +84,33 @@ export function CaptureApp() {
       }
     })();
     const offShown = events.captureShown.on((state) => {
-      setSaved([]);
+      savedCount.current = 0;
+      setFlash(null);
       setError("");
-      if (!titleRef.current) {
+      setPicking(null);
+      const d = draft.current;
+      const fresh = !d.title && !d.note.trim() && !d.link.trim();
+      if (fresh) {
         // A fresh start: the defaults, and the project the app suggests.
         setType("improve");
         setModuleId(0);
+        setNote("");
+        setLink("");
+        setDetails(false);
       }
-      void loadProjects(state.projectId).catch((e: unknown) => setError(errorMessage(e)));
+      // A draft keeps the project and module it was written for.
+      void loadProjects(fresh ? state.projectId : undefined).catch((e: unknown) => setError(errorMessage(e)));
       input.current?.focus();
     });
     const offChanged = events.changed.on(() => void loadProjects().catch(() => {}));
     const onFocus = () => input.current?.focus();
     window.addEventListener("focus", onFocus);
+    const prefetch = window.setTimeout(() => void loadEditor().catch(() => {}), 1000);
     return () => {
       offShown();
       offChanged();
       window.removeEventListener("focus", onFocus);
+      window.clearTimeout(prefetch);
     };
   }, [loadProjects]);
 
@@ -112,9 +139,18 @@ export function CaptureApp() {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!flash) return;
+    const t = window.setTimeout(() => setFlash(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [flash]);
+
   const project = projects.find((p) => p.id === projectId);
   const modules = loaded.projectId === projectId ? loaded.modules : [];
   const moduleIds = [0, ...modules.map((m) => m.id)];
+  const moduleName = modules.find((m) => m.id === moduleId)?.name ?? UNSORTED;
+
+  const focusTitle = () => input.current?.focus();
 
   const pickProject = (id: number) => {
     if (id === projectId) return;
@@ -122,23 +158,98 @@ export function CaptureApp() {
     setModuleId(0);
   };
 
-  // The field clears at once, so the next title can follow without waiting;
-  // a title that failed to save comes back unless another was typed since.
+  const closePicker = () => {
+    setPicking(null);
+    focusTitle();
+  };
+  const togglePicker = (kind: "project" | "module") => {
+    setError("");
+    if (picking === kind) closePicker();
+    else setPicking(kind);
+  };
+
+  /** Opens the details and goes to the notes; the editor takes the keys as it mounts. */
+  const openDetails = () => {
+    setPicking(null);
+    if (!details) {
+      setDetails(true);
+      return;
+    }
+    detailsBox.current?.querySelector<HTMLElement>(".cm-content")?.focus();
+  };
+  /** Back to the title; empty details fold away. */
+  const leaveDetails = () => {
+    if (!note.trim() && !link.trim()) setDetails(false);
+    focusTitle();
+  };
+  const toggleDetails = () => {
+    if (details) {
+      setDetails(false);
+      focusTitle();
+    } else openDetails();
+  };
+
+  const createProject = async (name: string) => {
+    const p = await Atlas.createProject(name);
+    await loadProjects(p.id);
+    setModuleId(0);
+    closePicker();
+  };
+  const createModule = async (name: string) => {
+    if (!projectId) return;
+    const m = await Atlas.createModule(projectId, name);
+    const list = await Atlas.modules(projectId);
+    setLoaded({ projectId, modules: list });
+    setModuleId(m.id);
+    closePicker();
+  };
+
+  const openLink = (href: string) => void Atlas.openLink(href).catch((e: unknown) => setError(errorMessage(e)));
+
+  // The panel empties at once, so the next item can follow without
+  // waiting; one that failed to save comes back unless another was begun
+  // since.
   const submit = async () => {
     const text = title.trim();
-    if (!text || !project) return;
+    if (!project) return;
+    if (!text) {
+      focusTitle();
+      return;
+    }
+    const saved = { title, note, link, details };
+    const where = `${project.name} / ${moduleName}`;
     setTitle("");
+    setNote("");
+    setLink("");
+    setDetails(false);
+    setPicking(null);
+    setError("");
+    focusTitle();
     try {
-      const item = await Atlas.captureItem({ projectId: project.id, parentId: 0, moduleId, type, title: text });
-      setSaved((list) => [{ id: item.id, title: item.title, type: item.type, project: project.name }, ...list].slice(0, 4));
-      setError("");
+      await Atlas.captureItem({
+        projectId: project.id,
+        parentId: 0,
+        moduleId,
+        type,
+        title: text,
+        note: saved.note.trim() ? saved.note.trimEnd() : "",
+        deeplink: saved.link.trim(),
+      });
+      savedCount.current += 1;
+      setFlash({ key: Date.now(), where, count: savedCount.current });
     } catch (e) {
       setError(errorMessage(e));
-      setTitle((now) => now || text);
+      const now = draft.current;
+      if (!now.title && !now.note && !now.link) {
+        setTitle(saved.title);
+        setNote(saved.note);
+        setLink(saved.link);
+        setDetails(saved.details || !!saved.note.trim() || !!saved.link.trim());
+      }
     }
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const onTitleKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (isComposing(e)) {
       // Escape gives the candidate up; it must not close the panel.
       if (e.key === "Escape") e.preventDefault();
@@ -148,7 +259,8 @@ export function CaptureApp() {
     switch (e.key) {
       case "Enter":
         e.preventDefault();
-        void submit();
+        if (e.shiftKey) openDetails();
+        else void submit();
         break;
       case "Escape":
         e.preventDefault();
@@ -177,19 +289,50 @@ export function CaptureApp() {
     }
   };
 
+  // Ctrl+P and Ctrl+M open the lists from anywhere in the panel.
+  const onPanelKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (isComposing(e) || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    if (e.code !== "KeyP" && e.code !== "KeyM") return;
+    e.preventDefault();
+    e.stopPropagation();
+    togglePicker(e.code === "KeyP" ? "project" : "module");
+  };
+
+  // In the notes and the link, before the editor sees them: Ctrl+Enter
+  // saves, Escape goes back to the title rather than closing the panel.
+  const onDetailsKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (isComposing(e)) {
+      if (e.key === "Escape") e.preventDefault();
+      return;
+    }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      void submit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      leaveDetails();
+    }
+  };
+
   if (ready && projects.length === 0) {
-    return <NoProject error={error} />;
+    return <NoProject onCreated={(id) => loadProjects(id)} />;
   }
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground" data-capture-ready={ready ? "" : undefined}>
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+    <div
+      className="flex flex-col bg-background text-foreground"
+      data-capture-ready={ready ? "" : undefined}
+      onKeyDownCapture={onPanelKey}
+    >
+      <div className="flex h-14 shrink-0 items-center gap-3 px-4">
         <button
           type="button"
           tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={keepFocus}
           onClick={() => setType(nextType(type))}
-          className="shrink-0 rounded-md"
+          className="shrink-0 rounded-md transition-transform duration-100 active:scale-95"
           title="切换类型（Tab）"
         >
           <TypeChip type={type} className="h-6 px-2 text-sm" />
@@ -197,141 +340,443 @@ export function CaptureApp() {
         <input
           ref={input}
           autoFocus
+          data-capture-title=""
           value={title}
           maxLength={300}
           aria-label="标题"
-          placeholder={`记一条${typeInfo(type).label}，按 Enter 保存`}
-          className="h-8 min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground/70"
+          placeholder={`记一条${typeInfo(type).label}`}
+          className="h-9 min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground/60"
           onChange={(e) => {
             setTitle(e.target.value);
             setError("");
           }}
-          onKeyDown={onKeyDown}
+          onKeyDown={onTitleKey}
         />
       </div>
-      {error && <p className="-mt-1 px-4 pb-2 text-xs text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="-mt-2 px-4 pb-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
 
-      <div className="flex flex-col gap-2 border-t px-4 py-3">
-        <ChipRow
-          label="项目"
-          keys="↑ ↓"
-          options={projects.map((p) => ({ id: p.id, name: p.name }))}
+      {picking === "project" && (
+        <Picker
+          key="project"
+          what="项目"
+          choices={projects.map((p) => ({ id: p.id, name: p.name, icon: FolderKanban, open: p.counts.todo + p.counts.doing }))}
           value={projectId}
-          onPick={pickProject}
+          onPick={(id) => {
+            pickProject(id);
+            closePicker();
+          }}
+          onCreate={createProject}
+          onClose={closePicker}
         />
-        <ChipRow
-          label="模块"
-          keys="Ctrl+↑ ↓"
-          options={[{ id: 0, name: UNSORTED }, ...modules.map((m) => ({ id: m.id, name: m.name }))]}
+      )}
+      {picking === "module" && (
+        <Picker
+          key="module"
+          what="模块"
+          choices={[
+            { id: 0, name: UNSORTED, icon: Inbox },
+            ...modules.map((m) => ({ id: m.id, name: m.name, icon: Boxes, open: m.counts.todo + m.counts.doing })),
+          ]}
           value={moduleId}
-          onPick={setModuleId}
+          onPick={(id) => {
+            setModuleId(id);
+            closePicker();
+          }}
+          onCreate={createModule}
+          onClose={closePicker}
         />
-      </div>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-hidden border-t px-4 py-2">
-        {saved.length === 0 ? (
-          <p className="py-1 text-xs text-muted-foreground">记下的会立即出现在主窗口的队列里；备注和链接之后在主窗口补。</p>
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {saved.map((s, i) => (
-              <li key={s.id} className={cn("flex h-7 items-center gap-2 text-sm", i > 0 && "text-muted-foreground")}>
-                <Check className="size-3.5 shrink-0 text-done" />
-                <TypeIcon type={s.type} />
-                <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">已记到「{s.project}」</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {details && (
+        <div
+          ref={detailsBox}
+          data-capture-details=""
+          className={cn("border-t animate-in duration-150 fade-in-0", picking && "hidden")}
+          onKeyDownCapture={onDetailsKey}
+        >
+          <Suspense fallback={<div className="h-28" />}>
+            <MarkdownEditor
+              value={note}
+              onChange={setNote}
+              onOpenLink={openLink}
+              placeholder="补充备注，支持 Markdown：标题、列表、任务框、代码块……"
+              autoFocus
+              className="capture-note px-4 pt-2"
+            />
+          </Suspense>
+          <label className="flex h-10 items-center gap-2 border-t border-dashed px-4 text-muted-foreground">
+            <Link2 className="size-3.5 shrink-0" />
+            <input
+              data-capture-link=""
+              value={link}
+              spellCheck={false}
+              aria-label="deeplink"
+              placeholder="deeplink（可选）：AI 对话、文件或网页的链接"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+              onChange={(e) => {
+                setLink(e.target.value);
+                setError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isComposing(e)) {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
+            />
+          </label>
+        </div>
+      )}
 
-      <footer className="flex shrink-0 items-center gap-3 border-t px-4 py-2 text-xs text-muted-foreground">
-        <Hint keys="Enter">保存</Hint>
-        <Hint keys="Tab">类型</Hint>
-        <Hint keys="↑ ↓">项目</Hint>
-        <Hint keys="Ctrl+↑ ↓">模块</Hint>
-        <Hint keys="Esc">关闭</Hint>
+      <footer className="flex h-11 shrink-0 items-center gap-0.5 border-t px-2 text-xs text-muted-foreground">
+        <PickButton
+          icon={FolderKanban}
+          label={project?.name ?? ""}
+          open={picking === "project"}
+          title="项目：搜索、切换或新建（Ctrl+P）"
+          onClick={() => togglePicker("project")}
+        />
+        <span className="text-muted-foreground/40">/</span>
+        <PickButton
+          icon={moduleId ? Boxes : Inbox}
+          label={moduleName}
+          open={picking === "module"}
+          title="模块：搜索、切换或新建（Ctrl+M）"
+          onClick={() => togglePicker("module")}
+        />
+        <div className="ml-auto flex min-w-0 items-center gap-1">
+          {flash ? (
+            <span key={flash.key} className="flex min-w-0 items-center gap-1.5 pr-2 animate-in duration-200 fade-in-0 slide-in-from-bottom-1">
+              <Check className="size-3.5 shrink-0 text-done" />
+              <span className="truncate">已记到 {flash.where}</span>
+              {flash.count > 1 && <span className="meta-mono shrink-0">×{flash.count}</span>}
+            </span>
+          ) : picking ? (
+            <>
+              <Hint keys="↑ ↓">选择</Hint>
+              <Hint keys="Enter">确定</Hint>
+              <Hint keys="Esc">返回</Hint>
+            </>
+          ) : details ? (
+            <>
+              <Hint keys="Esc" onClick={leaveDetails}>
+                返回标题
+              </Hint>
+              <Hint keys="Ctrl+Enter" onClick={() => void submit()}>
+                保存
+              </Hint>
+            </>
+          ) : (
+            <>
+              <Hint keys="Shift+Enter" onClick={toggleDetails}>
+                详情
+              </Hint>
+              <Hint keys="Enter" onClick={() => void submit()}>
+                保存
+              </Hint>
+            </>
+          )}
+        </div>
       </footer>
     </div>
   );
 }
 
-function Hint({ keys, children }: { keys: string; children: string }) {
-  return (
-    <span className="flex items-center gap-1">
+/** A key and what it does; a click does it too, when it can. */
+function Hint({ keys, children, onClick }: { keys: string; children: ReactNode; onClick?(): void }) {
+  const body = (
+    <>
       <Kbd>{keys}</Kbd>
       {children}
-    </span>
+    </>
+  );
+  if (!onClick) return <span className="flex h-7 shrink-0 items-center gap-1 px-1.5">{body}</span>;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onMouseDown={keepFocus}
+      onClick={onClick}
+      className="flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 transition-colors duration-100 hover:bg-muted hover:text-foreground"
+    >
+      {body}
+    </button>
   );
 }
 
-interface ChipRowProps {
+interface PickButtonProps {
+  icon: LucideIcon;
   label: string;
-  keys: string;
-  options: { id: number; name: string }[];
-  value: number;
-  onPick(id: number): void;
+  open: boolean;
+  title: string;
+  onClick(): void;
 }
 
-/** A row of choices; the keys move along it, the mouse picks too. */
-function ChipRow({ label, keys, options, value, onPick }: ChipRowProps) {
-  const row = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    row.current?.querySelector<HTMLElement>(`[data-choice="${value}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [value]);
+/** The project or the module in the bottom bar; a click opens its list. */
+function PickButton({ icon: Icon, label, open, title, onClick }: PickButtonProps) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-8 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <div ref={row} className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]">
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            tabIndex={-1}
-            data-choice={o.id}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPick(o.id)}
-            className={cn(
-              "h-6 max-w-40 shrink-0 truncate rounded-md px-2 text-xs transition-colors duration-100",
-              o.id === value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {o.name}
-          </button>
-        ))}
+    <button
+      type="button"
+      tabIndex={-1}
+      title={title}
+      aria-expanded={open}
+      onMouseDown={keepFocus}
+      onClick={onClick}
+      className={cn(
+        "flex h-7 max-w-52 min-w-0 items-center gap-1.5 rounded-md px-2 font-medium text-foreground/80 transition-colors duration-100 hover:bg-muted hover:text-foreground",
+        open && "bg-muted text-foreground",
+      )}
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{label}</span>
+      <ChevronsUpDown className="size-3 shrink-0 opacity-50" />
+    </button>
+  );
+}
+
+interface Choice {
+  id: number;
+  name: string;
+  icon: LucideIcon;
+  /** How many of its items are not done yet. */
+  open?: number;
+}
+
+interface PickerProps {
+  what: string;
+  choices: Choice[];
+  value: number;
+  onPick(id: number): void;
+  /** Creates a choice of this name and picks it; rejects with what went wrong. */
+  onCreate(name: string): Promise<void>;
+  onClose(): void;
+}
+
+/**
+ * A list to pick a project or a module from, in the panel: typing narrows
+ * it, and a name that matches none can be created.
+ */
+function Picker({ what, choices, value, onPick, onCreate, onClose }: PickerProps) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(() => Math.max(
+    choices.findIndex((c) => c.id === value),
+    0,
+  ));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const list = useRef<HTMLDivElement>(null);
+  const q = query.trim();
+  const lower = q.toLowerCase();
+  const shown = q ? choices.filter((c) => c.name.toLowerCase().includes(lower)) : choices;
+  const canCreate = q !== "" && !choices.some((c) => c.name.toLowerCase() === lower);
+  const rows = shown.length + (canCreate ? 1 : 0);
+  const at = rows === 0 ? -1 : Math.min(active, rows - 1);
+
+  useEffect(() => {
+    list.current?.querySelector(`[data-row="${at}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [at]);
+
+  const choose = async (i: number) => {
+    if (busy || i < 0) return;
+    const choice = shown[i];
+    if (choice) {
+      onPick(choice.id);
+      return;
+    }
+    setBusy(true);
+    try {
+      await onCreate(q);
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (isComposing(e)) {
+      if (e.key === "Escape") e.preventDefault();
+      return;
+    }
+    switch (e.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+        e.preventDefault();
+        if (rows > 0) setActive((at + (e.key === "ArrowDown" ? 1 : -1) + rows) % rows);
+        break;
+      case "Enter":
+        e.preventDefault();
+        void choose(at);
+        break;
+      case "Escape":
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        break;
+      case "Tab":
+        e.preventDefault();
+        break;
+    }
+  };
+
+  const row = (i: number, content: ReactNode, key: string | number) => (
+    <button
+      key={key}
+      type="button"
+      tabIndex={-1}
+      role="option"
+      aria-selected={i === at}
+      data-row={i}
+      onMouseDown={keepFocus}
+      onMouseMove={() => setActive(i)}
+      onClick={() => void choose(i)}
+      className={cn("flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-2.5 text-left", i === at && "bg-muted")}
+    >
+      {content}
+    </button>
+  );
+
+  return (
+    <div className="border-t animate-in duration-100 fade-in-0" data-capture-picker={what}>
+      <div className="flex h-10 items-center gap-2 px-4 text-muted-foreground">
+        <Search className="size-3.5 shrink-0" />
+        <input
+          autoFocus
+          value={query}
+          maxLength={60}
+          aria-label={`搜索或新建${what}`}
+          placeholder={`搜索或新建${what}`}
+          className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+            setError("");
+          }}
+          onKeyDown={onKeyDown}
+        />
       </div>
-      <span className="shrink-0 text-[11px] text-muted-foreground/70">{keys}</span>
+      {error && (
+        <p role="alert" className="px-4 pb-1.5 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <div ref={list} role="listbox" aria-label={what} className="flex max-h-64 flex-col overflow-y-auto px-1.5 pb-1.5">
+        {shown.map((c, i) =>
+          row(
+            i,
+            <>
+              <c.icon className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{c.name}</span>
+              {!!c.open && (
+                <span className="meta-mono shrink-0 text-muted-foreground" title={`未完成 ${c.open} 条`}>
+                  {c.open}
+                </span>
+              )}
+              <Check className={cn("size-3.5 shrink-0", c.id !== value && "invisible")} />
+            </>,
+            c.id,
+          ),
+        )}
+        {canCreate &&
+          row(
+            shown.length,
+            <>
+              <Plus className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                新建{what}「<span className="text-foreground">{q}</span>」
+              </span>
+              {busy && <span className="shrink-0 text-xs text-muted-foreground">正在新建…</span>}
+            </>,
+            "create",
+          )}
+        {rows === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">还没有{what}，输入名字新建一个</p>}
+      </div>
     </div>
   );
 }
 
-/** What the panel says before any project exists. */
-function NoProject({ error }: { error: string }) {
-  const button = useRef<HTMLButtonElement>(null);
+/** What the panel shows before any project exists: a field to create the first. */
+function NoProject({ onCreated }: { onCreated(id: number): Promise<void> }) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const focus = () => button.current?.focus();
+    const focus = () => field.current?.focus();
     focus();
     window.addEventListener("focus", focus);
     return () => window.removeEventListener("focus", focus);
   }, []);
+
+  const create = async () => {
+    const text = name.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    try {
+      const p = await Atlas.createProject(text);
+      await onCreated(p.id);
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+
   return (
-    <div
-      className="flex h-full flex-col items-center justify-center gap-3 bg-background p-6 text-center text-foreground"
-      data-capture-ready=""
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isComposing(e)) {
-          e.preventDefault();
-          void Atlas.hideCapture();
-        }
-      }}
-    >
-      <FolderKanban className="size-8 text-muted-foreground" />
-      <p>还没有项目。先在主窗口建一个，就能在这里快速记录了。</p>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <Button ref={button} onClick={() => void Atlas.showMain()}>
-        <Plus />
-        打开主窗口新建项目
-      </Button>
+    <div className="flex flex-col bg-background text-foreground" data-capture-ready="">
+      <div className="flex h-14 items-center gap-3 px-4">
+        <FolderKanban className="size-5 shrink-0 text-muted-foreground" />
+        <input
+          ref={field}
+          value={name}
+          maxLength={60}
+          aria-label="新项目的名字"
+          placeholder="还没有项目：输入名字，新建第一个项目"
+          className="h-9 min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground/60"
+          onChange={(e) => {
+            setName(e.target.value);
+            setError("");
+          }}
+          onKeyDown={(e) => {
+            if (isComposing(e)) {
+              if (e.key === "Escape") e.preventDefault();
+              return;
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void create();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              void Atlas.hideCapture();
+            }
+          }}
+        />
+      </div>
+      {error && (
+        <p role="alert" className="-mt-2 px-4 pb-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <footer className="flex h-11 items-center gap-1 border-t px-2 text-xs text-muted-foreground">
+        <span className="px-2">新建后就能在这里快速记录</span>
+        <div className="ml-auto flex items-center gap-1">
+          <Hint keys="Enter" onClick={() => void create()}>
+            新建
+          </Hint>
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={keepFocus}
+            onClick={() => void Atlas.showMain()}
+            className="flex h-7 items-center gap-1 rounded-md px-1.5 transition-colors duration-100 hover:bg-muted hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+            在主窗口新建
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

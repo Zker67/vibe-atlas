@@ -504,3 +504,18 @@ html.dragging-rows * {
   border-top: 1px solid var(--border);
 }
 
+/* Quick capture: the panel takes its page's height (FitContent in app.go),
+   so the page is as tall as its content rather than the window. */
+html[data-capture],
+html[data-capture] body,
+html[data-capture] #root {
+  height: auto;
+}
+/* The notes in quick capture grow with their text, then scroll. */
+.capture-note .cm-editor {
+  max-height: 16rem;
+}
+.capture-note .cm-content {
+  min-height: 6.5rem;
+  padding-bottom: 0.75rem;
+}

@@ -29,6 +29,12 @@ const (
 	captureBackground = "light-dark(#f4f3f1, #020202)"
 )
 
+// The quick capture panel's width, and the most height it grows to.
+const (
+	captureWidth     = 640
+	captureMaxHeight = 600
+)
+
 // titleBarHeight is the height of the main window's title bar, which the
 // page draws (src/components/app/title-bar.tsx) under the window buttons.
 const titleBarHeight = 40
@@ -111,13 +117,20 @@ func (a *app) start() {
 		Page:            mygo.PageOptions{BackgroundThrottling: throttling},
 	})
 	capture := mygo.NewWindow(mygo.WindowOptions{
-		Title:           "快速记录",
-		URL:             "/capture",
-		Panel:           true,
-		Hidden:          true,
-		Frameless:       true,
-		Width:           620,
-		Height:          340,
+		Title:     "快速记录",
+		URL:       "/capture",
+		Panel:     true,
+		Hidden:    true,
+		Frameless: true,
+		Width:     captureWidth,
+		Height:    120,
+		// The panel is as tall as what it shows: one line to type in,
+		// growing as the details or a list open, and shrinking back.
+		FitContent:      true,
+		MinWidth:        captureWidth,
+		MaxWidth:        captureWidth,
+		MinHeight:       48,
+		MaxHeight:       captureMaxHeight,
 		DisableResize:   true,
 		CornerRadius:    12,
 		BackgroundColor: captureBackground,
@@ -256,9 +269,15 @@ func (a *app) showCapture() {
 	if capture == nil {
 		return
 	}
+	// The top edge stays where it is whatever the height, a fifth of the
+	// way down, as long as the panel at its tallest still fits below it.
 	d := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint())
-	width, height := capture.Size()
-	capture.SetPosition(d.WorkArea.X+(d.WorkArea.Width-width)/2, d.WorkArea.Y+(d.WorkArea.Height-height)/4)
+	width, _ := capture.Size()
+	top := d.WorkArea.Height / 5
+	if top+captureMaxHeight > d.WorkArea.Height {
+		top = max(d.WorkArea.Height-captureMaxHeight, 0)
+	}
+	capture.SetPosition(d.WorkArea.X+(d.WorkArea.Width-width)/2, d.WorkArea.Y+top)
 	_ = CaptureShown.Emit(capture, a.atlas.captureState())
 	a.mu.Lock()
 	a.shownAt = time.Now()

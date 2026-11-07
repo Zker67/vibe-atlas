@@ -142,6 +142,13 @@ export interface NewItem {
   /** Type is TypeImprove when empty. */
   type: ItemType;
   title: string;
+  /** Note is the item's notes, in Markdown, or "" for none. */
+  note?: string;
+  /**
+   * Deeplink is the link the item is bound to, or "" for none. See
+   * NormalizeDeeplink for the links it takes.
+   */
+  deeplink?: string;
 }
 
 /** Overview sums up a project from its items. */

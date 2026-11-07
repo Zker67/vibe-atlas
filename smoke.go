@@ -101,6 +101,12 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 	report["capture"] = captured
+	panel, err := a.smokeCapturePanel(capture)
+	report["capturePanel"] = panel
+	if err != nil {
+		finish(err, "capture panel")
+		return
+	}
 
 	// The effects are off out of the box; turned on, the main window loads
 	// the background picked, and quick capture never does.
