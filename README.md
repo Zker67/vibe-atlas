@@ -70,6 +70,7 @@ bun run build    # 打包：build/windows-amd64/ 下的程序和安装包
 ```
 
 - 默认快速记录快捷键 `Ctrl+Alt+Space`，可以在设置（`Ctrl+,`）里改。
+- 用法和全部快捷键见使用说明（`F1`，或侧栏左下角）。
 - 数据存在 `%AppData%\Vibe Atlas\vibe-atlas.db`，设置里可以一键打开所在文件夹。
 - 程序没有签名，SmartScreen 拦截时点「更多信息」→「仍要运行」。
 

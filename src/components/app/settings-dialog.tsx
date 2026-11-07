@@ -1,14 +1,31 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AudioWaveform, CircleOff, FolderOpen, Grip, Monitor, Moon, Sun } from "lucide-react";
+import { Tabs } from "radix-ui";
+import {
+  AudioWaveform,
+  BookOpen,
+  CircleOff,
+  Database,
+  FolderOpen,
+  Grip,
+  Keyboard,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { Atlas, type Background, type Settings, type Theme } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
-import { openSettings, useDialogs } from "@/state/dialogs";
+import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
+import { NAV_ITEM, NavColumn, NavIndicator } from "./side-nav";
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "跟随系统", icon: Monitor },
@@ -31,132 +48,179 @@ async function chooseEffects(choice: EffectsChoice): Promise<Settings> {
   return Atlas.setEffects(true);
 }
 
-const MAIN_KEYS: [string, string][] = [
-  ["N", "新增一条"],
-  ["↑ ↓", "选择上一条、下一条"],
-  ["Space", "标为完成，或重新打开"],
-  ["S", "开始进行，或退回待办"],
-  ["C", "复制给 AI"],
-  ["O", "打开链接"],
-  ["Enter", "编辑标题"],
-  ["Delete", "删除"],
-  ["Esc", "取消选择"],
-  ["Ctrl+,", "打开设置"],
-];
-
-const CAPTURE_KEYS: [string, string][] = [
-  ["Enter", "保存，接着记下一条"],
-  ["Tab", "切换类型"],
-  ["↑ ↓", "切换项目"],
-  ["Ctrl+↑ ↓", "切换模块"],
-  ["Esc", "关闭小窗"],
-];
-
 function Keys({ accelerator }: { accelerator: string }) {
   return (
     <KbdGroup>
       {acceleratorKeys(accelerator).map((k, i) => (
-        <Kbd key={i}>{k}</Kbd>
+        <Kbd key={i} className="h-6 min-w-6 px-1.5 text-foreground ring-1 ring-foreground/10">
+          {k}
+        </Kbd>
       ))}
     </KbdGroup>
   );
 }
 
+
+const TABS: { value: SettingsTab; label: string; icon: LucideIcon; description: string }[] = [
+  { value: "capture", label: "快速记录", icon: Zap, description: "在任何软件里呼出小窗，记下一条就回去干活" },
+  { value: "appearance", label: "外观", icon: Palette, description: "主题和视觉效果" },
+  { value: "data", label: "数据", icon: Database, description: "所有内容只保存在这台电脑上，不联网" },
+];
+
 export function SettingsDialog() {
   const open = useDialogs((s) => s.settings);
   const settings = useAtlas((s) => s.settings);
+  const tab = useDialogs((s) => s.settingsTab);
+  const at = TABS.findIndex((t) => t.value === tab);
   return (
     <Dialog open={open} onOpenChange={openSettings}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>设置</DialogTitle>
-          <DialogDescription className="sr-only">快速记录的快捷键、外观、视觉效果和数据位置</DialogDescription>
-        </DialogHeader>
-        {settings && (
-          <div className="flex flex-col gap-5">
-            <ShortcutSetting />
-            <Row title="外观">
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                value={settings.theme}
-                onValueChange={(v) => {
-                  if (v) void run(Atlas.setTheme(v as Theme)).then((s) => s && useAtlas.setState({ settings: s }));
-                }}
+      <DialogContent className="flex h-[min(32rem,85vh)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <Tabs.Root
+          orientation="vertical"
+          value={tab}
+          onValueChange={(v) => showSettingsTab(v as SettingsTab)}
+          className="flex min-h-0 min-w-0 flex-1"
+        >
+          <NavColumn>
+            <DialogHeader className="px-2.5 pt-1">
+              <DialogTitle>设置</DialogTitle>
+              <DialogDescription className="sr-only">快速记录的快捷键、外观、视觉效果和数据位置</DialogDescription>
+            </DialogHeader>
+            <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
+              <NavIndicator index={at} />
+              {TABS.map((t) => (
+                <Tabs.Trigger key={t.value} value={t.value} className={NAV_ITEM}>
+                  <t.icon />
+                  {t.label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+            <button type="button" className={cn(NAV_ITEM, "mt-auto")} onClick={() => openHelp()}>
+              <BookOpen />
+              <span className="flex-1">使用说明</span>
+              <span className="meta-mono opacity-70">F1</span>
+            </button>
+          </NavColumn>
+          {settings &&
+            TABS.map((t) => (
+              <Tabs.Content
+                key={t.value}
+                value={t.value}
+                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 pt-5 pb-6 outline-none data-[state=active]:animate-in data-[state=active]:duration-200 data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1"
               >
-                {THEMES.map((t) => (
-                  <ToggleGroupItem key={t.value} value={t.value}>
-                    <t.icon />
-                    {t.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Row>
-            <Row title="视觉效果">
-              <div className="flex min-w-0 flex-col items-start gap-1.5">
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  size="sm"
-                  value={settings.effects ? settings.background : "off"}
-                  onValueChange={(v) => {
-                    if (v) void run(chooseEffects(v as EffectsChoice)).then((s) => s && useAtlas.setState({ settings: s }));
-                  }}
-                >
-                  {EFFECTS.map((e) => (
-                    <ToggleGroupItem key={e.value} value={e.value}>
-                      <e.icon />
-                      {e.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-                <p className="text-xs text-muted-foreground">动态背景、毛玻璃和悬停辉光，会多占用显卡</p>
-              </div>
-            </Row>
-            <Row title="数据">
-              <div className="flex min-w-0 flex-col items-start gap-1.5">
-                <p className="text-xs text-muted-foreground">只保存在这台电脑上：</p>
-                <p className="selectable w-full font-mono text-xs break-all">{settings.dataDir}</p>
-                <Button variant="outline" size="sm" onClick={() => void runOk(Atlas.openDataFolder())}>
-                  <FolderOpen />
-                  打开数据文件夹
-                </Button>
-              </div>
-            </Row>
-            <Row title="快捷键">
-              <div className="grid w-full grid-cols-2 gap-4 text-xs">
-                <KeyList title="主窗口" keys={MAIN_KEYS} />
-                <KeyList title="快速记录小窗" keys={CAPTURE_KEYS} />
-              </div>
-            </Row>
-          </div>
-        )}
+                <PanelHeader icon={t.icon} title={t.label} description={t.description} />
+                <div className="flex flex-col gap-3">
+                  {t.value === "capture" && <CapturePanel />}
+                  {t.value === "appearance" && <AppearancePanel settings={settings} />}
+                  {t.value === "data" && <DataPanel settings={settings} />}
+                </div>
+              </Tabs.Content>
+            ))}
+        </Tabs.Root>
       </DialogContent>
     </Dialog>
   );
 }
 
-function Row({ title, children }: { title: string; children: ReactNode }) {
+function PanelHeader({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
   return (
-    <section className="grid grid-cols-[5.5rem_1fr] items-start gap-3">
-      <h3 className="pt-1 text-sm font-medium">{title}</h3>
-      <div className="flex min-w-0">{children}</div>
+    <header className="mb-5 flex items-center gap-3 pr-8">
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-foreground/[0.06]">
+        <Icon className="size-4.5" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <h2 className="text-base leading-tight font-semibold">{title}</h2>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </header>
+  );
+}
+
+/** One setting: its name and what it does over its control. */
+function SettingCard({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 rounded-lg bg-card p-4 ring-1 ring-foreground/[0.07]">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium">{title}</h3>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </div>
+      {children}
     </section>
   );
 }
 
-function KeyList({ title, keys }: { title: string; keys: [string, string][] }) {
+function CapturePanel() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-muted-foreground">{title}</div>
-      {keys.map(([key, what]) => (
-        <div key={key} className="flex items-center gap-2">
-          <Kbd>{key}</Kbd>
-          <span>{what}</span>
+    <>
+      <ShortcutSetting />
+      <SettingCard title="其他快捷键" description="主窗口、快速记录小窗和 Markdown 编辑器的按键是固定的，按用途分好组放在使用说明里。">
+        <div>
+          <Button variant="outline" size="sm" onClick={() => openHelp("keys")}>
+            <Keyboard />
+            查看全部快捷键
+          </Button>
         </div>
-      ))}
-    </div>
+      </SettingCard>
+    </>
+  );
+}
+
+function AppearancePanel({ settings }: { settings: Settings }) {
+  return (
+    <>
+      <SettingCard title="主题" description="顶栏右上角的按钮也能切换。">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={settings.theme}
+          onValueChange={(v) => {
+            if (v) void run(Atlas.setTheme(v as Theme)).then((s) => s && useAtlas.setState({ settings: s }));
+          }}
+        >
+          {THEMES.map((t) => (
+            <ToggleGroupItem key={t.value} value={t.value}>
+              <t.icon />
+              {t.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </SettingCard>
+      <SettingCard title="视觉效果" description="动态背景、毛玻璃和悬停辉光，会多占用显卡。">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={settings.effects ? settings.background : "off"}
+          onValueChange={(v) => {
+            if (v) void run(chooseEffects(v as EffectsChoice)).then((s) => s && useAtlas.setState({ settings: s }));
+          }}
+        >
+          {EFFECTS.map((e) => (
+            <ToggleGroupItem key={e.value} value={e.value}>
+              <e.icon />
+              {e.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </SettingCard>
+    </>
+  );
+}
+
+function DataPanel({ settings }: { settings: Settings }) {
+  return (
+    <SettingCard title="数据文件夹" description="项目、模块和改进点都存在这里的 SQLite 文件里，每次修改立即写入。">
+      <p className="selectable rounded-md bg-muted px-2.5 py-2 font-mono text-xs break-all">{settings.dataDir}</p>
+      <div>
+        <Button variant="outline" size="sm" onClick={() => void runOk(Atlas.openDataFolder())}>
+          <FolderOpen />
+          打开数据文件夹
+        </Button>
+      </div>
+    </SettingCard>
   );
 }
 
@@ -219,9 +283,8 @@ function ShortcutSetting() {
   };
 
   return (
-    <Row title="快速记录">
+    <SettingCard title="全局快捷键" description="在任何软件里按下它，呼出快速记录小窗。">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <p className="text-xs text-muted-foreground">在任何软件里按下它，呼出快速记录小窗。</p>
         <div className="flex flex-wrap items-center gap-2">
           {recording ? (
             <span className="flex h-7 items-center rounded-md border border-dashed border-ring px-2.5 text-xs">请按下新的组合键，Esc 取消</span>
@@ -246,6 +309,6 @@ function ShortcutSetting() {
         </div>
         {(error || settings.shortcutError) && <p className="text-xs text-destructive">{error || settings.shortcutError}</p>}
       </div>
-    </Row>
+    </SettingCard>
   );
 }

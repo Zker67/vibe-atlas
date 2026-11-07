@@ -1,4 +1,4 @@
-import { Boxes, FolderKanban, Inbox, LayoutList, Pencil, Plus, Settings, Trash2, type LucideIcon } from "lucide-react";
+import { BookOpen, Boxes, FolderKanban, Inbox, LayoutList, Pencil, Plus, Settings, Trash2, type LucideIcon } from "lucide-react";
 import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { UNSORTED } from "@/lib/labels";
@@ -23,7 +23,7 @@ import {
   useAtlas,
   type ModuleFilter,
 } from "@/state/atlas";
-import { askConfirm, askName, openSettings } from "@/state/dialogs";
+import { askConfirm, askName, openHelp, openSettings } from "@/state/dialogs";
 import { IconButton } from "./icon-button";
 import { SortableList, SortableRow } from "./sortable";
 
@@ -55,18 +55,25 @@ export function Sidebar() {
     <aside className="app-frame flex w-60 shrink-0 flex-col text-sidebar-foreground">
       <Projects />
       <Modules />
-      <div className="mt-auto shrink-0 border-t p-2">
-        <button
-          type="button"
-          onClick={() => openSettings()}
-          className="signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
-        >
-          <Settings className="size-4 shrink-0" />
-          <span className="flex-1">设置</span>
-          <span className="meta-mono opacity-70">Ctrl+,</span>
-        </button>
+      <div className="mt-auto flex shrink-0 flex-col gap-0.5 border-t p-2">
+        <FooterButton icon={BookOpen} label="使用说明" shortcut="F1" onClick={() => openHelp()} />
+        <FooterButton icon={Settings} label="设置" shortcut="Ctrl+," onClick={() => openSettings()} />
       </div>
     </aside>
+  );
+}
+
+function FooterButton({ icon: Icon, label, shortcut, onClick }: { icon: LucideIcon; label: string; shortcut: string; onClick(): void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="flex-1">{label}</span>
+      <span className="meta-mono opacity-70">{shortcut}</span>
+    </button>
   );
 }
 

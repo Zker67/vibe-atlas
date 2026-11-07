@@ -7,6 +7,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog, NameDialog } from "@/components/app/dialogs";
+import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
 import { ProjectBar, QueueFilters } from "@/components/app/project-header";
@@ -25,7 +26,7 @@ import {
   toggleItemDone,
   useAtlas,
 } from "@/state/atlas";
-import { openSettings } from "@/state/dialogs";
+import { openHelp, openSettings } from "@/state/dialogs";
 import type { Project } from "@/mygo";
 
 // The effects load only once they are turned on (设置 → 视觉效果).
@@ -79,6 +80,7 @@ export function MainApp() {
       <NameDialog />
       <ConfirmDialog />
       <SettingsDialog />
+      <HelpDialog />
       {/* Bottom right: clear of the field that adds items. */}
       <Toaster position="bottom-right" />
     </TooltipProvider>
@@ -188,6 +190,11 @@ function useShortcuts() {
       if (mod && !e.shiftKey && key === ",") {
         e.preventDefault();
         openSettings();
+        return;
+      }
+      if (key === "F1" && !mod && !e.shiftKey) {
+        e.preventDefault();
+        openHelp();
         return;
       }
       const focus = document.activeElement;
