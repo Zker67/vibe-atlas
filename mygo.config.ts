@@ -3,7 +3,7 @@ import { defineConfig } from "mygo-cli";
 export default defineConfig({
   name: "Vibe Atlas",
   identifier: "io.github.zker67.vibeatlas",
-  version: "0.1.0",
+  version: "0.2.0",
   // `mygo dev` runs devCommand and loads devUrl; `mygo build` runs
   // buildCommand and embeds frontendDist into the app.
   devUrl: "http://localhost:5173",
