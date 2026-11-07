@@ -30,4 +30,5 @@ React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui，由 Vite 构建，跑在 My
 - 调用 Go 出错时：对话框和输入框里的错误就地显示，其他操作用 toast 提示。
 - 单键快捷键只在没有输入框获得焦点、也没有弹窗时生效；处理 Enter、Esc 前先用 `isComposing` 排除输入法正在选词的情况。
 - 颜色只用主题变量（`index.css`），亮暗两种主题都要能看。视觉风格参照 Next-AIGC 的「暗场 + 信号光」：主窗口分底层框架（`.app-frame`：顶栏、侧栏）和浮起的内容面板（`.app-panel`），内容区不铺图案；弹窗用 `bg-popover` 近实底；类型标签用 `.signal-chip`（`--chip` 由 `lib/labels.ts` 给出）；数量和时间用 `.meta-mono`。
+- 字体和字重：英文、数字用 Geist，中文用内置的 Noto Sans SC（`index.css` 的 `--font-sans`）。正文 400（默认），标签和按钮 `font-medium`，标题 `font-semibold`，不用 `font-bold`。
 - 耗性能的效果只写在 `html[data-effects]` 下，或者放进 `components/effects/` 按需加载；快速记录小窗不能引用它们。

@@ -20,6 +20,7 @@
 | lint | oxlint 1.92 | 快，自带 React 规则 | 已接入 |
 | 窗口顶栏 | MyGo 隐藏标题栏（`TitleBarStyle: TitleBarHidden`，高 40） | 页面自己画顶栏，系统窗口按钮、贴靠布局、顶边缩放和阴影都保留；macOS 上自动是红绿灯 | 已实现，待用户验收 |
 | 视觉效果 | React Bits 的 `DotGrid`、`PatternWaves`（源码拷入 `src/components/react-bits/`），`ogl` 1.0 | 参照 Next-AIGC；默认关闭，打开后才按需加载，`ogl` 只给「点阵信号」用 | 已实现，待用户验收 |
+| 字体 | Geist Variable（英文、数字）+ Noto Sans SC Variable（中文，`@fontsource-variable/noto-sans-sc`，OFL） | 微软雅黑只有常规和粗体两档，500 显示不出来、600 直接变粗体，中英文字重对不齐；两款都是可变字体，400 / 500 / 600 在各平台都是真实字重。按 unicode-range 分片，只加载用到的字。代价是程序大约增加 4.3 MB；系统 emoji 字体排在 Noto 前面，emoji 仍是彩色 | 已实现，待用户验收；冒烟测试就绪耗时和不加字体时在同一波动范围内（约 0.6–1.0 秒） |
 
 ## 开发环境要求
 

@@ -2,13 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/noto-sans-sc";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-    --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, "Microsoft YaHei UI", monospace;
+    /* Latin and digits in Geist, Chinese in Noto Sans SC: both variable, so
+       400 / 500 / 600 are real weights on every platform (Microsoft YaHei has
+       only regular and bold). The emoji fonts come before Noto, which covers
+       some emoji in black and white. */
+    --font-sans: 'Geist Variable', "Segoe UI Emoji", "Apple Color Emoji", 'Noto Sans SC Variable', "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, 'Noto Sans SC Variable', "Microsoft YaHei UI", monospace;
     --color-improve: var(--improve);
     --color-bug: var(--bug);
     --color-feature: var(--feature);
@@ -189,6 +194,15 @@ textarea,
 .cm-editor,
 .selectable {
   @apply select-text;
+}
+
+/*
+ * Weights: 400 for text, 500 for labels and buttons, 600 for titles; never
+ * bolder. The dialogs' titles are titles too.
+ */
+[data-slot="dialog-title"],
+[data-slot="alert-dialog-title"] {
+  font-weight: 600;
 }
 
 /* Thin scroll bars in both themes. */

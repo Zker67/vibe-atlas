@@ -180,7 +180,7 @@ function Stat({ label, value, tone, hint }: { label: string; value: number; tone
     <div className="rounded-lg border px-3 py-2.5">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-1.5">
-        <span className={cn("text-2xl font-semibold tabular-nums", tone)}>{value}</span>
+        <span className={cn("text-2xl font-semibold tracking-tight tabular-nums", tone)}>{value}</span>
         {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
       </div>
     </div>
