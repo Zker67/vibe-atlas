@@ -1,0 +1,119 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/egoist/mygo"
+)
+
+// smokeTest checks a build end to end without showing a window: both pages
+// load, call Go, and follow its events. It runs when VIBE_ATLAS_SMOKE_REPORT
+// names the file to write its result to, as JSON; set VIBE_ATLAS_DATA_DIR
+// too, so that it works on a database of its own. The app exits with 0
+// when every check passed.
+func (a *app) smokeTest(main, capture *mygo.Window) {
+	report := map[string]any{"ok": false}
+	finish := func(err error, step string) {
+		if err != nil {
+			report["failedStep"] = step
+			report["error"] = err.Error()
+		} else {
+			report["ok"] = true
+		}
+		shortcut, problem := a.shortcutState()
+		report["shortcut"] = shortcut
+		report["shortcutRegistered"] = problem == ""
+		data, _ := json.MarshalIndent(report, "", "  ")
+		_ = os.WriteFile(a.smokeReport, data, 0o644)
+		mygo.GlobalShortcut.UnregisterAll()
+		if err != nil {
+			mygo.App.Exit(1)
+		}
+		mygo.App.Exit(0)
+	}
+
+	start := time.Now()
+	if err := waitFor(main, "[data-atlas-ready]"); err != nil {
+		finish(err, "main page loads")
+		return
+	}
+	report["mainReadyMs"] = time.Since(start).Milliseconds()
+	if err := waitFor(capture, "[data-capture-ready]"); err != nil {
+		finish(err, "capture page loads")
+		return
+	}
+	report["captureReadyMs"] = time.Since(start).Milliseconds()
+
+	// The page calls Go, and shows what the Changed events tell it.
+	result, err := mygo.EvalAs[map[string]any](main.Page(), `
+		const name = "冒烟测试项目";
+		const project = await mygo.call("Atlas.CreateProject", name);
+		const module = await mygo.call("Atlas.CreateModule", project.id, "冒烟模块");
+		const item = await mygo.call("Atlas.CreateItem", { projectId: project.id, moduleId: module.id, type: "bug", title: "冒烟测试条目" });
+		await mygo.call("Atlas.SetItemStatus", item.id, "doing");
+		await mygo.call("Atlas.SetItemNote", item.id, "## 备注\n- [ ] 任务");
+		const overview = await mygo.call("Atlas.Overview", project.id);
+		const seen = async (text) => {
+			for (let i = 0; i < 100; i++) {
+				if (document.body.innerText.includes(text)) return true;
+				await new Promise((r) => setTimeout(r, 100));
+			}
+			return false;
+		};
+		let rejected = "";
+		try { await mygo.call("Atlas.CreateProject", name); } catch (e) { rejected = e.message; }
+		return {
+			projectShown: await seen(name),
+			itemShown: await seen("冒烟测试条目"),
+			doing: overview.totals.doing,
+			duplicateRejected: rejected,
+		};
+	`)
+	if err != nil {
+		finish(err, "main page calls Go")
+		return
+	}
+	report["main"] = result
+	if result["projectShown"] != true || result["itemShown"] != true {
+		finish(errors.New("the main page did not show what it created"), "main page follows events")
+		return
+	}
+	if result["doing"] != float64(1) || result["duplicateRejected"] == "" {
+		finish(errors.New("unexpected results: "+strconv.Quote(jsonString(result))), "main page calls Go")
+		return
+	}
+
+	// Quick capture saves to the project it starts with.
+	captured, err := mygo.EvalAs[map[string]any](capture.Page(), `
+		const item = await mygo.call("Atlas.CaptureItem", { projectId: (await mygo.call("Atlas.Projects"))[0].id, moduleId: 0, type: "feature", title: "从小窗记下的" });
+		return { id: item.id, status: item.status };
+	`)
+	if err != nil {
+		finish(err, "capture page calls Go")
+		return
+	}
+	report["capture"] = captured
+	finish(nil, "")
+}
+
+func jsonString(v any) string {
+	data, _ := json.Marshal(v)
+	return string(data)
+}
+
+// waitFor waits until the page of w has an element matching selector.
+func waitFor(w *mygo.Window, selector string) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		ok, err := mygo.EvalAs[bool](w.Page(), "return !!document.querySelector("+strconv.Quote(selector)+")")
+		if err == nil && ok {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return errors.New("timed out waiting for " + selector)
+}
