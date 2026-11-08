@@ -13,7 +13,7 @@ import {
   type Settings,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
-import { ancestors, applyMove, buildForest, linkSource, queueTrees, subtreeIds, type QueueTrees } from "@/lib/tree";
+import { ancestors, applyMove, buildForest, linkSource, queueTrees, subtreeIds, type QueueTrees, type TreeNode } from "@/lib/tree";
 
 export type View = "queue" | "overview";
 export type TypeFilter = ItemType | "all";
@@ -462,14 +462,64 @@ async function applyStatus(id: number, status: ItemStatus) {
  * parent takes the done items under it back to do.
  */
 export async function setItemStatus(id: number, status: ItemStatus) {
-  await applyPlan(statusPlan(get().items, id, status, false));
+  const items = get().items;
+  const plan = statusPlan(items, id, status, false);
+  const start = startMove(items, id, plan);
+  await applyChange(start ? [start] : [], plan);
 }
 
-/** Shows a statusPlan at once, then has Go apply it item by item, the top first. */
-async function applyPlan(plan: ReadonlyMap<number, ItemStatus>) {
-  if (plan.size === 0) return;
-  set((s) => ({ items: s.items.map((i) => withStatus(i, plan.get(i.id) ?? i.status)) }));
-  for (const [v, to] of plan) await applyStatus(v, to);
+/** A move of an item, with those under it, as Store.MoveItem makes it. */
+interface Move {
+  id: number;
+  anchorId: number;
+  place: Place;
+}
+
+/**
+ * Where the tree of id goes when plan starts something in it: right after
+ * the last other tree doing, so that 进行中 lists trees in the order they
+ * started until the user drags them. Null when the plan starts nothing,
+ * when the tree is in 进行中 already, or when no other tree is.
+ */
+function startMove(items: Item[], id: number, plan: ReadonlyMap<number, ItemStatus>): Move | null {
+  if (![...plan.values()].includes("doing")) return null;
+  const forest = buildForest(items);
+  let root = forest.byId.get(id);
+  while (root?.parent) root = root.parent;
+  if (!root) return null;
+  const doing = (n: TreeNode): boolean => n.item.status === "doing" || n.children.some(doing);
+  if (doing(root)) return null;
+  let last: TreeNode | undefined;
+  for (const r of forest.roots) if (r !== root && doing(r)) last = r;
+  return last ? { id: root.item.id, anchorId: last.item.id, place: "after" } : null;
+}
+
+/**
+ * Shows a change at once, the moves then the statuses of the plan, and has
+ * Go apply it in that order, the plan the top first. reopenId is the done
+ * item the plan takes back to the status it had: it keeps when it started.
+ */
+async function applyChange(moves: Move[], plan: ReadonlyMap<number, ItemStatus>, reopenId = 0) {
+  if (moves.length === 0 && plan.size === 0) return;
+  let items = get().items;
+  for (const m of moves) items = applyMove(items, m.id, m.anchorId, m.place) ?? items;
+  items = items.map((i) => {
+    const to = plan.get(i.id);
+    if (!to) return i;
+    return i.id === reopenId ? { ...i, status: to, doneAt: 0 } : withStatus(i, to);
+  });
+  set({ items });
+  for (const m of moves) {
+    if (m.place === "inside") expand([m.anchorId]);
+    if (!(await runOk(Atlas.moveItem(m.id, m.anchorId, m.place)))) {
+      void refresh();
+      return;
+    }
+  }
+  for (const [v, to] of plan) {
+    if (v === reopenId) await editItem(Atlas.reopenItem(v));
+    else await applyStatus(v, to);
+  }
 }
 
 /**
@@ -478,9 +528,18 @@ async function applyPlan(plan: ReadonlyMap<number, ItemStatus>) {
  */
 export const reopenStatus = (item: Item): ItemStatus => (item.startedAt ? "doing" : "todo");
 
-/** Takes a done item back to the status it had before, as reopenStatus says. */
+/**
+ * Takes a done item back to the status it had before, as reopenStatus
+ * says, with the done items under it back to do, as statusPlan has it.
+ * Back to doing, its tree goes to the end of 进行中, as when it starts.
+ */
 export async function reopenItem(id: number) {
-  await editItem(Atlas.reopenItem(id));
+  const items = get().items;
+  const item = items.find((i) => i.id === id);
+  if (item?.status !== "done") return;
+  const plan = statusPlan(items, id, reopenStatus(item), false);
+  const start = startMove(items, id, plan);
+  await applyChange(start ? [start] : [], plan, id);
 }
 
 /** The status a click on an item's circle gives it: done, or back to the status before. */
@@ -555,17 +614,13 @@ export function statusChanges(items: Item[], id: number, status: ItemStatus): nu
  * them in that order.
  */
 export async function dropItem(id: number, move: { anchorId: number; place: Place } | null, status: ItemStatus | null) {
-  let items = get().items;
+  const items = get().items;
   const plan = status ? statusPlan(items, id, status, true) : new Map<number, ItemStatus>();
-  if (move) items = applyMove(items, id, move.anchorId, move.place) ?? items;
-  items = items.map((i) => withStatus(i, plan.get(i.id) ?? i.status));
-  set({ items });
-  if (move?.place === "inside") expand([move.anchorId]);
-  if (move && !(await runOk(Atlas.moveItem(id, move.anchorId, move.place)))) {
-    void refresh();
-    return;
-  }
-  for (const [v, to] of plan) await applyStatus(v, to);
+  // Put where the user dropped it, the item stays there; started from the
+  // title of 进行中, its tree goes to the end of it.
+  const start = move ? null : startMove(items, id, plan);
+  const moves = move ? [{ id, ...move }] : start ? [start] : [];
+  await applyChange(moves, plan);
 }
 
 /** Puts id and targetId under a new parent in the target's place, and selects the parent. */

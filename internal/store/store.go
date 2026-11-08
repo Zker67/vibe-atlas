@@ -56,7 +56,60 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.once(keyDoingByStart, s.OrderDoingByStart); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
+}
+
+// keyDoingByStart marks a database whose trees doing were put in the order
+// they started, once, when 进行中 became an order the user drags.
+const keyDoingByStart = "doingOrderedByStart"
+
+// once runs fn unless the setting key says it ran already, and records
+// that it did. Unlike a migration, it leaves the structure version alone,
+// so older versions of the app still open the database.
+func (s *Store) once(key string, fn func() error) error {
+	if _, done, err := s.Setting(key); err != nil || done {
+		return err
+	}
+	if err := fn(); err != nil {
+		return err
+	}
+	return s.SetSetting(key, "1")
+}
+
+// OrderDoingByStart puts the top-level items whose tree has an item doing
+// in the order their earliest such item started, in the places they take
+// among the top-level items of their project; the others keep theirs.
+func (s *Store) OrderDoingByStart() error {
+	return s.inTx(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+WITH RECURSIVE tree(root, id) AS (
+	SELECT id, id FROM items WHERE parent_id IS NULL
+	UNION ALL
+	SELECT tree.root, i.id FROM items i JOIN tree ON i.parent_id = tree.id
+),
+doing(root, started) AS (
+	SELECT tree.root, MIN(COALESCE(i.started_at, 0)) FROM tree JOIN items i ON i.id = tree.id
+	WHERE i.status = 'doing' GROUP BY tree.root
+),
+slots(project_id, n, sort_order) AS (
+	SELECT r.project_id, ROW_NUMBER() OVER (PARTITION BY r.project_id ORDER BY r.sort_order, r.id), r.sort_order
+	FROM items r JOIN doing d ON d.root = r.id
+),
+wanted(id, project_id, n) AS (
+	SELECT r.id, r.project_id, ROW_NUMBER() OVER (PARTITION BY r.project_id ORDER BY d.started, r.id)
+	FROM items r JOIN doing d ON d.root = r.id
+)
+UPDATE items SET sort_order = (
+	SELECT slots.sort_order FROM wanted JOIN slots ON slots.project_id = wanted.project_id AND slots.n = wanted.n
+	WHERE wanted.id = items.id
+)
+WHERE id IN (SELECT root FROM doing)`)
+		return err
+	})
 }
 
 // Close closes the database.

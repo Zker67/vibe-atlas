@@ -172,7 +172,7 @@ function StartSection() {
           按 <Accel /> 打开快速记录，输入标题后按 <K>Enter</K>。
         </Step>
         <Step n={2} title="安排顺序">
-          在待办中拖动排序，排在上面的先做；拖到另一条上可以合并。
+          在待办和进行中拖动排序，排在上面的先做；拖到另一条上可以合并。
         </Step>
         <Step n={3} title="交给 AI">
           选中一条按 <K>C</K> 复制，粘贴到 AI 对话中。
@@ -212,7 +212,7 @@ function CaptureSection() {
 
 const STATUS_HINTS: Record<string, string> = {
   todo: "等待处理，可以拖动排序",
-  doing: "正在处理",
+  doing: "正在处理，默认按开始先后，可以拖动调整",
   done: "已完成，默认收起",
 };
 

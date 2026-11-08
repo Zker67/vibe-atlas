@@ -113,8 +113,6 @@ interface Scan {
   matched: number;
   doing: boolean;
   todo: boolean;
-  /** The earliest start among the matching items doing. */
-  started: number;
   /** The latest completion among the matching items done. */
   doneAt: number;
   /** How many items sit under it, filters aside, and how many of them are done. */
@@ -126,8 +124,8 @@ interface Scan {
  * Lays out the queue. Each tree goes to one section, by the items in it that
  * match: 进行中 when one is doing, else 待办 when one is to do, else 已完成.
  * An item shows when it or something under it matches; children show in
- * their order unless their parent is collapsed. Trees doing are in the
- * order they started, to do in the user's order, done the latest first.
+ * their order unless their parent is collapsed. Trees doing and to do are
+ * in the user's order, done the latest first.
  */
 export function queueTrees(forest: Forest, matches: (item: Item) => boolean, collapsed: ReadonlySet<number>): QueueTrees {
   const scans = new Map<number, Scan>();
@@ -139,7 +137,6 @@ export function queueTrees(forest: Forest, matches: (item: Item) => boolean, col
       matched: m ? 1 : 0,
       doing: m && it.status === "doing",
       todo: m && it.status === "todo",
-      started: m && it.status === "doing" ? it.startedAt : Infinity,
       doneAt: m && it.status === "done" ? it.doneAt : 0,
       total: 0,
       done: 0,
@@ -153,7 +150,6 @@ export function queueTrees(forest: Forest, matches: (item: Item) => boolean, col
       s.matched += cs.matched;
       s.doing ||= cs.doing;
       s.todo ||= cs.todo;
-      s.started = Math.min(s.started, cs.started);
       s.doneAt = Math.max(s.doneAt, cs.doneAt);
     }
     scans.set(it.id, s);
@@ -183,9 +179,7 @@ export function queueTrees(forest: Forest, matches: (item: Item) => boolean, col
     walk(root, 0);
     out[s.doing ? "doing" : s.todo ? "todo" : "done"].push({ root: root.item, rows, matched: s.matched });
   }
-  const started = (t: TreeRows) => scans.get(t.root.id)!.started;
   const doneAt = (t: TreeRows) => scans.get(t.root.id)!.doneAt;
-  out.doing.sort((a, b) => started(a) - started(b) || a.root.id - b.root.id);
   out.done.sort((a, b) => doneAt(b) - doneAt(a) || a.root.id - b.root.id);
   return out;
 }

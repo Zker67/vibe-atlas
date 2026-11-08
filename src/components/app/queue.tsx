@@ -271,15 +271,22 @@ function sectionDrop(active: Item, section: ItemStatus): Drop | null {
 
 /**
  * Finds where the item dragged would land with the pointer at (x, y), dx
- * to the right of where the drag started. On a row, its top or bottom 30 %
+ * to the right of where the drag started. On a row, its top or bottom EDGE
  * puts the item before or after, its middle merges or puts it inside. The
  * bottom with the pointer a level to the right puts the item under the row.
- * Top-level rows of 进行中 and 已完成 have no order of their own: their
- * edges stand for the section. The bottom of an open parent is the top of
+ * Top-level rows of 已完成 have no order of their own: their edges stand
+ * for the section. The bottom of an open parent is the top of
  * its first child. Elsewhere in a section, its title included, the item
  * takes the section's status. On a module of the sidebar, other than its
  * own and its children's, the item goes to that module with them.
  */
+/**
+ * How much of a row, from its top and from its bottom, puts the item before
+ * or after it; the middle left, a third or less, merges. Moving is what a
+ * drag mostly does: it gets the larger share.
+ */
+const EDGE = 0.35;
+
 function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, moving: ReadonlySet<number>): Drop | null {
   const hit = document.elementFromPoint(x, y);
   const target = hit?.closest<HTMLElement>("[data-module-drop]");
@@ -300,19 +307,19 @@ function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, mo
   const r = el.getBoundingClientRect();
   const at = (y - r.top) / r.height;
   const middle: Zone = row.hasChildren ? "inside" : "merge";
-  const zone: Zone = at < 0.3 ? "before" : at > 0.7 ? "after" : middle;
+  const zone: Zone = at < EDGE ? "before" : at > 1 - EDGE ? "after" : middle;
   if (zone === "merge" || zone === "inside") return { kind: "row", overId, zone, status: null, count: 0 };
   const first = zone === "after" && row.hasChildren && !row.collapsed && info.next?.depth === row.depth + 1 ? info.next : undefined;
   const under = zone === "after" && dx >= INDENT;
   if (under && !first) return { kind: "row", overId, zone: "child", status: null, count: 0 };
-  if (row.depth === 0 && info.section !== "todo" && !under) return sectionDrop(active, info.section);
+  if (row.depth === 0 && info.section === "done" && !under) return sectionDrop(active, info.section);
   if (first) {
     if (moving.has(first.item.id)) return null;
     return { kind: "row", overId: first.item.id, zone: "before", status: null, count: 0 };
   }
-  // Among the top-level items to do, the item becomes one of them.
-  const count = row.depth === 0 ? statusChanges(useAtlas.getState().items, active.id, "todo").length : 0;
-  return { kind: "row", overId, zone, status: count ? "todo" : null, count };
+  // Among the top-level items doing or to do, the item becomes one of them.
+  const count = row.depth === 0 ? statusChanges(useAtlas.getState().items, active.id, info.section).length : 0;
+  return { kind: "row", overId, zone, status: count ? info.section : null, count };
 }
 
 /** The ids of the items dragged, it and those under it, not in the module yet. */

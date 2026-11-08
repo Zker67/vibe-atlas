@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -368,4 +369,70 @@ func TestCreateItemWithDetails(t *testing.T) {
 	if items := must(s.Items(p.ID)); len(items) != 1 {
 		t.Fatalf("rejected items were saved: %s", titles(items))
 	}
+}
+
+func TestOrderDoingByStart(t *testing.T) {
+	s, path := newStore(t)
+	p := must(s.CreateProject("规则恐怖"))
+	add := func(title string, parent int64) Item {
+		return must(s.CreateItem(NewItem{ProjectID: p.ID, ParentID: parent, Title: title}))
+	}
+	// Top-level, in this order: a to do, b started last, c to do, d whose
+	// child started first, e done.
+	add("待办甲", 0)
+	b := add("后开始", 0)
+	add("待办乙", 0)
+	d := add("父改进点", 0)
+	child := add("先开始的子改进点", d.ID)
+	e := add("已完成", 0)
+	must(s.SetItemStatus(child.ID, StatusDoing))
+	must(s.SetItemStatus(b.ID, StatusDoing))
+	must(s.SetItemStatus(e.ID, StatusDone))
+
+	if err := s.OrderDoingByStart(); err != nil {
+		t.Fatal(err)
+	}
+	items := must(s.Items(p.ID))
+	var roots []string
+	for _, it := range sortedRoots(items) {
+		roots = append(roots, it.Title)
+	}
+	want := []string{"待办甲", "父改进点", "待办乙", "后开始", "已完成"}
+	if strings.Join(roots, ",") != strings.Join(want, ",") {
+		t.Fatalf("top-level order = %v, want %v", roots, want)
+	}
+	// Opening the database again does not reorder it: the user's order
+	// stays, though d's tree now started after b.
+	must(s.SetItemStatus(child.ID, StatusTodo))
+	must(s.SetItemStatus(child.ID, StatusDoing))
+	before := sortedRoots(must(s.Items(p.ID)))
+	s.Close()
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	after := sortedRoots(must(s2.Items(p.ID)))
+	for i := range before {
+		if before[i].ID != after[i].ID {
+			t.Fatalf("reopening reordered the items: %v then %v", before, after)
+		}
+	}
+}
+
+// sortedRoots returns the top-level items in their order.
+func sortedRoots(items []Item) []Item {
+	var roots []Item
+	for _, it := range items {
+		if it.ParentID == 0 {
+			roots = append(roots, it)
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].SortOrder != roots[j].SortOrder {
+			return roots[i].SortOrder < roots[j].SortOrder
+		}
+		return roots[i].ID < roots[j].ID
+	})
+	return roots
 }
