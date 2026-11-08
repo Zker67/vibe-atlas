@@ -1,138 +1,204 @@
+<div align="center">
+
 # Vibe Atlas
 
-> **AI 助手**：请先阅读 [AGENTS.md](./AGENTS.md)，再开始任何操作。
+**一个人管所有 vibe 项目：想到就记，一条条推进，项目全貌自己长出来。**
 
-## 项目简介
+`快捷键随手记` · `项目 / 模块 / 改进点` · `复制给 AI` · `自动汇总总览` — 本地桌面软件，Windows 先行。
 
-个人开发者所有 vibe 项目的管理中枢：随手记下每个想法，一条条推进，项目的全貌自然积累出来。
+[![License](https://img.shields.io/badge/license-Private-blue?style=flat-square)](#license)
+[![Stack](https://img.shields.io/badge/stack-Go%20%2B%20MyGo%20%2B%20React-61dafb?style=flat-square)](#开发栈)
+[![Install](https://img.shields.io/badge/install-git%20clone%20%2B%20bun-orange?style=flat-square)](#启动)
+[![Structure](https://img.shields.io/badge/结构-项目%20%2F%20模块%20%2F%20改进点-brightgreen?style=flat-square)](#核心能力)
+[![Hotkey](https://img.shields.io/badge/快速记录-Ctrl%2BAlt%2BSpace-yellow?style=flat-square)](#使用流程)
+[![Local](https://img.shields.io/badge/本地优先-不联网%20%C2%B7%20不内置%20AI-ff69b4?style=flat-square)](#配置)
 
-编程时看到结果，改进点、bug、新需求会一起冒出来：先随手记下，再一条条挑出来发给 AI，自己打勾标记进行中和完成。记得越多，项目总览就越完整。
+[使用流程](#使用流程) · [核心能力](#核心能力) · [启动](#启动) · [配置](#配置) · [开发栈](#开发栈) · [协同关系](#协同关系)
 
-不联网、不同步、不做多人协作，也不内置 AI。比 Linear 轻、快，只服务一个人在一台电脑上的开发。
+</div>
 
-## 当前状态
+> AI 接手前先读 [AGENTS.md](./AGENTS.md)。本 README 是用户视角速览；项目不变量、验证命令和文档分工全在 AGENTS.md。
 
-**第一期原型（Windows）已经做好，等待用户验收。** 自动检查（数据层测试、类型检查、lint、构建、打包后冒烟测试）已通过；快速记录的手感、中文输入、链接打开等需要在真实使用中确认。
+---
 
-- 已实现的功能：[docs/product.md](./docs/product.md#已实现的功能)
-- 验收清单：[第一期计划 · 用户验收场景](./plans/2026-11-07-prototype/00-overview.md#用户验收场景)
-- 实施报告：[09-implementation-report.md](./plans/2026-11-07-prototype/09-implementation-report.md)
-- 代码仓库：GitHub 私有仓库 [Zker67/vibe-atlas](https://github.com/Zker67/vibe-atlas)，在指挥室索引 `../REPOS.md` 中登记
+<p align="center">
+  <img src="./assets/hero.png" alt="Vibe Atlas 暗色主窗口：左侧是项目和模块，中间是按进行中、待办、已完成分组的改进点队列，带子改进点和完成进度，右侧是改进点详情，有状态、类型、链接、时间线和 Markdown 备注" width="80%">
+</p>
 
-- 产品概念与规则：[docs/product.md](./docs/product.md)
-- 第一期计划（可测试原型）：[plans/2026-11-07-prototype/](./plans/2026-11-07-prototype/00-overview.md)
-- 以后再考虑的功能：[docs/backlog.md](./docs/backlog.md)
-- 已放弃的想法：[docs/archive/dropped-ideas.md](./docs/archive/dropped-ideas.md)
-- 技术选型与验证状态：[docs/architecture/tech-stack.md](./docs/architecture/tech-stack.md)
+> 用 AI 写代码时，改进点、bug、新需求总是一起冒出来，记在聊天里很快就找不到了。现在按快捷键随手记一行，之后在队列里挑一条复制给 AI，做完自己打勾，记得越多项目总览越完整。
 
-## 目录
+---
 
-- [需求概述](#需求概述)
-- [使用方法](#使用方法)
-- [配置说明](#配置说明)
-- [文档结构](#文档结构)
-- [开发路线](#开发路线)
+## 核心能力
 
-## 需求概述
+| 能力 | 实现 |
+|---|---|
+| **快速记录** | 在任何软件上按 `Ctrl+Alt+Space` 呼出小窗，输入一行回车就存进项目；`Shift+Enter` 展开 Markdown 备注和链接。见 [capture-app.tsx](src/capture-app.tsx) |
+| **项目 → 模块 → 改进点** | 改进点分改进、bug、新需求三种，可以挂在模块下，也可以有任意层子改进点；拖动排序、改层级、合并。见 [queue.tsx](src/components/app/queue.tsx)、[数据层](internal/store/README.md) |
+| **状态全靠手点** | 待办、进行中、完成随时切换，进行中不限条数，自动记录开始和完成时间；`Ctrl` / `Shift` 多选后批量操作。规则见 [product.md](docs/product.md#规则) |
+| **复制给 AI** | 把标题、备注连同子改进点清单复制成一段 Markdown，自己粘贴发送；备注里的图片换成本机路径，AI 能直接读图。见 [atlas.go](atlas.go)、[images.go](images.go) |
+| **链接到会话** | 每条改进点可以绑定一个 deeplink；设置了会话来源时，能直接从 Claude Code、Codex、codeg 的本机会话里挑一个。见 [claude_session.go](claude_session.go)、[session-picker.tsx](src/components/app/session-picker.tsx) |
+| **Markdown 备注** | 边写边渲染；划词浮出格式工具栏，`/` 斜杠命令插入，`Ctrl+F` 查找替换；粘贴截图或图文混排内容，图片存进数据目录，点开能缩放拖动。见 [editor/](src/components/editor/) |
+| **沉浸式编辑** | 备注展开成大窗口：左边大纲、标题折叠、专注模式、打字机滚动、字数统计。见 [immersive-note.tsx](src/components/app/immersive-note.tsx) |
+| **项目总览** | 从改进点即时汇总：总进度、各模块进度、类型分布、进行中列表、按天的完成记录。见 [overview.tsx](src/components/app/overview.tsx) |
+| **回收站** | 删除不弹确认，`Ctrl+Z` 撤销；回收站按天分组，默认保留 30 天。见 [trash.tsx](src/components/app/trash.tsx) |
+| **常驻托盘** | 关窗口只是隐藏，老板键一键藏起所有窗口；暗色和亮色主题，可选动态背景、背景图片和毛玻璃。见 [app.go](app.go)、[look-settings.tsx](src/components/app/look-settings.tsx) |
 
-### 核心需求
+全部功能的细节在 [docs/product.md 的「已实现的功能」](docs/product.md#已实现的功能)。
 
-组织方式沿用 Linear 的用法：**项目 → 模块 → 改进点**。
+---
 
-- [x] 快速记录：全局快捷键呼出小窗，输入一行回车就存进项目
-- [x] 改进点：分改进 / bug / 新需求三种类型，可以挂在某个模块下，也可以不挂
-- [x] 状态全部手动：待办、进行中、完成随时点选，进行中的数量不设上限
-- [x] 可选 deeplink：每条改进点可以绑定一个链接，点击用系统默认程序打开
-- [x] Markdown 即时预览编辑：边写边渲染，用来写备注和项目说明
-- [x] 复制为文本：把改进点复制出去，由人自己发给 AI
-- [x] 项目总览：从不断积累的改进点里汇总出各模块进度和完成历史
-- [x] 项目可选绑定一个本地文件夹
-- [ ] Windows 先行（第一期原型已完成，待验收），之后支持 macOS
+## 启动
 
-### 技术选型
+这是一个桌面软件，没有发布到任何包仓库。从源码运行或自己打包，需要 Go 和 Bun。
 
-已在 Windows 上实测，详见 [tech-stack.md](./docs/architecture/tech-stack.md)。
-
-| 层级 | 技术 | 说明 |
-|---|---|---|
-| 桌面容器 | MyGo 0.8.1（Web 页面窗口） | Go 负责系统能力和数据存取，Windows / macOS / Linux 都支持 |
-| 界面 | React + TypeScript + Tailwind CSS + shadcn/ui | 大部分代码在这里 |
-| 编辑器 | CodeMirror 6 | 实现 Markdown 即时预览 |
-| 数据存储 | SQLite（纯 Go 驱动） | 存在本机用户数据目录 |
-| 检查 | Go 集成测试、tsc、oxlint、打包后冒烟测试 | 命令见 [operations.md](./docs/operations.md) |
-
-## 使用方法
+### 本地运行
 
 ```bash
-bun install      # 安装依赖
-bun run dev      # 开发运行
-bun run build    # 打包：build/windows-amd64/ 下的程序和安装包
+git clone https://github.com/Zker67/vibe-atlas.git
+cd vibe-atlas
+bun install
+bun run dev
 ```
 
-- 默认快速记录快捷键 `Ctrl+Alt+Space`，可以在设置（`Ctrl+,`）里改。
-- 用法和全部快捷键见使用说明（`F1`，或侧栏左下角）。
-- 数据存在 `%AppData%\Vibe Atlas\vibe-atlas.db`，设置里可以一键打开所在文件夹。
-- 程序没有签名，SmartScreen 拦截时点「更多信息」→「仍要运行」。
+开发模式的数据放在正式数据目录下的 `dev` 子文件夹里，不会碰到正式数据。
 
-测试、冒烟测试和排查方法见 [docs/operations.md](./docs/operations.md)。
+### 打包安装
 
-## 配置说明
+```bash
+bun run build
+```
 
-### AI 行为配置
+产物在 `build/windows-amd64/`：
 
-- **协作入口**：`AGENTS.md`，AI 首次进入项目时先读取；`CLAUDE.md` 只引用它。
-- **规则文件**：`.agents/rules/*.md`，使用 YAML frontmatter + Markdown。
-- **目录说明**：`.agents/README.md`，说明 `.agents/` 的组织方式与规则写法。
+| 文件 | 说明 |
+|---|---|
+| `Vibe Atlas.exe` | 免安装版，可以直接运行；复制到别处时把同目录的 `icon.png`、`tray.png` 一起带上 |
+| `vibe-atlas-setup-<版本>-amd64.exe` | 安装包 |
 
-### 项目文档
+程序没有代码签名，Windows SmartScreen 拦截时点「更多信息」→「仍要运行」。
 
-`docs/` 存放当前项目的长期事实。`README.md` 只做总览和入口分流，`AGENTS.md` 只写给 AI 的协作约束。同一类信息只在一个地方完整维护，具体由 [source-of-truth.md](./docs/architecture/source-of-truth.md) 规定。
+### 检查
 
-### 外部参考
+```bash
+bun run typecheck && bun run lint
+CGO_ENABLED=0 go vet ./... && CGO_ENABLED=0 go test ./...
+bun test tests
+```
 
-`references/` 记录外部文档和外部仓库。采纳后的结论写回 `docs/` 或源码。
+打包后的冒烟测试和排查方法见 [docs/operations.md](docs/operations.md)。
 
-## 文档结构
+---
+
+## 使用流程
+
+| 步骤 | 做什么 |
+|---|---|
+| 1 · 记下来 | 写代码时想到什么，按 `Ctrl+Alt+Space` 输入一行，`Tab` 切换类型，`Enter` 保存，可以连续记 |
+| 2 · 整理 | 在主窗口的队列里拖动排序、挂到模块、拖到另一条下面变成子改进点，在右边详情里补备注和链接 |
+| 3 · 发给 AI | 挑一条点「开始进行」，按 `C` 复制，粘贴给 Claude Code、Codex 或别的 AI |
+| 4 · 打勾 | 做完点行首的圆圈标为完成；父改进点完成时子改进点跟着完成 |
+| 5 · 看全貌 | 切到「总览」，看各模块进度和每天完成了什么 |
+
+全部快捷键在软件里按 `F1` 打开使用说明查看，源文件是 [help-dialog.tsx](src/components/app/help-dialog.tsx)。
+
+---
+
+## 配置
+
+设置都在软件里改（`Ctrl+,`），存在数据库里，没有单独的配置文件。
+
+| 设置 | 默认 | 位置 |
+|---|---|---|
+| 快速记录快捷键 | `Ctrl+Alt+Space` | 设置 → 快捷键 |
+| 老板键 | 不设置 | 设置 → 快捷键 |
+| 主题 | 跟随系统 | 设置 → 外观，或顶栏的外观按钮 |
+| 动态背景、背景图片、毛玻璃 | 关闭 | 设置 → 外观 |
+| 窗口整体透明度 | 100%（最低 40%） | 设置 → 外观 |
+| 子改进点沿用上级的链接 | 打开 | 设置 → 改进点 |
+| 会话来源 | 不使用（可选 Claude Code / Codex / codeg） | 设置 → 改进点 |
+| 回收站保留天数 | 30 天 | 设置 → 数据 |
+
+环境变量只用于开发和测试：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `VIBE_ATLAS_DATA_DIR` | `%AppData%\Vibe Atlas` | 换一个数据目录 |
+| `VIBE_ATLAS_SMOKE_REPORT` | 无 | 进入冒烟测试模式，并指定报告文件 |
+
+**数据位置**：
+
+- 所有数据只在本机：`%AppData%\Vibe Atlas\vibe-atlas.db`（SQLite），备注里的图片在同目录的 `images/`，背景图片在 `wallpapers/`。设置 → 数据 可以一键打开这个文件夹。
+- 每次修改立即写入磁盘，强制结束进程也不丢已经保存的内容。手动备份时先从托盘退出，再复制整个文件夹。
+- 会话来源只读各软件自己的会话文件，不改动它们，读取位置见 [docs/operations.md](docs/operations.md#配置)。
+
+---
+
+## 开发栈
+
+| 用途 | 技术 |
+|---|---|
+| **桌面容器** | [MyGo](https://github.com/egoist/mygo) 0.8：Go 负责窗口、托盘、全局快捷键和数据，页面跑在系统 WebView 里 |
+| **界面** | React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui，Vite 构建 |
+| **编辑器** | CodeMirror 6，自己实现即时预览、工具栏、图片卡片 |
+| **数据** | SQLite，纯 Go 驱动 `modernc.org/sqlite`，不需要 cgo |
+| **测试** | Go 集成测试（真实 SQLite 文件）、`bun test`、打包后冒烟测试 |
+
+选型理由和实测结果见 [tech-stack.md](docs/architecture/tech-stack.md)，接口见 [api.md](docs/api.md)。
+
+---
+
+## 目录结构
 
 ```text
 vibe-atlas/
-├── AGENTS.md                 # AI 协作入口
-├── CLAUDE.md                 # 引用 AGENTS.md
-├── README.md                 # 项目说明
-├── docs/                     # 当前项目的长期事实
-│   ├── README.md
-│   ├── product.md            # 产品概念、规则、已实现功能
-│   ├── backlog.md            # 以后再考虑的功能
-│   ├── archive/              # 已放弃的想法
-│   ├── api.md
-│   ├── operations.md
-│   └── architecture/
-│       ├── README.md
-│       ├── source-of-truth.md
-│       ├── project-structure.md
-│       └── tech-stack.md
-├── references/               # 外部文档和外部仓库参考
-│   ├── README.md
-│   ├── external-docs/
-│   └── external-repos/
-├── plans/                    # 分期计划与验收
-│   ├── README.md
-│   └── 2026-11-07-prototype/ # 第一期：可测试原型
-├── .agents/                  # AI 项目规则和 Skill
-│   ├── README.md
-│   ├── rules/
-│   └── skills/
-├── main.go / app.go / atlas.go / smoke.go   # Go 端：入口、窗口与托盘、绑定服务、冒烟测试
-├── internal/store/           # 数据层（SQLite）
-├── src/                      # 前端（React + TypeScript）
-└── resources/                # 图标
+├─ main.go / app.go          # 入口、窗口、托盘、全局快捷键
+├─ atlas.go                  # 绑定给前端的服务
+├─ images.go                 # 备注图片：保存、加载、复制换路径、清理
+├─ claude_session.go         # 读取本机 AI 会话
+├─ smoke*.go                 # 打包后冒烟测试
+├─ internal/store/           # 数据层（SQLite）和集成测试
+├─ src/
+│  ├─ main-app.tsx           # 主窗口
+│  ├─ capture-app.tsx        # 快速记录小窗
+│  ├─ components/app/        # 队列、详情、总览、回收站、设置
+│  ├─ components/editor/     # Markdown 编辑器
+│  └─ mygo.ts                # 生成的 Go 调用客户端，不要手改
+├─ tests/                    # 前端逻辑测试
+├─ docs/                     # 产品规则、接口、运行、架构
+├─ plans/                    # 每次改动的计划和验收记录
+├─ assets/                   # README 截图
+└─ AGENTS.md                 # AI 协作入口
 ```
 
-## 开发路线
+---
 
-| 阶段 | 内容 | 状态 |
-|---|---|---|
-| 第一期 | Windows 上可测试的原型：快速记录、项目 / 模块 / 改进点、手动状态、deeplink、Markdown 即时预览编辑、项目总览 | 已实现，待验收 |
-| 以后 | macOS 版等，见 [docs/backlog.md](./docs/backlog.md) | 未排期 |
+## 文档导航
 
-第一期的步骤和验收场景见 [plans/2026-11-07-prototype/](./plans/2026-11-07-prototype/00-overview.md)。
+| 文档 | 说明 |
+|---|---|
+| [docs/product.md](docs/product.md) | 产品概念、规则、已实现的功能 |
+| [docs/operations.md](docs/operations.md) | 运行、测试、打包、冒烟测试、数据位置 |
+| [docs/architecture/project-structure.md](docs/architecture/project-structure.md) | 每个目录和文件管什么 |
+| [docs/backlog.md](docs/backlog.md) | 以后可能做的功能 |
+| [docs/archive/dropped-ideas.md](docs/archive/dropped-ideas.md) | 已经放弃的想法 |
+| [plans/README.md](plans/README.md) | 计划索引和验收状态 |
+| [AGENTS.md](./AGENTS.md) | AI 协作约束和项目不变量 |
+
+当前状态：第一期原型（Windows）和之后的各项改动都已实现，等待用户验收，见 [plans/README.md](plans/README.md)。之后会做 macOS 版。
+
+---
+
+## 协同关系
+
+| 关联仓库 | 关系 |
+|---|---|
+| [`appshelf`](https://github.com/Zker67/appshelf) | 同样是 Go + MyGo 的 Windows 个人桌面工具，共用一套技术栈和打包方式 |
+| [`Next-AIGC`](https://github.com/Zker67/Next-AIGC) | 本仓的「暗场 + 信号光」视觉风格照它来做 |
+| [`zker67-ui-way`](https://github.com/Zker67/zker67-ui-way) | 个人前端风格规则，本仓的界面按它检查 |
+
+---
+
+## License
+
+私有仓库，未开源，没有 LICENSE 文件。© Zker67

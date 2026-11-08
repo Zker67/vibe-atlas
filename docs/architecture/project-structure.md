@@ -19,6 +19,7 @@
 | 路径 | 职责 |
 |---|---|
 | `README.md` | 项目总览、快速启动和文档分流 |
+| `assets/` | README 用的截图（`hero.png`） |
 | `AGENTS.md` | AI 助手协作入口、约束和项目不变量 |
 | `.agents/rules/` | 项目级可自动加载规则 |
 | `.agents/skills/` | 项目级 Skill（MyGo 模板自带的 `mygo-maintenance`） |
