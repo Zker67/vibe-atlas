@@ -79,7 +79,12 @@ type Settings struct {
 	DefaultShortcut string `json:"defaultShortcut"`
 	// ShortcutError says why Shortcut does not work, or "".
 	ShortcutError string `json:"shortcutError"`
-	Theme         Theme  `json:"theme"`
+	// BossKey is the global shortcut that hides every window at once and
+	// brings the main window back, or "" while not set (out of the box).
+	BossKey string `json:"bossKey"`
+	// BossKeyError says why BossKey does not work, or "".
+	BossKeyError string `json:"bossKeyError"`
+	Theme        Theme  `json:"theme"`
 	// Effects turns on the effects that cost the GPU in the main window: the
 	// moving background, blurred panels and glowing rows. Off by default;
 	// quick capture never shows them.
@@ -108,6 +113,7 @@ type Settings struct {
 // Keys of the settings table.
 const (
 	keyShortcut       = "shortcut"
+	keyBossKey        = "bossKey"
 	keyTheme          = "theme"
 	keyEffects        = "effects"
 	keyBackground     = "background"
@@ -556,11 +562,14 @@ func (a *Atlas) Settings() (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
-	shortcut, shortcutErr := a.app.shortcutState()
+	shortcut, shortcutErr := a.app.keyState(&a.app.capKey)
+	bossKey, bossKeyErr := a.app.keyState(&a.app.bossKey)
 	s := Settings{
 		Shortcut:        shortcut,
 		DefaultShortcut: defaultShortcut,
 		ShortcutError:   shortcutErr,
+		BossKey:         bossKey,
+		BossKeyError:    bossKeyErr,
 		Theme:           a.theme(db),
 		Effects:         effectsOn(db),
 		Background:      background(db),
@@ -614,14 +623,15 @@ func (a *Atlas) settingsChanged() {
 	}
 }
 
-// SetShortcut changes the global shortcut of quick capture. When the new
-// one cannot be registered, the old one stays.
+// SetShortcut changes the global shortcut of quick capture. It must differ
+// from the boss key. When the new one cannot be registered, the old one
+// stays.
 func (a *Atlas) SetShortcut(shortcut string) (Settings, error) {
 	db, err := a.store()
 	if err != nil {
 		return Settings{}, err
 	}
-	shortcut, err = a.app.changeShortcut(shortcut)
+	shortcut, err = a.app.changeShortcut(&a.app.capKey, &a.app.bossKey, shortcut)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -632,11 +642,33 @@ func (a *Atlas) SetShortcut(shortcut string) (Settings, error) {
 	return a.Settings()
 }
 
-// PauseShortcut releases the global shortcut while the user records a new
-// one, so that pressing it reaches the page, and takes it back when paused
-// is false.
+// SetBossKey changes the boss key, the global shortcut that hides every
+// window at once and brings the main window back; "" clears it. It must
+// differ from the shortcut of quick capture. When the new one cannot be
+// registered, the old one stays.
+func (a *Atlas) SetBossKey(shortcut string) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if strings.TrimSpace(shortcut) == "" {
+		a.app.clearShortcut(&a.app.bossKey, &a.app.capKey)
+		shortcut = ""
+	} else if shortcut, err = a.app.changeShortcut(&a.app.bossKey, &a.app.capKey, shortcut); err != nil {
+		return Settings{}, err
+	}
+	if err := db.SetSetting(keyBossKey, shortcut); err != nil {
+		return Settings{}, err
+	}
+	a.settingsChanged()
+	return a.Settings()
+}
+
+// PauseShortcut releases the global shortcuts, quick capture's and the boss
+// key, while the user records a new one, so that pressing either reaches
+// the page, and takes them back when paused is false.
 func (a *Atlas) PauseShortcut(paused bool) error {
-	a.app.pauseShortcut(paused)
+	a.app.pauseShortcuts(paused)
 	return nil
 }
 

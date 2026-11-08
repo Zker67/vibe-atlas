@@ -28,7 +28,7 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		} else {
 			report["ok"] = true
 		}
-		shortcut, problem := a.shortcutState()
+		shortcut, problem := a.keyState(&a.capKey)
 		report["shortcut"] = shortcut
 		report["shortcutRegistered"] = problem == ""
 		data, _ := json.MarshalIndent(report, "", "  ")
@@ -177,7 +177,65 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		finish(err, "look")
 		return
 	}
+
+	boss, err := a.smokeBossKey(main)
+	report["bossKey"] = boss
+	if err != nil {
+		finish(err, "boss key")
+		return
+	}
 	finish(nil, "")
+}
+
+// smokeBossKey checks the boss key: not set out of the box, the shortcut of
+// quick capture and keys without Ctrl, Alt or Win are refused, a set one is
+// registered, recording a shortcut releases it and takes it back, and
+// clearing it lets it go.
+func (a *app) smokeBossKey(main *mygo.Window) (map[string]any, error) {
+	const accel = "Ctrl+Alt+Shift+F12"
+	result, err := mygo.EvalAs[map[string]any](main.Page(), `
+		const refused = async (shortcut) => {
+			try { await mygo.call("Atlas.SetBossKey", shortcut); return ""; } catch (e) { return e.message; }
+		};
+		const s = await mygo.call("Atlas.Settings");
+		const result = { unsetByDefault: s.bossKey === "" };
+		result.sameRefused = await refused(s.shortcut);
+		result.plainRefused = await refused("Shift+B");
+		const set = await mygo.call("Atlas.SetBossKey", `+strconv.Quote(accel)+`);
+		result.set = set.bossKey;
+		result.setError = set.bossKeyError;
+		result.captureRefused = await (async () => {
+			try { await mygo.call("Atlas.SetShortcut", `+strconv.Quote(accel)+`); return ""; } catch (e) { return e.message; }
+		})();
+		return result;
+	`)
+	if err != nil {
+		return result, err
+	}
+	if result["unsetByDefault"] != true || result["sameRefused"] == "" || result["plainRefused"] == "" ||
+		result["captureRefused"] == "" || result["set"] != accel || result["setError"] != "" {
+		return result, errors.New("boss key: unexpected results: " + jsonString(result))
+	}
+	result["registered"] = mygo.GlobalShortcut.IsRegistered(accel)
+	if err := a.atlas.PauseShortcut(true); err != nil {
+		return result, err
+	}
+	result["releasedWhileRecording"] = !mygo.GlobalShortcut.IsRegistered(accel)
+	if err := a.atlas.PauseShortcut(false); err != nil {
+		return result, err
+	}
+	result["takenBack"] = mygo.GlobalShortcut.IsRegistered(accel)
+	s, err := a.atlas.SetBossKey("")
+	if err != nil {
+		return result, err
+	}
+	result["cleared"] = s.BossKey == "" && !mygo.GlobalShortcut.IsRegistered(accel)
+	for _, k := range []string{"registered", "releasedWhileRecording", "takenBack", "cleared"} {
+		if result[k] != true {
+			return result, errors.New("boss key: " + k + " failed: " + jsonString(result))
+		}
+	}
+	return result, nil
 }
 
 // smokeLook checks the look of the main window: a picture loads from the

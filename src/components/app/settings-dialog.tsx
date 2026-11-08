@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Tabs } from "radix-ui";
 import {
+  AppWindow,
   BookOpen,
   Check,
   CircleAlert,
   Database,
   FolderOpen,
+  Globe,
   Keyboard,
   ListTree,
   Monitor,
@@ -14,7 +16,7 @@ import {
   Pencil,
   RotateCcw,
   Sun,
-  Zap,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { Atlas, type Settings, type Theme } from "@/mygo";
@@ -40,7 +42,7 @@ const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
 ];
 
 const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
-  { value: "capture", label: "快速记录", icon: Zap },
+  { value: "keys", label: "快捷键", icon: Keyboard },
   { value: "items", label: "改进点", icon: ListTree },
   { value: "appearance", label: "外观", icon: Palette },
   { value: "data", label: "数据", icon: Database },
@@ -63,7 +65,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">快速记录的快捷键、子改进点的链接、外观（主题、背景、毛玻璃、透明度）和数据位置</DialogDescription>
+              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、外观（主题、背景、毛玻璃、透明度）和数据位置</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -89,7 +91,7 @@ export function SettingsDialog() {
               >
                 <Scroller always className="flex-1" viewportClassName="px-6 pt-12 pb-6">
                   <div className="flex flex-col gap-3">
-                    {t.value === "capture" && <CapturePanel />}
+                    {t.value === "keys" && <KeysPanel settings={settings} />}
                     {t.value === "items" && <ItemsPanel settings={settings} />}
                     {t.value === "appearance" && <AppearancePanel settings={settings} />}
                     {t.value === "data" && <DataPanel settings={settings} />}
@@ -103,11 +105,30 @@ export function SettingsDialog() {
   );
 }
 
-function CapturePanel() {
+const saveCaptureKey = (accelerator: string) => Atlas.setShortcut(accelerator);
+const saveBossKey = (accelerator: string) => Atlas.setBossKey(accelerator);
+
+function KeysPanel({ settings }: { settings: Settings }) {
   return (
     <>
-      <ShortcutSetting />
-      <SettingCard title="其他快捷键">
+      <GroupTitle icon={Globe} title="全局" hint="在任何软件中都能用" />
+      <ShortcutSetting
+        title="快速记录"
+        description="在任何软件中打开快速记录。"
+        value={settings.shortcut}
+        problem={settings.shortcutError}
+        defaultValue={settings.defaultShortcut}
+        save={saveCaptureKey}
+      />
+      <ShortcutSetting
+        title="老板键"
+        description="立刻隐藏 Vibe Atlas 的所有窗口，再按一次主窗口回来；托盘图标不隐藏。默认不设置。"
+        value={settings.bossKey}
+        problem={settings.bossKeyError}
+        save={saveBossKey}
+      />
+      <GroupTitle icon={AppWindow} title="软件内" hint="在 Vibe Atlas 的窗口里" className="mt-3" />
+      <SettingCard title="软件内的快捷键" description="软件内的快捷键不能修改。">
         <div>
           <Button variant="outline" size="sm" onClick={() => openHelp("keys")}>
             <Keyboard />
@@ -176,6 +197,17 @@ function DataPanel({ settings }: { settings: Settings }) {
   );
 }
 
+/** The heading of a group of settings. */
+function GroupTitle({ icon: Icon, title, hint, className }: { icon: LucideIcon; title: string; hint: string; className?: string }) {
+  return (
+    <h3 className={cn("flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground", className)}>
+      <Icon className="size-3.5" />
+      {title}
+      <span className="font-normal opacity-70">{hint}</span>
+    </h3>
+  );
+}
+
 /** The modifiers held in a key event, as key caps. */
 function heldModifiers(e: KeyboardEvent): string[] {
   const mods: string[] = [];
@@ -203,12 +235,26 @@ function KeyCaps({ keys }: { keys: string[] }) {
 }
 
 /**
- * The global shortcut of quick capture, as a field that records the keys
- * pressed. While recording, the shortcut is released, so that pressing the
- * same keys again reaches the page.
+ * A global shortcut, as a field that records the keys pressed. While
+ * recording, the global shortcuts are released, so that pressing the same
+ * keys again reaches the page. value is "" while the shortcut is not set;
+ * with a defaultValue it can be reset, without one cleared.
  */
-function ShortcutSetting() {
-  const settings = useAtlas((s) => s.settings)!;
+function ShortcutSetting({
+  title,
+  description,
+  value,
+  problem,
+  defaultValue,
+  save,
+}: {
+  title: string;
+  description: string;
+  value: string;
+  problem: string;
+  defaultValue?: string;
+  save: (accelerator: string) => Promise<Settings>;
+}) {
   const [recording, setRecording] = useState(false);
   const [held, setHeld] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -248,7 +294,7 @@ function ShortcutSetting() {
       }
       saving = true;
       setRecording(false);
-      Atlas.setShortcut(accelerator).then(
+      save(accelerator).then(
         (s) => {
           useAtlas.setState({ settings: s });
           setError("");
@@ -268,10 +314,10 @@ function ShortcutSetting() {
       window.removeEventListener("blur", onBlur);
       if (!saving) void Atlas.pauseShortcut(false);
     };
-  }, [recording]);
+  }, [recording, save]);
 
-  const reset = () => {
-    Atlas.setShortcut(settings.defaultShortcut).then(
+  const change = (accelerator: string) => {
+    save(accelerator).then(
       (s) => {
         useAtlas.setState({ settings: s });
         setError("");
@@ -281,14 +327,14 @@ function ShortcutSetting() {
     );
   };
 
-  const message = error || settings.shortcutError;
+  const message = error || problem;
   return (
-    <SettingCard title="快速记录快捷键" description="在任何软件中打开快速记录。">
+    <SettingCard title={title} description={description}>
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            aria-label={recording ? "正在录制快捷键，按 Esc 取消" : `快速记录快捷键 ${settings.shortcut}，点击修改`}
+            aria-label={recording ? "正在录制快捷键，按 Esc 取消" : value ? `${title}快捷键 ${value}，点击修改` : `${title}快捷键未设置，点击设置`}
             onClick={() => {
               setError("");
               setHeld([]);
@@ -317,7 +363,7 @@ function ShortcutSetting() {
             ) : (
               <>
                 <Keyboard className="size-4 shrink-0 text-muted-foreground" />
-                <KeyCaps keys={acceleratorKeys(settings.shortcut)} />
+                {value ? <KeyCaps keys={acceleratorKeys(value)} /> : <span className="text-muted-foreground">未设置</span>}
                 {saved ? (
                   <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-done animate-in fade-in-0">
                     <Check className="size-3.5" />
@@ -326,16 +372,22 @@ function ShortcutSetting() {
                 ) : (
                   <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                     <Pencil className="size-3.5" />
-                    修改
+                    {value ? "修改" : "设置"}
                   </span>
                 )}
               </>
             )}
           </button>
-          {!recording && settings.shortcut !== settings.defaultShortcut && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground" title={`恢复为 ${settings.defaultShortcut}`} onClick={reset}>
+          {!recording && defaultValue && value !== defaultValue && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" title={`恢复为 ${defaultValue}`} onClick={() => change(defaultValue)}>
               <RotateCcw />
               恢复默认
+            </Button>
+          )}
+          {!recording && !defaultValue && value && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => change("")}>
+              <X />
+              清除
             </Button>
           )}
         </div>

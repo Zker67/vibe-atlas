@@ -134,7 +134,7 @@ function HelpBody() {
             ))}
           </div>
         </nav>
-        <button type="button" className={cn(NAV_ITEM, "mt-auto")} onClick={() => showSettingsTab("capture")}>
+        <button type="button" className={cn(NAV_ITEM, "mt-auto")} onClick={() => showSettingsTab("keys")}>
           <Settings />
           <span className="flex-1">设置</span>
           <span className="meta-mono opacity-70">Ctrl+,</span>
@@ -169,7 +169,7 @@ function StartSection() {
       </div>
       <ol className="grid grid-cols-2 gap-2.5">
         <Step n={1} title="记录改进点">
-          按 <Accel /> 打开快速记录，输入标题后按 <K>Enter</K>。
+          按 <Accel of="shortcut" /> 打开快速记录，输入标题后按 <K>Enter</K>。
         </Step>
         <Step n={2} title="安排顺序">
           在待办和进行中拖动排序，排在上面的先做；拖到另一条上可以合并。
@@ -190,8 +190,8 @@ function CaptureSection() {
     <Section id="capture" lead="在任何软件中按快捷键，都能打开快速记录窗口。">
       <div className="flex items-center gap-3 rounded-lg bg-card p-3.5 ring-1 ring-foreground/[0.07]">
         <span className="text-muted-foreground">快捷键</span>
-        <Accel />
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => showSettingsTab("capture")}>
+        <Accel of="shortcut" />
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => showSettingsTab("keys")}>
           <Settings />
           修改
         </Button>
@@ -444,10 +444,13 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
 
 function KeysSection() {
   return (
-    <Section id="keys" lead="快速记录的快捷键可以在设置中修改。">
+    <Section id="keys" lead="全局快捷键（快速记录、老板键）可以在设置中修改，软件内的快捷键不能修改。">
       <KeyCard icon={Globe} title="全局" hint="在任何软件中">
         <KeyLine what="打开快速记录">
-          <Accel />
+          <Accel of="shortcut" />
+        </KeyLine>
+        <KeyLine what="老板键：立刻隐藏所有窗口，再按一次主窗口回来">
+          <Accel of="bossKey" />
         </KeyLine>
       </KeyCard>
       {KEY_GROUPS.map((g) => (
@@ -579,10 +582,11 @@ function Combo({ combo }: { combo: string }) {
   );
 }
 
-/** The global shortcut of quick capture, as set now. */
-function Accel() {
-  const shortcut = useAtlas((s) => s.settings?.shortcut);
-  if (!shortcut) return null;
+/** A global shortcut, quick capture's or the boss key, as set now. */
+function Accel({ of }: { of: "shortcut" | "bossKey" }) {
+  const shortcut = useAtlas((s) => s.settings?.[of]);
+  if (shortcut === undefined) return null;
+  if (!shortcut) return <span className="text-xs text-muted-foreground">未设置</span>;
   return (
     <span className="inline-flex items-center gap-1 align-[1px]">
       {acceleratorKeys(shortcut).map((k, i) => (

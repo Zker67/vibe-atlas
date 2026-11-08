@@ -19,7 +19,7 @@
 | 改进点 | `items`、`createItem`、`setItemTitle`、`setItemType`、`setItemModule`、`setItemNote`、`setItemDeeplink`、`setItemStatus`、`reopenItem`、`moveItem`、`mergeItems`、`moveItemToProject`、`deleteItem` | `items` 是项目的全部改进点（含子改进点），前端按 `parentId` 和 `sortOrder` 建树。`moveItem(id, anchorId, place)`：`place` 为 `before` / `after`（放到 anchor 同一层的前后）或 `inside`（成为 anchor 的最后一个子改进点）。`mergeItems(id, targetId)` 在 target 的位置新建父改进点并返回它。`moveItemToProject` 带上子孙；`deleteItem` 让子改进点上移一层 |
 | 复制与链接 | `copyItem`、`openDeeplink`、`openLink` | `copyItem` 复制标题和备注（连同子改进点的清单和备注，不带链接）；`openDeeplink` 在开关打开时，子改进点没有链接就打开最近一层上级的；`file:` 链接打开前先检查文件是否存在 |
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
-| 设置 | `settings`、`setShortcut`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setShareLinks`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；`pauseShortcut` 在录制新快捷键时临时释放全局快捷键 |
+| 设置 | `settings`、`setShortcut`、`setBossKey`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setShareLinks`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；快速记录和老板键不能相同；`setBossKey("")` 清除老板键；`pauseShortcut` 在录制新快捷键时临时释放两个全局快捷键 |
 | 背景与透明度 | `chooseWallpaper`、`clearWallpaper`、`setWallpaperLook`、`setGlass`、`setWindowOpacity`、`previewWindowOpacity` | `chooseWallpaper` 打开系统的选择文件窗口，取消时返回原设置；图片只收 PNG、JPG、WebP、GIF、BMP，最大 20 MB，并按内容校验类型。数值超出范围时由 Go 限制到范围内。`previewWindowOpacity` 只改窗口，不保存 |
 | 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目；小窗会一起传可选的 `note`、`deeplink` |
 
@@ -41,7 +41,7 @@
 | `Module` | `id`、`projectId`、`name`、`sortOrder`、`counts` |
 | `Item` | `id`、`projectId`、`parentId`（`0` 是顶层）、`moduleId`（`0` 是未分类）、`type`（`improve` / `bug` / `feature`）、`status`（`todo` / `doing` / `done`）、`title`、`note`、`deeplink`、`sortOrder`、`createdAt`、`startedAt`、`doneAt`、`updatedAt` |
 | `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done` |
-| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`theme`、`effects`（视觉效果，默认 `false`）、`background`（`grid` / `waves`，默认 `grid`）、`wallpaper`、`glass`、`windowOpacity`（40–100，默认 100）、`shareLinks`（子改进点沿用上级的链接，默认 `true`）、`lookDefaults`、`dataDir`、`currentProjectId` |
+| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`bossKey`（老板键，默认 `""` 即不设置）、`bossKeyError`、`theme`、`effects`（视觉效果，默认 `false`）、`background`（`grid` / `waves`，默认 `grid`）、`wallpaper`、`glass`、`windowOpacity`（40–100，默认 100）、`shareLinks`（子改进点沿用上级的链接，默认 `true`）、`lookDefaults`、`dataDir`、`currentProjectId` |
 | `Wallpaper` | `url`（页面加载图片的地址，没有图片时为空；Windows 上是 `http://wallpaper.localhost/<文件>`，其他平台是 `wallpaper://localhost/<文件>`）、`name`（原文件名）、`look` |
 | `WallpaperLook` | `enabled`（是否显示）、`blur`（0–40 px）、`opacity`（0–100）、`scale`（0 为铺满窗口，否则 20–300 %）、`x`、`y`（0–100 %）；默认显示、不模糊、不透明度 100、铺满、居中 |
 | `Glass` | `blur`（内容面板 0–60 px，框架取它的 60%）、`panel`、`frame`（内容面板和框架的不透明度，0–100）；默认 32 / 90 / 64 |

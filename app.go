@@ -39,8 +39,19 @@ const (
 // page draws (src/components/app/title-bar.tsx) under the window buttons.
 const titleBarHeight = 40
 
+// hotkey is one of the app's global shortcuts. Its fields are guarded by
+// app.mu; app.shortcutM keeps changes to the hotkeys one at a time.
+type hotkey struct {
+	name    string // what it does, in messages: 快速记录, 老板键
+	action  func()
+	accel   string // such as "Ctrl+Alt+Space", or "" while not set
+	active  bool   // registered
+	paused  bool   // released while the user records a shortcut
+	problem string // why it does not work, or ""
+}
+
 // app is the running Vibe Atlas: its windows, its tray icon and its global
-// shortcut.
+// shortcuts.
 type app struct {
 	atlas   *Atlas
 	dataDir string
@@ -53,10 +64,8 @@ type app struct {
 	capture   *mygo.Window
 	quitting  bool
 	shownAt   time.Time // when the capture panel last showed
-	shortcut  string
-	scError   string
-	scActive  bool // the shortcut is registered
-	scPaused  bool // released while the user records another
+	capKey    hotkey    // opens quick capture
+	bossKey   hotkey    // hides every window at once
 	shortcutM sync.Mutex
 }
 
@@ -169,7 +178,8 @@ func (a *app) start() {
 	if !ok || shortcut == "" {
 		shortcut = defaultShortcut
 	}
-	a.registerShortcut(shortcut)
+	boss, _, _ := db.Setting(keyBossKey) // not set out of the box
+	a.registerShortcuts(shortcut, boss)
 
 	if a.smokeReport != "" {
 		go a.smokeTest(main, capture)
@@ -292,6 +302,21 @@ func (a *app) hideCapture() {
 	}
 }
 
+// toggleBoss is what the boss key does: while any window shows, it hides
+// them all at once; otherwise it brings the main window back.
+func (a *app) toggleBoss() {
+	main, capture := a.windows()
+	if main == nil || capture == nil {
+		return
+	}
+	if main.IsVisible() || capture.IsVisible() {
+		capture.Hide()
+		main.Hide()
+		return
+	}
+	a.showMain()
+}
+
 // applyTheme makes every window light, dark or follow the system.
 func applyTheme(t Theme) {
 	switch t {
@@ -304,84 +329,141 @@ func applyTheme(t Theme) {
 	}
 }
 
-// ---- The global shortcut ----
+// ---- The global shortcuts ----
 
-func (a *app) shortcutState() (shortcut, problem string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.shortcut, a.scError
+func busyProblem(accel string) string {
+	return fmt.Sprintf("「%s」已被其他软件占用，请在设置里换一个", accel)
 }
 
-func (a *app) setShortcutState(shortcut string, active bool, problem string) {
+// keyState returns a hotkey's shortcut, "" while not set, and why it does
+// not work.
+func (a *app) keyState(k *hotkey) (accel, problem string) {
 	a.mu.Lock()
-	a.shortcut, a.scActive, a.scError, a.scPaused = shortcut, active, problem, false
+	defer a.mu.Unlock()
+	return k.accel, k.problem
+}
+
+func (a *app) setKeyState(k *hotkey, accel string, active bool, problem string) {
+	a.mu.Lock()
+	k.accel, k.active, k.problem, k.paused = accel, active, problem, false
 	a.mu.Unlock()
 }
 
-// registerShortcut takes the saved shortcut as the app starts.
-func (a *app) registerShortcut(shortcut string) {
+// registerShortcuts takes the saved shortcuts as the app starts; boss is ""
+// while the boss key is not set.
+func (a *app) registerShortcuts(capture, boss string) {
 	a.shortcutM.Lock()
 	defer a.shortcutM.Unlock()
-	if err := mygo.GlobalShortcut.Register(shortcut, a.toggleCapture); err != nil {
-		log.Printf("shortcut %s: %v", shortcut, err)
-		a.setShortcutState(shortcut, false, fmt.Sprintf("「%s」已被其他软件占用，请在设置里换一个", shortcut))
-		return
-	}
-	a.setShortcutState(shortcut, true, "")
+	a.mu.Lock()
+	a.capKey = hotkey{name: "快速记录", action: a.toggleCapture}
+	a.bossKey = hotkey{name: "老板键", action: a.toggleBoss}
+	a.mu.Unlock()
+	a.takeKey(&a.capKey, capture)
+	a.takeKey(&a.bossKey, boss)
 }
 
-// changeShortcut swaps the shortcut for another, keeping the old one when
-// the new one cannot be registered.
-func (a *app) changeShortcut(shortcut string) (string, error) {
-	shortcut, err := cleanShortcut(shortcut)
+// takeKey registers accel for k, or leaves k without a shortcut when accel
+// is "". The caller holds shortcutM.
+func (a *app) takeKey(k *hotkey, accel string) {
+	if accel == "" {
+		a.setKeyState(k, "", false, "")
+		return
+	}
+	if err := mygo.GlobalShortcut.Register(accel, k.action); err != nil {
+		log.Printf("shortcut %s: %v", accel, err)
+		a.setKeyState(k, accel, false, busyProblem(accel))
+		return
+	}
+	a.setKeyState(k, accel, true, "")
+}
+
+// changeShortcut swaps k's shortcut for another, keeping the old one when
+// the new one cannot be registered. It must differ from other's.
+func (a *app) changeShortcut(k, other *hotkey, accel string) (string, error) {
+	accel, err := cleanShortcut(accel)
 	if err != nil {
 		return "", err
 	}
 	a.shortcutM.Lock()
 	defer a.shortcutM.Unlock()
+	defer a.resumeKey(other) // recording a shortcut released both
 	a.mu.Lock()
-	old, active := a.shortcut, a.scActive
+	old, active := k.accel, k.active
+	otherAccel, otherName := other.accel, other.name
 	a.mu.Unlock()
-	if active && strings.EqualFold(old, shortcut) {
-		return shortcut, nil
+	if otherAccel != "" && strings.EqualFold(otherAccel, accel) {
+		return "", fmt.Errorf("「%s」已经是%s的快捷键，换一个", accel, otherName)
+	}
+	if active && strings.EqualFold(old, accel) {
+		return accel, nil
 	}
 	if active {
 		mygo.GlobalShortcut.Unregister(old)
 	}
-	if err := mygo.GlobalShortcut.Register(shortcut, a.toggleCapture); err != nil {
-		log.Printf("shortcut %s: %v", shortcut, err)
-		restored := old != "" && mygo.GlobalShortcut.Register(old, a.toggleCapture) == nil
+	if err := mygo.GlobalShortcut.Register(accel, k.action); err != nil {
+		log.Printf("shortcut %s: %v", accel, err)
+		restored := old != "" && mygo.GlobalShortcut.Register(old, k.action) == nil
 		problem := ""
-		if !restored {
-			problem = fmt.Sprintf("「%s」已被其他软件占用，请在设置里换一个", old)
+		if old != "" && !restored {
+			problem = busyProblem(old)
 		}
-		a.setShortcutState(old, restored, problem)
-		return "", fmt.Errorf("「%s」用不了，可能已被其他软件占用，换一个试试", shortcut)
+		a.setKeyState(k, old, restored, problem)
+		return "", fmt.Errorf("「%s」用不了，可能已被其他软件占用，换一个试试", accel)
 	}
-	a.setShortcutState(shortcut, true, "")
-	return shortcut, nil
+	a.setKeyState(k, accel, true, "")
+	return accel, nil
 }
 
-// pauseShortcut releases the shortcut while the user records a new one,
-// and takes it back.
-func (a *app) pauseShortcut(paused bool) {
+// clearShortcut leaves k without a shortcut.
+func (a *app) clearShortcut(k, other *hotkey) {
 	a.shortcutM.Lock()
 	defer a.shortcutM.Unlock()
 	a.mu.Lock()
-	shortcut, active, wasPaused := a.shortcut, a.scActive, a.scPaused
+	accel, active := k.accel, k.active
 	a.mu.Unlock()
-	switch {
-	case paused && active:
-		mygo.GlobalShortcut.Unregister(shortcut)
-		a.mu.Lock()
-		a.scActive, a.scPaused = false, true
-		a.mu.Unlock()
-	case !paused && wasPaused:
-		if err := mygo.GlobalShortcut.Register(shortcut, a.toggleCapture); err != nil {
-			a.setShortcutState(shortcut, false, fmt.Sprintf("「%s」已被其他软件占用，请在设置里换一个", shortcut))
-			return
+	if active {
+		mygo.GlobalShortcut.Unregister(accel)
+	}
+	a.setKeyState(k, "", false, "")
+	a.resumeKey(other)
+}
+
+// pauseShortcuts releases every global shortcut while the user records a
+// new one, and takes them back.
+func (a *app) pauseShortcuts(paused bool) {
+	a.shortcutM.Lock()
+	defer a.shortcutM.Unlock()
+	for _, k := range []*hotkey{&a.capKey, &a.bossKey} {
+		if paused {
+			a.pauseKey(k)
+		} else {
+			a.resumeKey(k)
 		}
-		a.setShortcutState(shortcut, true, "")
+	}
+}
+
+// pauseKey releases k's shortcut. The caller holds shortcutM.
+func (a *app) pauseKey(k *hotkey) {
+	a.mu.Lock()
+	accel, active := k.accel, k.active
+	a.mu.Unlock()
+	if !active {
+		return
+	}
+	mygo.GlobalShortcut.Unregister(accel)
+	a.mu.Lock()
+	k.active, k.paused = false, true
+	a.mu.Unlock()
+}
+
+// resumeKey takes back k's shortcut when it was paused. The caller holds
+// shortcutM.
+func (a *app) resumeKey(k *hotkey) {
+	a.mu.Lock()
+	accel, paused := k.accel, k.paused
+	a.mu.Unlock()
+	if paused {
+		a.takeKey(k, accel)
 	}
 }
 

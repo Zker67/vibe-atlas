@@ -207,6 +207,13 @@ export interface Settings {
   defaultShortcut: string;
   /** ShortcutError says why Shortcut does not work, or "". */
   shortcutError: string;
+  /**
+   * BossKey is the global shortcut that hides every window at once and
+   * brings the main window back, or "" while not set (out of the box).
+   */
+  bossKey: string;
+  /** BossKeyError says why BossKey does not work, or "". */
+  bossKeyError: string;
   theme: Theme;
   /**
    * Effects turns on the effects that cost the GPU in the main window: the
@@ -409,9 +416,9 @@ export const Atlas = {
     return call("Atlas.Overview", projectID);
   },
   /**
-   * PauseShortcut releases the global shortcut while the user records a new
-   * one, so that pressing it reaches the page, and takes it back when paused
-   * is false.
+   * PauseShortcut releases the global shortcuts, quick capture's and the boss
+   * key, while the user records a new one, so that pressing either reaches
+   * the page, and takes them back when paused is false.
    */
   pauseShortcut(paused: boolean): Promise<void> {
     return call("Atlas.PauseShortcut", paused);
@@ -453,6 +460,15 @@ export const Atlas = {
   /** SetBackground picks the moving background the effects show. */
   setBackground(bg: Background): Promise<Settings> {
     return call("Atlas.SetBackground", bg);
+  },
+  /**
+   * SetBossKey changes the boss key, the global shortcut that hides every
+   * window at once and brings the main window back; "" clears it. It must
+   * differ from the shortcut of quick capture. When the new one cannot be
+   * registered, the old one stays.
+   */
+  setBossKey(shortcut: string): Promise<Settings> {
+    return call("Atlas.SetBossKey", shortcut);
   },
   /**
    * SetCurrentProject records the project open in the main window, which
@@ -514,8 +530,9 @@ export const Atlas = {
     return call("Atlas.SetShareLinks", on);
   },
   /**
-   * SetShortcut changes the global shortcut of quick capture. When the new
-   * one cannot be registered, the old one stays.
+   * SetShortcut changes the global shortcut of quick capture. It must differ
+   * from the boss key. When the new one cannot be registered, the old one
+   * stays.
    */
   setShortcut(shortcut: string): Promise<Settings> {
     return call("Atlas.SetShortcut", shortcut);

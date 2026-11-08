@@ -1023,7 +1023,7 @@ export function statusActions(item: Item): StatusAction[] {
     case "done":
       return reopenStatus(item) === "doing"
         ? [
-            { label: "重新打开，回到进行中", status: "doing", icon: RotateCcw, shortcut: "Space", reopen: true },
+            { label: "重新打开", status: "doing", icon: RotateCcw, shortcut: "Space", reopen: true },
             { label: "改为待办", status: "todo", icon: Pause, shortcut: "" },
           ]
         : [
