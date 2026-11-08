@@ -248,3 +248,95 @@ func TestCleanImages(t *testing.T) {
 		t.Errorf("left %q, want %q", got, want)
 	}
 }
+
+func TestFetchImage(t *testing.T) {
+	pic := pngBytes(t, 90)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/pic.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(pic)
+		case "/big":
+			_, _ = w.Write(make([]byte, maxImageBytes+10))
+		case "/slow":
+			time.Sleep(300 * time.Millisecond)
+			_, _ = w.Write(pic)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	got, err := fetchImage(srv.URL+"/pic.png", time.Second)
+	if err != nil || !bytes.Equal(got, pic) {
+		t.Fatalf("web picture: %v, %d bytes", err, len(got))
+	}
+	dataDir := t.TempDir()
+	name, err := saveImage(dataDir, got)
+	if err != nil || !imageFile.MatchString(name) {
+		t.Fatalf("saving the downloaded picture: %q, %v", name, err)
+	}
+
+	if _, err := fetchImage(srv.URL+"/missing.png", time.Second); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Errorf("a missing picture: %v", err)
+	}
+	if _, err := fetchImage(srv.URL+"/slow", 50*time.Millisecond); err == nil {
+		t.Error("a download past its time was taken")
+	}
+	big, err := fetchImage(srv.URL+"/big", 5*time.Second)
+	if err != nil || len(big) != maxImageBytes+1 {
+		t.Fatalf("a large download read %d bytes, %v; want the limit and one more", len(big), err)
+	}
+	if _, err := saveImage(dataDir, big); err == nil {
+		t.Error("a picture past the limit was saved")
+	}
+
+	// A file on this machine, by a file: link with a space in its path.
+	dir := filepath.Join(t.TempDir(), "带 空格")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "clip_image001.png")
+	if err := os.WriteFile(path, pic, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := "file:///" + strings.ReplaceAll(filepath.ToSlash(path), " ", "%20")
+	if got, err := fetchImage(link, time.Second); err != nil || !bytes.Equal(got, pic) {
+		t.Fatalf("local picture %s: %v", link, err)
+	}
+	if _, err := fetchImage("file:///"+filepath.ToSlash(filepath.Join(dir, "none.png")), time.Second); err == nil {
+		t.Error("a missing local file was read")
+	}
+
+	for _, src := range []string{"blob:https://x/1", "javascript:alert(1)", "data:image/png;base64,AAAA", ""} {
+		if _, err := fetchImage(src, time.Second); err == nil {
+			t.Errorf("%q was taken", src)
+		}
+	}
+}
+
+func TestSaveImageFiles(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.png")
+	b := filepath.Join(dir, "b.png")
+	notPic := filepath.Join(dir, "readme.png")
+	for path, data := range map[string][]byte{a: pngBytes(t, 1), b: pngBytes(t, 2), notPic: []byte("not a picture")} {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dataDir := t.TempDir()
+	names, err := saveImageFiles(dataDir, []string{a, notPic, b})
+	if err != nil || len(names) != 2 || names[0] == names[1] {
+		t.Fatalf("names %v, %v; want the two pictures, in order", names, err)
+	}
+	if got := imageFiles(t, dataDir); len(got) != 2 {
+		t.Errorf("saved %v", got)
+	}
+	if names, err := saveImageFiles(dataDir, nil); err != nil || len(names) != 0 {
+		t.Errorf("nothing chosen: %v, %v", names, err)
+	}
+	if _, err := saveImageFiles(dataDir, []string{notPic, filepath.Join(dir, "none.png")}); err == nil || !strings.Contains(err.Error(), "readme.png") {
+		t.Errorf("none could be kept: %v", err)
+	}
+}

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArrowRightLeft, CircleDashed, Copy, Folder, ListChecks, Shapes, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, CircleDashed, Copy, Folder, ListChecks, Shapes, X } from "lucide-react";
 import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { STATUSES, statusInfo, TYPES, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ import {
   toggleSelected,
   useAtlas,
 } from "@/state/atlas";
+import { DeleteButton } from "./delete-button";
 import { IconButton } from "./icon-button";
 import { Prop, QUIET_TRIGGER, StatusPicker } from "./item-detail";
 import { TypeChip, TypeIcon } from "./item-marks";
@@ -68,9 +69,7 @@ export function SelectionDetail() {
               <Copy />
             </IconButton>
             <MoveMenu ids={ids} />
-            <IconButton label="删除" shortcut="Delete" className="hover:text-destructive" onClick={() => confirmDeleteItems(ids)}>
-              <Trash2 />
-            </IconButton>
+            <DeleteButton onDelete={(purge) => confirmDeleteItems(ids, purge)} />
             <span aria-hidden className="mx-1 h-4 w-px bg-border" />
             <IconButton label="取消选择" shortcut="Esc" onClick={() => select(0)}>
               <X />

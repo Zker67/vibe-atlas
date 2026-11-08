@@ -24,7 +24,7 @@
 | 项目文件树 / 资源管理器 | 不做 | 和 AI 上下文一起放弃，编辑器自带的就够用 |
 | 识别当前编辑器窗口，自动跟随当前项目 | 暂不做 | 用户：目前让人手动切换 |
 | 识别正在交互的 AI 工具，自动标记会话是否完成 | 不做 | 状态由人自己打勾 |
-| agent 集成：Claude Code hooks、MCP server、CLI | 暂不做 | 用户：agent 暂不考虑 |
+| agent 集成：Claude Code hooks、MCP server、CLI | 暂不做 | 用户：agent 暂不考虑。例外（用户 2026-11-08 明确要求）：只读本机的 Claude Code / Codex / codeg 会话供「选择会话」，以及点开 Claude Code 会话链接时运行一次 `claude --desktop --resume`，见 [本机会话计划](../../plans/2026-11-08-local-sessions/00-overview.md) |
 | 会话编排、分线程、git worktree 管理 | 不做 | 一次只发一条，由人决定 |
 | 定时给特定应用发送提示词 | 不做 | 由人主动发送 |
 | 完整的预制提示词管理：标签、变量、给 AI 读、定时发送 | 不做 | 和 AI、自动发送绑在一起。轻量的「提示词片段」作为候选留在 backlog |

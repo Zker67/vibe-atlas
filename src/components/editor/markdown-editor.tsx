@@ -3,14 +3,18 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { EditorState } from "@codemirror/state";
+import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
+import { Compartment, EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { cn } from "@/lib/utils";
 import { toggleInline, toggleLink } from "./format";
 import { formatToolbar } from "./format-toolbar";
+import { autopair } from "./autopair";
 import { images } from "./images";
+import { type ImmersiveOptions, immersiveExtensions } from "./immersive";
 import { linkAt, livePreview } from "./live-preview";
+import { slashMenu } from "./slash";
 
 /** Colors of code in fenced blocks, from the theme tokens. */
 const codeColors = HighlightStyle.define([
@@ -22,6 +26,27 @@ const codeColors = HighlightStyle.define([
   { tag: [tags.typeName, tags.className, tags.tagName], color: "var(--bug)" },
   { tag: [tags.attributeName, tags.propertyName], color: "var(--improve)" },
 ]);
+
+/** The words of the find and replace panel. */
+const searchPhrases = EditorState.phrases.of({
+  Find: "查找",
+  Replace: "替换为",
+  next: "下一个",
+  previous: "上一个",
+  all: "全选",
+  "match case": "区分大小写",
+  "by word": "全字匹配",
+  regexp: "正则",
+  replace: "替换",
+  "replace all": "全部替换",
+  close: "关闭",
+  "current match": "当前匹配",
+  "replaced $ matches": "替换了 $ 处",
+  "replaced match on line $": "替换了第 $ 行的匹配",
+  "on line": "在第几行",
+  "Go to line": "跳到行",
+  go: "跳转",
+});
 
 const formatting = keymap.of([
   { key: "Mod-b", run: toggleInline("strong") },
@@ -41,17 +66,35 @@ interface MarkdownEditorProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  /** In the immersive dialog: folding, and focus mode and typewriter scrolling when on. */
+  immersive?: ImmersiveOptions;
+  /** Told the editor's state as it starts and whenever its text or selection changes. */
+  onState?(state: EditorState): void;
+  /** Given the editor once it is made, and null as it goes. */
+  onView?(view: EditorView | null): void;
 }
 
 /**
  * A Markdown editor with live preview. It owns its text once mounted: give
  * it a key to start over with another document.
  */
-export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholder, autoFocus, className }: MarkdownEditorProps) {
+export function MarkdownEditor({
+  value,
+  onChange,
+  onBlur,
+  onOpenLink,
+  placeholder,
+  autoFocus,
+  className,
+  immersive,
+  onState,
+  onView,
+}: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onBlur, onOpenLink });
-  callbacks.current = { onChange, onBlur, onOpenLink };
+  const callbacks = useRef({ onChange, onBlur, onOpenLink, onState, onView });
+  callbacks.current = { onChange, onBlur, onOpenLink, onState, onView };
+  const immersiveSlot = useRef(new Compartment());
 
   useEffect(() => {
     const view = new EditorView({
@@ -68,11 +111,18 @@ export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholde
           images,
           formatToolbar,
           placeholderText(placeholder ?? ""),
+          slashMenu,
+          autopair,
+          search({ top: true }),
+          searchPhrases,
           formatting,
+          keymap.of([{ key: "Mod-h", run: openSearchPanel }, ...searchKeymap]),
+          immersiveSlot.current.of(immersive ? immersiveExtensions(immersive) : []),
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           EditorView.contentAttributes.of({ spellcheck: "false" }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) callbacks.current.onChange(u.state.doc.toString());
+            if (u.docChanged || u.selectionSet) callbacks.current.onState?.(u.state);
             if (u.focusChanged && !u.view.hasFocus) callbacks.current.onBlur?.();
           }),
           EditorView.domEventHandlers({
@@ -95,14 +145,26 @@ export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholde
       }),
     });
     viewRef.current = view;
+    callbacks.current.onView?.(view);
+    callbacks.current.onState?.(view.state);
     if (autoFocus) view.focus();
     return () => {
       viewRef.current = null;
+      callbacks.current.onView?.(null);
       view.destroy();
     };
     // The editor keeps its own text: it starts once, from the first value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The immersive options change while the editor stays.
+  const focus = immersive?.focus;
+  const typewriter = immersive?.typewriter;
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || focus === undefined || typewriter === undefined) return;
+    view.dispatch({ effects: immersiveSlot.current.reconfigure(immersiveExtensions({ focus, typewriter })) });
+  }, [focus, typewriter]);
 
   // A click in the box around the text, below or beside it, starts typing
   // at the end, as in a text field.

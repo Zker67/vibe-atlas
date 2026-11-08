@@ -5,12 +5,13 @@
 // on it as its Markdown with the pictures under it, so nothing jumps.
 
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Range, StateEffect, StateField, type Transaction } from "@codemirror/state";
+import { type EditorState, type Range, StateEffect, StateField, type Text, type Transaction } from "@codemirror/state";
 import { Decoration, type DecorationSet, dropCursor, EditorView, WidgetType } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/api";
 import { Atlas } from "@/mygo";
+import { hasPictures, htmlToMarkdown, placeholderPattern } from "./paste-html";
 
 const maxBytes = 20 << 20;
 const types = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"]);
@@ -283,7 +284,14 @@ async function insertPictures(view: EditorView, files: File[], at: { from: numbe
     }
   }
   if (names.length === 0 || !view.dom.isConnected) return;
+  placePictures(view, names, at, before);
+}
 
+/**
+ * Puts saved pictures, side by side, on a line of their own at from–to, or
+ * at the selection; there too when the text changed since before.
+ */
+function placePictures(view: EditorView, names: string[], at: { from: number; to: number } | null, before: Text) {
   const { state } = view;
   const main = state.selection.main;
   // Typed on meanwhile: the pictures go where the cursor is now.
@@ -308,12 +316,93 @@ async function insertPictures(view: EditorView, files: File[], at: { from: numbe
   view.focus();
 }
 
+/** Asks for pictures on this machine and puts them in at the cursor, on a line of their own. */
+export async function choosePictures(view: EditorView) {
+  const before = view.state.doc;
+  const at = view.state.selection.main.head;
+  let names: string[];
+  try {
+    names = await Atlas.chooseImages();
+  } catch (e) {
+    toast.error(errorMessage(e));
+    return;
+  }
+  if (names.length === 0 || !view.dom.isConnected) return;
+  placePictures(view, names, { from: at, to: at }, before);
+}
+
+/** Saves the picture a pasted source refers to, or file, the picture itself: its name, or "" when it could not be. */
+async function saveSource(src: string, file: File | undefined): Promise<string> {
+  try {
+    if (file) return await Atlas.saveImage(await toBase64(file));
+    const inline = /^data:image\/[\w.+-]+;base64,([\s\S]*)$/i.exec(src);
+    if (inline) return await Atlas.saveImage(inline[1]!.replace(/\s+/g, ""));
+    if (/^(https?|file):/i.test(src)) return await Atlas.saveImageFrom(src);
+  } catch {
+    // Told of below, with the others.
+  }
+  return "";
+}
+
+/**
+ * Pastes content copied with pictures in it, as Markdown: the pictures are
+ * saved and put where they were. A picture that could not be saved stays a
+ * link to where it came from, when that is on the web.
+ */
+async function pasteHtml(view: EditorView, html: string, files: File[]) {
+  const before = view.state.doc;
+  const { from, to } = view.state.selection.main;
+  const { markdown, sources } = htmlToMarkdown(html);
+  // A picture copied from a browser or Word comes as its file too: the surest copy of it.
+  const file = sources.length === 1 && files.length === 1 ? files[0] : undefined;
+  let loading: string | number | undefined;
+  const slow = window.setTimeout(() => (loading = toast.loading("正在保存粘贴的图片…")), 400);
+  const names = await Promise.all(sources.map((src) => saveSource(src, file)));
+  window.clearTimeout(slow);
+  if (loading !== undefined) toast.dismiss(loading);
+  if (!view.dom.isConnected) return;
+
+  let kept = 0;
+  const failed = names.filter((n) => !n).length;
+  if (!markdown.replace(placeholderPattern, "").trim()) {
+    // Only pictures: on a line of their own, as pictures pasted alone.
+    const saved = names.filter(Boolean);
+    if (saved.length > 0) placePictures(view, saved, { from, to }, before);
+  } else {
+    const text = markdown.replace(placeholderPattern, (_, i: string) => {
+      const name = names[Number(i)];
+      if (name) return `![](image:${name})`;
+      const src = sources[Number(i)]!;
+      if (!/^https?:/i.test(src)) return "";
+      kept++;
+      return `![](${src.replace(/[()\s]/g, (c) => encodeURIComponent(c))})`;
+    });
+    const range = view.state.doc === before ? { from, to } : view.state.selection.main;
+    view.dispatch({
+      changes: { from: range.from, to: range.to, insert: text },
+      selection: { anchor: range.from + text.length },
+      scrollIntoView: true,
+      userEvent: "input.paste",
+    });
+    view.focus();
+  }
+  if (failed > 0) toast.error(`有 ${failed} 张图片没能保存${kept > 0 ? "，保留了它们原来的链接" : ""}`);
+}
+
 const handlers = EditorView.domEventHandlers({
   paste(e, view) {
     const data = e.clipboardData;
-    const files = imageFiles(data?.files);
+    if (!data) return false;
+    const files = imageFiles(data.files);
+    // Content with pictures in it, as Markdown; into a code block, as text.
+    const html = data.getData("text/html");
+    if (html && hasPictures(html) && !inCode(view.state, view.state.selection.main.from)) {
+      e.preventDefault();
+      void pasteHtml(view, html, files);
+      return true;
+    }
     // Copied from a document, text comes with a picture of it: the text wins.
-    if (files.length === 0 || data!.getData("text/plain").trim()) return false;
+    if (files.length === 0 || data.getData("text/plain").trim()) return false;
     e.preventDefault();
     void insertPictures(view, files, null);
     return true;

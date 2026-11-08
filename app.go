@@ -109,6 +109,9 @@ func (a *app) start() {
 	if err := mygo.Protocol.HandleFunc(imageScheme, a.serveImage); err != nil {
 		log.Println("image scheme:", err)
 	}
+	// The old trash first: the pictures only its notes held go with the
+	// cleanup after it.
+	a.atlas.purgeTrashLater(db)
 	a.cleanImagesLater(db)
 
 	throttling := mygo.ThrottlingOn

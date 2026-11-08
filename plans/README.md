@@ -57,7 +57,11 @@ plans/
 | [2026-11-07-queue-keyboard](./2026-11-07-queue-keyboard/00-overview.md) | 队列键盘操作：`Tab` / `Shift+Tab` 改层级，`Enter` 行内改名，`Shift+Enter` 连续新建同级改进点；拖到侧栏模块改模块 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-shared-links](./2026-11-07-shared-links/00-overview.md) | 子改进点没有自己的链接时沿用最近一层上级的链接，设置里可以关闭；复制不带链接 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-boss-key](./2026-11-07-boss-key/00-overview.md) | 老板键（全局快捷键，隐藏所有窗口 / 带回主窗口，默认不设置）；设置的快捷键页分全局和软件内 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-immersive-editor](./2026-11-08-immersive-editor/00-overview.md) | 沉浸式编辑升级（状态栏、铺满窗口、专注、打字机、行宽字号、大纲、折叠、顶栏改标题和切换条目）；所有编辑器加斜杠命令、查找替换、自动配对 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-rich-paste](./2026-11-08-rich-paste/00-overview.md) | 备注粘贴图文混排的内容：HTML 转 Markdown，图片保存到本地（内嵌、网络、本机文件） | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-multi-select](./2026-11-08-multi-select/00-overview.md) | 队列多选：`Ctrl` / `Shift` 点选、`Shift+↑ ↓`、`Ctrl+A`、空白处框选；批量改状态 / 类型 / 模块、复制、移动、删除；整组一起拖动；详情面板显示「已选 N 条」 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-markdown-plus](./2026-11-08-markdown-plus/00-overview.md) | Markdown 编辑器：划词浮出格式工具栏；备注里贴 / 拖图片（存进数据目录 `images/`，同一行并排，大图预览可缩放拖动切换），复制给 AI 时换成本机路径，没人引用的图片自动清理 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-trash](./2026-11-08-trash/00-overview.md) | 回收站：删除先进回收站（不确认，提示里可以撤销，`Ctrl+Z`），按住 `Shift` 彻底删除（按钮和菜单跟着变）；侧栏打开所有项目的回收站，恢复回到原处、子改进点放回；默认保留 30 天 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-local-sessions](./2026-11-08-local-sessions/00-overview.md) | 设置里三选一会话来源（Claude Code / Codex / codeg），读本机会话快速选择填入链接；会话链接显示成 agent 图标 + 会话名 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

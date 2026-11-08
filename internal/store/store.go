@@ -122,7 +122,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -177,6 +177,38 @@ CREATE INDEX items_by_parent ON items (parent_id);`,
 	2: `
 ALTER TABLE items ADD COLUMN done_with INTEGER REFERENCES items (id) ON DELETE SET NULL;
 CREATE INDEX items_by_done_with ON items (done_with);`,
+	// The trash: items deleted the soft way, as they were, with where they
+	// sat (parent_id, its created_at to tell it from a later item of the
+	// same id, and place among its siblings), the children that moved up
+	// (lifted) and the items it had carried to done (carried), both JSON
+	// lists of {"id", "created"}. Entries deleted together share a batch.
+	3: `
+CREATE TABLE trash (
+	id             INTEGER PRIMARY KEY,
+	batch          INTEGER NOT NULL,
+	deleted_at     INTEGER NOT NULL,
+	item_id        INTEGER NOT NULL,
+	project_id     INTEGER NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+	parent_id      INTEGER,
+	parent_created INTEGER,
+	place          INTEGER NOT NULL,
+	module_id      INTEGER,
+	type           TEXT    NOT NULL,
+	status         TEXT    NOT NULL,
+	title          TEXT    NOT NULL,
+	note           TEXT    NOT NULL,
+	deeplink       TEXT    NOT NULL,
+	auto_title     INTEGER NOT NULL,
+	created_at     INTEGER NOT NULL,
+	started_at     INTEGER,
+	done_at        INTEGER,
+	done_with      INTEGER,
+	updated_at     INTEGER NOT NULL,
+	lifted         TEXT    NOT NULL DEFAULT '[]',
+	carried        TEXT    NOT NULL DEFAULT '[]'
+);
+CREATE INDEX trash_by_batch ON trash (batch);
+CREATE INDEX trash_by_project ON trash (project_id);`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction

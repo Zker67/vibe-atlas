@@ -11,6 +11,7 @@ import {
   type Place,
   type Project,
   type Settings,
+  type TrashEntry,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import {
@@ -26,7 +27,8 @@ import {
   type TreeNode,
 } from "@/lib/tree";
 
-export type View = "queue" | "overview";
+/** What the panel shows: the open project's queue or overview, or the trash of every project. */
+export type View = "queue" | "overview" | "trash";
 export type TypeFilter = ItemType | "all";
 /** A module's id, 0 for the items without a module, or all. */
 export type ModuleFilter = number | "all";
@@ -65,6 +67,10 @@ interface AtlasState {
   collapsed: ReadonlySet<number>;
   /** The item whose detail should open its field that adds a child, once; 0 for none. */
   newChildFor: number;
+  /** How many items the trash holds, of every project. */
+  trashCount: number;
+  /** What the trash holds, the last deleted first; fetched while it shows. */
+  trash: TrashEntry[];
 }
 
 const COLLAPSED_KEY = "vibe-atlas-collapsed";
@@ -115,6 +121,8 @@ export const useAtlas = create<AtlasState>(() => ({
   focusNewItem: 0,
   collapsed: loadCollapsed(),
   newChildFor: 0,
+  trashCount: 0,
+  trash: [],
 }));
 
 const get = useAtlas.getState;
@@ -192,7 +200,11 @@ export function refresh(): Promise<void> {
 
 async function load() {
   const requested = get().projectId;
-  const projects = await Atlas.projects();
+  const [projects, trashCount, trash] = await Promise.all([
+    Atlas.projects(),
+    Atlas.trashCount(),
+    get().view === "trash" ? Atlas.trash() : null,
+  ]);
   const projectId = projects.some((p) => p.id === requested) ? requested : (projects[0]?.id ?? 0);
   let modules: Module[] = [];
   let items: Item[] = [];
@@ -204,7 +216,7 @@ async function load() {
   if (get().projectId !== requested) {
     // The user opened another project meanwhile: fetch that one.
     again = true;
-    set({ projects });
+    set({ projects, trashCount, ...(trash ? { trash } : {}) });
     return;
   }
   const present = new Set(items.map((i) => i.id));
@@ -212,6 +224,8 @@ async function load() {
     ready: true,
     loadError: "",
     projects,
+    trashCount,
+    ...(trash ? { trash } : {}),
     projectId,
     modules,
     items,
@@ -249,6 +263,7 @@ export async function init() {
 // ---- Navigation ----
 
 export function openProject(id: number) {
+  leaveTrash();
   if (id === get().projectId) return;
   set({ projectId: id, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [] });
   void Atlas.setCurrentProject(id);
@@ -257,7 +272,12 @@ export function openProject(id: number) {
 
 export function setView(view: View) {
   set({ view });
-  if (view === "overview") void refresh();
+  if (view === "overview" || view === "trash") void refresh();
+}
+
+/** Back to the project's queue from the trash, as picking a project or module in the sidebar does. */
+function leaveTrash() {
+  if (get().view === "trash") set({ view: "queue" });
 }
 
 /** Selects the item alone, or nothing for 0. */
@@ -342,6 +362,7 @@ export function setStatusFilter(statusFilter: StatusFilter) {
 }
 
 export function setModuleFilter(moduleFilter: ModuleFilter) {
+  leaveTrash();
   set({ moduleFilter });
 }
 
@@ -922,13 +943,107 @@ export async function moveItemsToProject(ids: number[], projectId: number) {
   toast.success(`已把 ${top.length} 条移到「${name}」${under > 0 ? `，子改进点 ${under} 条一起` : ""}`);
 }
 
-/** Deletes the items ids; their children not deleted move up. */
+/** Deletes the items ids for good, past the trash; their children not deleted move up. */
 export async function deleteItems(ids: number[]) {
   if (await runOk(Atlas.deleteItems(ids))) {
     const gone = new Set(ids);
     set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
     void refresh();
   }
+}
+
+// ---- Trash ----
+
+/** The deletion Ctrl+Z undoes: the batch the trash took last, 0 for none. */
+let lastBatch = 0;
+
+/**
+ * Moves the items ids to the trash, in the queue's order, with nothing to
+ * confirm: their children not deleted move up, and a toast offers to undo.
+ */
+export async function trashItems(ids: number[]) {
+  const list = inQueueOrder(get().items, ids);
+  if (list.length === 0) return;
+  const title = list.length === 1 ? get().items.find((i) => i.id === list[0])?.title : undefined;
+  const batch = await run(Atlas.trashItems(list));
+  if (batch === undefined) return;
+  lastBatch = batch;
+  const gone = new Set(list);
+  set((s) => ({
+    items: s.items.filter((i) => !gone.has(i.id)),
+    ...keepSelected(s, (v) => !gone.has(v)),
+    trashCount: s.trashCount + list.length,
+  }));
+  // Its children moved up into its place.
+  void refresh();
+  toast(title ? `「${clip(title)}」已移到回收站` : `已把 ${list.length} 条移到回收站`, {
+    id: "trashed",
+    action: { label: "撤销", onClick: () => void restoreBatch(batch) },
+  });
+}
+
+/** Ctrl+Z: puts back what the last deletion moved to the trash; false when there is none to undo. */
+export function undoTrash(): boolean {
+  if (!lastBatch) return false;
+  void restoreBatch(lastBatch);
+  return true;
+}
+
+/** Puts back the items deleted together in batch, where they were, and selects them. */
+async function restoreBatch(batch: number) {
+  if (batch === lastBatch) lastBatch = 0;
+  toast.dismiss("trashed");
+  const items = await run(Atlas.restoreBatch(batch));
+  if (!items?.length) return;
+  await refresh();
+  const here = items.filter((i) => i.projectId === get().projectId).map((i) => i.id);
+  if (here.length && get().view === "queue") setSelection(here, here.at(-1)!, here[0]);
+  toast.success(items.length === 1 ? "已撤销删除" : `已撤销删除，${items.length} 条已放回原处`);
+}
+
+/** Restores the trash entries ids, then offers to show them in their project. */
+export async function restoreTrash(ids: number[]) {
+  const items = await run(Atlas.restoreTrash(ids));
+  if (!items?.length) return;
+  const gone = new Set(ids);
+  set((s) => ({ trash: s.trash.filter((e) => !gone.has(e.id)), trashCount: Math.max(0, s.trashCount - ids.length) }));
+  void refresh();
+  const first = items[0]!;
+  const name = get().projects.find((p) => p.id === first.projectId)?.name;
+  const where = items.every((i) => i.projectId === first.projectId) && name ? `「${name}」` : "原来的项目";
+  toast.success(items.length === 1 ? `「${clip(first.title)}」已恢复到${where}` : `已把 ${items.length} 条恢复到${where}`, {
+    action: { label: "查看", onClick: () => void showRestored(first) },
+  });
+}
+
+/** Opens the project of an item put back, and shows it in the queue. */
+async function showRestored(item: Item) {
+  openProject(item.projectId);
+  set({ view: "queue" });
+  await refresh();
+  const it = get().items.find((i) => i.id === item.id);
+  if (it) showItem(it);
+}
+
+/** Deletes the trash entries ids for good. */
+export async function purgeTrash(ids: number[]) {
+  if (!(await runOk(Atlas.purgeTrash(ids)))) return;
+  const gone = new Set(ids);
+  set((s) => ({ trash: s.trash.filter((e) => !gone.has(e.id)), trashCount: Math.max(0, s.trashCount - ids.length) }));
+  toast.success(ids.length === 1 ? "已彻底删除" : `已彻底删除 ${ids.length} 条`);
+}
+
+/** Deletes everything in the trash for good. */
+export async function emptyTrash() {
+  const n = await run(Atlas.emptyTrash());
+  if (n === undefined) return;
+  set({ trash: [], trashCount: 0 });
+  toast.success(`回收站已清空，彻底删除了 ${n} 条`);
+}
+
+/** A title short enough for a toast. */
+function clip(title: string): string {
+  return title.length > 24 ? title.slice(0, 24) + "…" : title;
 }
 
 /** Copies the items ids, in the queue's order; those under another of them come with it. */

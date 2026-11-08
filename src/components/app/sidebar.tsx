@@ -24,6 +24,7 @@ import {
   renameModule,
   renameProject,
   setModuleFilter,
+  setView,
   useAtlas,
   type ModuleFilter,
 } from "@/state/atlas";
@@ -61,10 +62,32 @@ export function Sidebar() {
       <Projects />
       <Modules />
       <div className="mt-auto flex shrink-0 flex-col gap-0.5 border-t p-2">
+        <TrashButton />
         <FooterButton icon={BookOpen} label="使用说明" shortcut="F1" onClick={() => openHelp()} />
         <FooterButton icon={Settings} label="设置" shortcut="Ctrl+," onClick={() => openSettings()} />
       </div>
     </aside>
+  );
+}
+
+/** 回收站: opens the trash in the panel, or goes back to the queue; its icon bounces as items come in. */
+function TrashButton() {
+  const count = useAtlas((s) => s.trashCount);
+  const active = useAtlas((s) => s.view === "trash");
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={() => setView(active ? "queue" : "trash")}
+      className={cn(
+        "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
+        active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+      )}
+    >
+      <Trash2 key={count} className={cn("size-4 shrink-0", count > 0 && "animate-in duration-300 zoom-in-50")} />
+      <span className="flex-1">回收站</span>
+      {count > 0 && <span className="meta-mono opacity-70">{count}</span>}
+    </button>
   );
 }
 

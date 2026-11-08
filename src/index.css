@@ -533,22 +533,80 @@ html.dragging-rows * {
   padding-left: 0.75rem !important;
   color: var(--muted-foreground);
 }
+/* A code block: a framed card, its fences a bar with the language and 复制
+   while the cursor is out of it (live-preview.ts). Borders are shadows, so
+   that no line grows as the fences show. */
 .cm-md-fence {
   font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: var(--muted);
-  padding: 0 0.6rem !important;
+  font-size: 0.85em;
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+  box-shadow:
+    inset 1px 0 0 var(--border),
+    inset -1px 0 0 var(--border);
+  padding: 0 0.85rem !important;
 }
 .cm-md-fence-first {
-  border-top-left-radius: 0.375rem;
-  border-top-right-radius: 0.375rem;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  box-shadow:
+    inset 1px 0 0 var(--border),
+    inset -1px 0 0 var(--border),
+    inset 0 1px 0 var(--border);
 }
 .cm-md-fence-last {
-  border-bottom-left-radius: 0.375rem;
-  border-bottom-right-radius: 0.375rem;
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+  box-shadow:
+    inset 1px 0 0 var(--border),
+    inset -1px 0 0 var(--border),
+    inset 0 -1px 0 var(--border);
+}
+.cm-md-fence-first.cm-md-fence-last {
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 .cm-md-fence-edge {
   color: var(--muted-foreground);
+}
+/* The bar of a code block: a header strip, set off from the code. */
+.cm-md-fence-first:has(.cm-md-fence-bar) {
+  background: color-mix(in oklch, var(--foreground) 7%, transparent);
+  box-shadow:
+    inset 1px 0 0 var(--border),
+    inset -1px 0 0 var(--border),
+    inset 0 1px 0 var(--border),
+    inset 0 -1px 0 var(--border);
+}
+.cm-md-fence-bar {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  vertical-align: middle;
+}
+.cm-md-fence-lang {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+}
+.cm-md-fence-copy {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 0 0.4rem;
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+.cm-md-fence-copy:hover {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+.cm-md-fence-copy[data-copied] {
+  color: var(--done);
 }
 .cm-md-bullet {
   display: inline-block;
@@ -685,6 +743,199 @@ html.dragging-rows * {
   bottom: auto;
   transform-origin: top left;
   animation-name: format-pop-below;
+}
+
+/* The slash menu (slash.tsx), under the slash: a card like the toolbar's. */
+.cm-tooltip.cm-slash-menu {
+  border: none;
+  background: transparent;
+  z-index: 60;
+}
+.slash-menu {
+  max-height: 19rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+  box-shadow: var(--glass-shadow), 0 12px 32px -14px oklch(0 0 0 / 30%);
+  backdrop-filter: blur(16px) saturate(1.4);
+  transform-origin: top left;
+  animation: format-pop-below 220ms var(--spring-pop);
+}
+.cm-tooltip-above .slash-menu {
+  transform-origin: bottom left;
+  animation-name: format-pop;
+}
+
+/*
+ * Find and replace (@codemirror/search), drawn as the app's own: a bar at
+ * the top of the editor with its fields and buttons. The selectors outdo
+ * CodeMirror's own theme.
+ */
+.cm-editor .cm-panels.cm-panels-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border-bottom: none;
+  background: transparent;
+  color: var(--foreground);
+}
+.cm-editor .cm-panels .cm-panel.cm-search {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 2.25rem 0.5rem 0.5rem;
+  border-radius: 0.625rem;
+  background: var(--popover);
+  box-shadow: var(--glass-shadow), 0 10px 28px -16px oklch(0 0 0 / 35%);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  animation: format-pop-below 200ms var(--spring-pop);
+}
+/* The fields and buttons wrap as the width allows. */
+.cm-editor .cm-search br {
+  display: none;
+}
+.cm-editor .cm-search .cm-textfield {
+  height: 1.75rem;
+  min-width: 10rem;
+  flex: 1 1 10rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.cm-editor .cm-search .cm-textfield:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 30%, transparent);
+}
+.cm-editor .cm-search .cm-button {
+  height: 1.75rem;
+  margin: 0;
+  padding: 0 0.625rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: var(--muted);
+  background-image: none;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+.cm-editor .cm-search .cm-button:hover {
+  background: color-mix(in oklch, var(--foreground) 12%, transparent);
+}
+.cm-editor .cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.cm-editor .cm-search input[type="checkbox"] {
+  accent-color: var(--improve);
+  margin: 0;
+}
+.cm-editor .cm-search button[name="close"] {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.cm-editor .cm-search button[name="close"]:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.cm-editor .cm-searchMatch {
+  background: color-mix(in oklch, var(--doing) 28%, transparent);
+  border-radius: 2px;
+  outline: none;
+}
+.cm-editor .cm-searchMatch-selected {
+  background: color-mix(in oklch, var(--doing) 60%, transparent);
+}
+
+/*
+ * The immersive dialog's editor (immersive.ts): its own size of text,
+ * folding chevrons beside the headings, focus mode dimming the other
+ * paragraphs, and room under the text for typewriter scrolling.
+ */
+.immersive-editor .cm-editor {
+  font-size: var(--immersive-font, 15px);
+}
+.cm-immersive .cm-gutters {
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.cm-immersive .cm-foldGutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  padding-right: 0.25rem;
+  cursor: pointer;
+}
+.cm-fold-chevron {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 200ms var(--spring-pop), background-color 150ms ease;
+}
+.cm-fold-chevron > svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.cm-immersive:hover .cm-fold-chevron {
+  opacity: 0.55;
+}
+.cm-fold-chevron:hover {
+  opacity: 1 !important;
+  background: var(--muted);
+  color: var(--foreground);
+}
+.cm-fold-chevron-closed {
+  opacity: 0.8;
+  transform: rotate(-90deg);
+}
+.cm-immersive .cm-foldPlaceholder {
+  margin: 0 0.25rem;
+  padding: 0 0.4rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75em;
+  cursor: pointer;
+}
+.cm-immersive .cm-line {
+  transition: opacity 220ms ease;
+}
+.cm-immersive .cm-dimmed {
+  opacity: 0.3;
+}
+.cm-typewriter .cm-content {
+  padding-bottom: 45vh !important;
 }
 
 /*

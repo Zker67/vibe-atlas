@@ -1,12 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Boxes, Check, ChevronsUpDown, FolderKanban, Inbox, Link2, Plus, Search, type LucideIcon } from "lucide-react";
-import { Atlas, events, type ItemType, type Module, type Project } from "@/mygo";
+import { Atlas, events, type ItemType, type Module, type Project, type Source } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { nextType, typeInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/ui/kbd";
 import { TypeChip } from "@/components/app/item-marks";
+import { AgentIcon } from "@/components/app/agent-icon";
+import { SessionPicker } from "@/components/app/session-picker";
+import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
 
 // The notes' editor loads once the panel is up, so that it never delays
 // the field taking the first keys.
@@ -20,7 +23,7 @@ function step<T>(list: T[], current: T, delta: number): T {
   return list[(Math.max(at, 0) + delta + list.length) % list.length]!;
 }
 
-type Picking = "project" | "module" | null;
+type Picking = "project" | "module" | "session" | null;
 
 /** What the panel says for a moment after an item is saved. */
 interface Flash {
@@ -50,6 +53,11 @@ export function CaptureApp() {
   const [link, setLink] = useState("");
   const [details, setDetails] = useState(false);
   const [picking, setPicking] = useState<Picking>(null);
+  // Where sessions to link are read from, as the settings say; "" for none.
+  const [sessionSource, setSessionSource] = useState<Source>("");
+  const linkSession = useSessionLook(link);
+  const [linkFocused, setLinkFocused] = useState(false);
+  const linkInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState<Flash | null>(null);
   const savedCount = useRef(0);
@@ -77,6 +85,7 @@ export function CaptureApp() {
     void (async () => {
       try {
         const settings = await Atlas.settings();
+        setSessionSource(settings.sessionSource);
         await loadProjects(settings.currentProjectId);
       } catch (e) {
         setError(errorMessage(e));
@@ -103,12 +112,14 @@ export function CaptureApp() {
       input.current?.focus();
     });
     const offChanged = events.changed.on(() => void loadProjects().catch(() => {}));
+    const offSettings = events.settingsChanged.on((s) => setSessionSource(s.sessionSource));
     const onFocus = () => input.current?.focus();
     window.addEventListener("focus", onFocus);
     const prefetch = window.setTimeout(() => void loadEditor().catch(() => {}), 1000);
     return () => {
       offShown();
       offChanged();
+      offSettings();
       window.removeEventListener("focus", onFocus);
       window.clearTimeout(prefetch);
     };
@@ -162,7 +173,7 @@ export function CaptureApp() {
     setPicking(null);
     focusTitle();
   };
-  const togglePicker = (kind: "project" | "module") => {
+  const togglePicker = (kind: Exclude<Picking, null>) => {
     setError("");
     if (picking === kind) closePicker();
     else setPicking(kind);
@@ -292,6 +303,12 @@ export function CaptureApp() {
   // Ctrl+P and Ctrl+M open the lists from anywhere in the panel.
   const onPanelKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (isComposing(e) || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    if (e.code === "KeyL" && sessionSource) {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePicker("session");
+      return;
+    }
     if (e.code !== "KeyP" && e.code !== "KeyM") return;
     e.preventDefault();
     e.stopPropagation();
@@ -391,6 +408,23 @@ export function CaptureApp() {
         />
       )}
 
+      {picking === "session" && sessionSource && (
+        <SessionPicker
+          key="session"
+          source={sessionSource}
+          folder={project?.folderPath ?? ""}
+          className="border-t animate-in duration-100 fade-in-0"
+          onPick={(s) => {
+            rememberSession(s);
+            setLink(s.link);
+            setError("");
+            setDetails(true);
+            closePicker();
+          }}
+          onClose={closePicker}
+        />
+      )}
+
       {details && (
         <div
           ref={detailsBox}
@@ -409,25 +443,52 @@ export function CaptureApp() {
             />
           </Suspense>
           <label className="flex h-10 items-center gap-2 border-t border-dashed px-4 text-muted-foreground">
-            <Link2 className="size-3.5 shrink-0" />
-            <input
-              data-capture-link=""
-              value={link}
-              spellCheck={false}
-              aria-label="deeplink"
-              placeholder="deeplink（可选）：AI 对话、文件或网页的链接"
-              className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
-              onChange={(e) => {
-                setLink(e.target.value);
-                setError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !isComposing(e)) {
-                  e.preventDefault();
-                  void submit();
-                }
-              }}
-            />
+            {linkSession ? <AgentIcon agent={linkSession.agent} /> : <Link2 className="size-3.5 shrink-0" />}
+            <span className="relative flex h-full min-w-0 flex-1">
+              <input
+                ref={linkInput}
+                data-capture-link=""
+                value={link}
+                spellCheck={false}
+                aria-label="deeplink"
+                placeholder="deeplink（可选）：AI 对话、文件或网页的链接"
+                className={cn(
+                  "h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60",
+                  linkSession && !linkFocused && "text-transparent",
+                )}
+                onFocus={() => setLinkFocused(true)}
+                onBlur={() => setLinkFocused(false)}
+                onChange={(e) => {
+                  setLink(e.target.value);
+                  setError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isComposing(e)) {
+                    e.preventDefault();
+                    void submit();
+                  }
+                }}
+              />
+              {/* A link to a session shows its name; the link itself shows while it is edited. */}
+              {linkSession && !linkFocused && (
+                <span className="pointer-events-none absolute inset-0 flex items-center truncate text-sm text-foreground">
+                  {sessionLabel(linkSession)}
+                </span>
+              )}
+            </span>
+            {sessionSource && (
+              <button
+                type="button"
+                tabIndex={-1}
+                title="选择会话（Ctrl+L）"
+                onMouseDown={keepFocus}
+                onClick={() => togglePicker("session")}
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-100 hover:bg-muted hover:text-foreground"
+              >
+                <AgentIcon agent={sessionSource} className="size-3" />
+                选择会话
+              </button>
+            )}
           </label>
         </div>
       )}

@@ -192,10 +192,38 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	pasted, err := a.smokePaste(main)
+	report["paste"] = pasted
+	if err != nil {
+		finish(err, "paste into a note")
+		return
+	}
+
+	immersive, err := a.smokeImmersive(main)
+	report["immersive"] = immersive
+	if err != nil {
+		finish(err, "immersive editing")
+		return
+	}
+
+	linked, err := a.smokeSessions(main)
+	report["sessions"] = linked
+	if err != nil {
+		finish(err, "pick a session")
+		return
+	}
+
 	selected, err := a.smokeSelect(main)
 	report["select"] = selected
 	if err != nil {
 		finish(err, "select several")
+		return
+	}
+
+	trashed, err := a.smokeTrash(main)
+	report["trash"] = trashed
+	if err != nil {
+		finish(err, "trash")
 		return
 	}
 	finish(nil, "")

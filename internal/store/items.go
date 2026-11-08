@@ -156,6 +156,14 @@ func checkModule(tx *sql.Tx, projectID, moduleID int64) error {
 	return nil
 }
 
+// newItemID returns the id of a new item: past every item and every item
+// in the trash, so an item restored from the trash gets its id back.
+func newItemID(tx *sql.Tx) (int64, error) {
+	var id int64
+	err := tx.QueryRow(`SELECT MAX(COALESCE((SELECT MAX(id) FROM items), 0), COALESCE((SELECT MAX(item_id) FROM trash), 0)) + 1`).Scan(&id)
+	return id, err
+}
+
 func nextItemOrder(tx *sql.Tx, projectID int64) (int64, error) {
 	var n int64
 	err := tx.QueryRow(`SELECT COALESCE(MAX(sort_order), 0) + 1 FROM items WHERE project_id = ?`, projectID).Scan(&n)
@@ -213,12 +221,12 @@ func (s *Store) CreateItem(in NewItem) (Item, error) {
 			return err
 		}
 		now := s.millis()
-		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, note, deeplink, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?)`, in.ProjectID, nullable(in.ParentID), nullable(in.ModuleID), in.Type, title, in.Note, link, order, now, now)
+		id, err := newItemID(tx)
 		if err != nil {
 			return err
 		}
-		id, err := res.LastInsertId()
+		_, err = tx.Exec(`INSERT INTO items (id, project_id, parent_id, module_id, type, status, title, note, deeplink, sort_order, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?)`, id, in.ProjectID, nullable(in.ParentID), nullable(in.ModuleID), in.Type, title, in.Note, link, order, now, now)
 		if err != nil {
 			return err
 		}
@@ -573,14 +581,14 @@ func (s *Store) MergeItems(id, targetID int64) (Item, error) {
 		if it.Status == StatusDone && target.Status == StatusDone {
 			status, doneAt = StatusDone, now
 		}
-		res, err := tx.Exec(`INSERT INTO items (project_id, parent_id, module_id, type, status, title, auto_title, sort_order, created_at, done_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`,
-			target.ProjectID, nullable(target.ParentID), nullable(target.ModuleID), target.Type, status,
-			autoTitle(target.Title, 2), now, nullable(doneAt), now)
+		pid, err := newItemID(tx)
 		if err != nil {
 			return err
 		}
-		pid, err := res.LastInsertId()
+		_, err = tx.Exec(`INSERT INTO items (id, project_id, parent_id, module_id, type, status, title, auto_title, sort_order, created_at, done_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`,
+			pid, target.ProjectID, nullable(target.ParentID), nullable(target.ModuleID), target.Type, status,
+			autoTitle(target.Title, 2), now, nullable(doneAt), now)
 		if err != nil {
 			return err
 		}

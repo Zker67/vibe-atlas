@@ -19,9 +19,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { Atlas, type Settings, type Theme } from "@/mygo";
+import { Atlas, type Settings, type Source, type Theme } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
+import { SOURCE_NAMES } from "@/lib/session-link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
+import { AgentIcon } from "./agent-icon";
 import { LookSettings } from "./look-settings";
 import { SettingCard } from "./setting-card";
 import { NAV_ITEM, NavColumn, NavIndicator } from "./side-nav";
@@ -65,7 +67,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、外观（主题、背景、毛玻璃、透明度）和数据位置</DialogDescription>
+              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -140,19 +142,58 @@ function KeysPanel({ settings }: { settings: Settings }) {
   );
 }
 
+const SESSION_SOURCES: { value: Source; label: string }[] = [
+  { value: "", label: "不使用" },
+  { value: "claude", label: SOURCE_NAMES.claude },
+  { value: "codex", label: SOURCE_NAMES.codex },
+  { value: "codeg", label: SOURCE_NAMES.codeg },
+];
+
 function ItemsPanel({ settings }: { settings: Settings }) {
   return (
-    <SettingCard
-      title="子改进点沿用上级的链接"
-      description="子改进点没有自己的链接时，打开最近一层有链接的上级的链接。关闭后每条只打开自己的链接。"
-      action={
-        <Switch
-          aria-label="子改进点沿用上级的链接"
-          checked={settings.shareLinks}
-          onCheckedChange={(on) => void run(Atlas.setShareLinks(on)).then((s) => s && useAtlas.setState({ settings: s }))}
-        />
-      }
-    />
+    <>
+      <SettingCard
+        title="子改进点沿用上级的链接"
+        description="子改进点没有自己的链接时，打开最近一层有链接的上级的链接。关闭后每条只打开自己的链接。"
+        action={
+          <Switch
+            aria-label="子改进点沿用上级的链接"
+            checked={settings.shareLinks}
+            onCheckedChange={(on) => void run(Atlas.setShareLinks(on)).then((s) => s && useAtlas.setState({ settings: s }))}
+          />
+        }
+      />
+      <SettingCard
+        title="会话来源"
+        description={
+          <>
+            选一个之后，链接旁边多出「选择会话」，列出这个软件在本机的会话（只读，不会改动它们），选中就填进链接；会话链接显示成图标和会话名。一次只读一个来源。
+            <br />
+            Claude Code 的会话由本软件运行 claude --desktop --resume 在 Claude 桌面版里打开。
+          </>
+        }
+      >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={settings.sessionSource || "none"}
+          onValueChange={(v) => {
+            if (!v) return;
+            const src = (v === "none" ? "" : v) as Source;
+            void run(Atlas.setSessionSource(src)).then((s) => s && useAtlas.setState({ settings: s }));
+          }}
+        >
+          {SESSION_SOURCES.map((o) => (
+            <ToggleGroupItem key={o.value || "none"} value={o.value || "none"}>
+              {o.value && <AgentIcon agent={o.value} />}
+              {o.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </SettingCard>
+    </>
   );
 }
 
@@ -183,17 +224,47 @@ function AppearancePanel({ settings }: { settings: Settings }) {
   );
 }
 
+const TRASH_DAYS: { value: number; label: string }[] = [
+  { value: 7, label: "7 天" },
+  { value: 30, label: "30 天" },
+  { value: 90, label: "90 天" },
+  { value: 0, label: "一直保留" },
+];
+
 function DataPanel({ settings }: { settings: Settings }) {
   return (
-    <SettingCard title="数据文件夹">
-      <p className="selectable rounded-md bg-muted px-2.5 py-2 font-mono text-xs break-all">{settings.dataDir}</p>
-      <div>
-        <Button variant="outline" size="sm" onClick={() => void runOk(Atlas.openDataFolder())}>
-          <FolderOpen />
-          打开数据文件夹
-        </Button>
-      </div>
-    </SettingCard>
+    <>
+      <SettingCard title="数据文件夹">
+        <p className="selectable rounded-md bg-muted px-2.5 py-2 font-mono text-xs break-all">{settings.dataDir}</p>
+        <div>
+          <Button variant="outline" size="sm" onClick={() => void runOk(Atlas.openDataFolder())}>
+            <FolderOpen />
+            打开数据文件夹
+          </Button>
+        </div>
+      </SettingCard>
+      <SettingCard
+        title="回收站保留多久"
+        description="删除的改进点先进回收站，超过这个天数后自动彻底删除。改短以后，已经超过的会立刻删除。选「一直保留」时，只有手动彻底删除或清空回收站才会删除。"
+      >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={String(settings.trashDays)}
+          onValueChange={(v) => {
+            if (v) void run(Atlas.setTrashDays(Number(v))).then((s) => s && useAtlas.setState({ settings: s }));
+          }}
+        >
+          {TRASH_DAYS.map((o) => (
+            <ToggleGroupItem key={o.value} value={String(o.value)}>
+              {o.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </SettingCard>
+    </>
   );
 }
 

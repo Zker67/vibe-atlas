@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -194,6 +197,114 @@ func (a *app) serveImage(w http.ResponseWriter, r *http.Request) {
 // picture saved twice is kept once.
 func (a *Atlas) SaveImage(data []byte) (string, error) {
 	return saveImage(a.app.dataDir, data)
+}
+
+// SaveImageFrom keeps a picture that pasted content refers to, a web
+// address (http or https) or a file on this machine (file:), and returns
+// its name, as SaveImage.
+func (a *Atlas) SaveImageFrom(src string) (string, error) {
+	data, err := fetchImage(src, imageFetchTimeout)
+	if err != nil {
+		return "", err
+	}
+	return saveImage(a.app.dataDir, data)
+}
+
+// imageFetchTimeout is how long downloading a pasted picture may take.
+const imageFetchTimeout = 15 * time.Second
+
+// fetchImage reads the picture at src: downloads it from the web, or reads
+// it from this machine. It reads at most one byte more than a picture may
+// have, which saveImage then refuses.
+func fetchImage(src string, timeout time.Duration) ([]byte, error) {
+	u, err := url.Parse(strings.TrimSpace(src))
+	if err != nil {
+		return nil, errors.New("图片地址不对")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, errors.New("图片地址不对")
+		}
+		// Some hosts of pictures turn away clients that do not look like a browser.
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VibeAtlas")
+		req.Header.Set("Accept", "image/*")
+		resp, err := (&http.Client{Timeout: timeout}).Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("下载不了图片：%w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("下载不了图片（%d）", resp.StatusCode)
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+		if err != nil {
+			return nil, fmt.Errorf("下载不了图片：%w", err)
+		}
+		return data, nil
+	case "file":
+		path, ok := store.LocalPath(u.String())
+		if !ok {
+			return nil, errors.New("图片地址不对")
+		}
+		return readImageFile(path)
+	}
+	return nil, errors.New("只能保存网络上或本机的图片")
+}
+
+// readImageFile reads a picture on this machine, at most one byte more
+// than a picture may have, which saveImage then refuses.
+func readImageFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("读不了图片 %s", path)
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxImageBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("读不了图片 %s", path)
+	}
+	return data, nil
+}
+
+// ChooseImages asks for pictures on this machine to put in a note, and
+// keeps them as SaveImage does: their names, none when the user cancels.
+// Pictures that cannot be kept are left out; when none can, it says why.
+func (a *Atlas) ChooseImages(ctx context.Context) ([]string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Parent:      mygo.CallerWindow(ctx),
+		Title:       "插入图片",
+		ButtonLabel: "插入",
+		Multiple:    true,
+		Filters:     []mygo.FileFilter{{Name: "图片", Extensions: []string{"png", "jpg", "jpeg", "webp", "gif", "bmp"}}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("打不开选择图片的窗口：%w", err)
+	}
+	return saveImageFiles(a.app.dataDir, paths)
+}
+
+// saveImageFiles keeps the pictures at paths, in order.
+func saveImageFiles(dataDir string, paths []string) ([]string, error) {
+	names := []string{}
+	var problems []string
+	for _, path := range paths {
+		data, err := readImageFile(path)
+		name := ""
+		if err == nil {
+			name, err = saveImage(dataDir, data)
+		}
+		if err != nil {
+			problems = append(problems, filepath.Base(path)+"："+err.Error())
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 && len(problems) > 0 {
+		return nil, errors.New(strings.Join(problems, "；"))
+	}
+	return names, nil
 }
 
 // ImageBase is where the pages load the pictures of the notes from: the

@@ -196,6 +196,28 @@ export interface Project {
   counts: Counts;
 }
 
+/** Session is one conversation with an agent. */
+export interface Session {
+  /**
+   * Agent is the agent it talks to, which picks its icon: "claude",
+   * "codex", "gemini", or the name codeg gives another agent.
+   */
+  agent: string;
+  /**
+   * ID is the session's ID in its source: the conversation number in
+   * codeg, the session or thread ID in Claude Code and Codex.
+   */
+  id: string;
+  /** Title is the session's name, or its first message when unnamed. */
+  title: string;
+  /** Cwd is the folder the session works in, or "" when unknown. */
+  cwd: string;
+  /** UpdatedAt is when it last changed, in milliseconds. */
+  updatedAt: number;
+  /** Link is the link that opens it (see Link). */
+  link: string;
+}
+
 /** Settings are the user's preferences. */
 export interface Settings {
   /**
@@ -238,6 +260,18 @@ export interface Settings {
    * the nearest item above it that has one. On by default.
    */
   shareLinks: boolean;
+  /**
+   * SessionSource is where the sessions to link items to are read from:
+   * Claude Code, Codex or codeg, one of them; "" (out of the box) for
+   * none.
+   */
+  sessionSource: Source;
+  /**
+   * TrashDays is how many days items stay in the trash before they are
+   * deleted for good, or 0 to keep them until the user empties it. 30 out
+   * of the box.
+   */
+  trashDays: number;
   /** LookDefaults are the looks the app has out of the box. */
   lookDefaults: LookDefaults;
   /** DataDir is the folder of the database. */
@@ -246,8 +280,30 @@ export interface Settings {
   currentProjectId: number;
 }
 
+/** Source is where sessions are read from: one at a time, as the user set. */
+export type Source = "" | "claude" | "codex" | "codeg";
+
 /** Theme is the appearance the user chose. */
 export type Theme = "system" | "light" | "dark";
+
+/** TrashEntry is an item in the trash, as it was when it was deleted. */
+export interface TrashEntry {
+  /** ID is the entry's, which RestoreTrash and PurgeTrash take. */
+  id: number;
+  /**
+   * Batch is shared by the entries deleted together, which RestoreBatch
+   * brings back at once.
+   */
+  batch: number;
+  deletedAt: number;
+  /**
+   * Item is the item as it was: its id, which it gets back, and its
+   * parent then.
+   */
+  item: Item;
+  /** Lifted is how many of its children moved up a level when it went. */
+  lifted: number;
+}
 
 /** TypeStats counts the items of a kind. */
 export interface TypeStats {
@@ -294,6 +350,14 @@ export const Atlas = {
    */
   captureItem(item: NewItem): Promise<Item> {
     return call("Atlas.CaptureItem", item);
+  },
+  /**
+   * ChooseImages asks for pictures on this machine to put in a note, and
+   * keeps them as SaveImage does: their names, none when the user cancels.
+   * Pictures that cannot be kept are left out; when none can, it says why.
+   */
+  chooseImages(): Promise<string[]> {
+    return call("Atlas.ChooseImages");
   },
   /**
    * ChooseProjectFolder asks for a folder and binds the project to it. It
@@ -343,14 +407,17 @@ export const Atlas = {
   createProject(name: string): Promise<Project> {
     return call("Atlas.CreateProject", name);
   },
-  /** DeleteItem deletes an item. Its children move up a level, into its place. */
+  /**
+   * DeleteItem deletes an item for good, past the trash. Its children move
+   * up a level, into its place.
+   */
   deleteItem(id: number): Promise<void> {
     return call("Atlas.DeleteItem", id);
   },
   /**
-   * DeleteItems deletes the items ids, all at once: when one fails, none is
-   * deleted. Children not deleted move up into the place of the nearest
-   * item above them that stays.
+   * DeleteItems deletes the items ids for good, past the trash, all at
+   * once: when one fails, none is deleted. Children not deleted move up into
+   * the place of the nearest item above them that stays.
    */
   deleteItems(ids: number[]): Promise<void> {
     return call("Atlas.DeleteItems", ids);
@@ -365,6 +432,13 @@ export const Atlas = {
   /** DeleteProject deletes a project with its modules and items. */
   deleteProject(id: number): Promise<void> {
     return call("Atlas.DeleteProject", id);
+  },
+  /**
+   * EmptyTrash deletes everything in the trash for good and returns how many
+   * items there were.
+   */
+  emptyTrash(): Promise<number> {
+    return call("Atlas.EmptyTrash");
   },
   /** HideCapture hides the quick capture panel. */
   hideCapture(): Promise<void> {
@@ -383,6 +457,14 @@ export const Atlas = {
    */
   items(projectID: number): Promise<Item[]> {
     return call("Atlas.Items", projectID);
+  },
+  /**
+   * ListSessions lists the sessions of the source the user set, the newest
+   * first: those that work in folder or a folder inside it, or all of them
+   * when all is set or folder is "". None while no source is set.
+   */
+  listSessions(folder: string, all: boolean): Promise<Session[]> {
+    return call("Atlas.ListSessions", folder, all);
   },
   /**
    * MergeItems puts the item id and the item targetID under a new parent in
@@ -469,6 +551,10 @@ export const Atlas = {
   projects(): Promise<Project[]> {
     return call("Atlas.Projects");
   },
+  /** PurgeTrash deletes the trash entries ids for good. */
+  purgeTrash(ids: number[]): Promise<void> {
+    return call("Atlas.PurgeTrash", ids);
+  },
   /** RenameModule renames a module. */
   renameModule(id: number, name: string): Promise<Module> {
     return call("Atlas.RenameModule", id, name);
@@ -493,12 +579,43 @@ export const Atlas = {
     return call("Atlas.ReorderProjects", ids);
   },
   /**
+   * RestoreBatch puts back the items TrashItems moved to the trash together,
+   * as RestoreTrash does: what undoing a deletion does.
+   */
+  restoreBatch(batch: number): Promise<Item[]> {
+    return call("Atlas.RestoreBatch", batch);
+  },
+  /**
+   * RestoreTrash puts the items of the trash entries ids back where they
+   * were, with the children that moved up when they went, all at once: when
+   * one fails, none comes back. Without its parent, an item goes to the end
+   * of its project's top level; without its module, it is 未分类.
+   */
+  restoreTrash(ids: number[]): Promise<Item[]> {
+    return call("Atlas.RestoreTrash", ids);
+  },
+  /**
    * SaveImage keeps a picture pasted or dropped in a note and returns its
    * name, which the note refers to it by: ![](image:<name>). The same
    * picture saved twice is kept once.
    */
   saveImage(data: string): Promise<string> {
     return call("Atlas.SaveImage", data);
+  },
+  /**
+   * SaveImageFrom keeps a picture that pasted content refers to, a web
+   * address (http or https) or a file on this machine (file:), and returns
+   * its name, as SaveImage.
+   */
+  saveImageFrom(src: string): Promise<string> {
+    return call("Atlas.SaveImageFrom", src);
+  },
+  /**
+   * SessionsOf finds the sessions links open, by link, to show their names:
+   * only those of the source the user set.
+   */
+  sessionsOf(links: string[]): Promise<Record<string, Session>> {
+    return call("Atlas.SessionsOf", links);
   },
   /** SetBackground picks the moving background the effects show. */
   setBackground(bg: Background): Promise<Settings> {
@@ -580,6 +697,13 @@ export const Atlas = {
     return call("Atlas.SetProjectDescription", id, description);
   },
   /**
+   * SetSessionSource picks where the sessions to link items to are read
+   * from: "claude", "codex" or "codeg"; "" for none.
+   */
+  setSessionSource(src: Source): Promise<Settings> {
+    return call("Atlas.SetSessionSource", src);
+  },
+  /**
    * SetShareLinks turns on or off sub-items opening the link of the item
    * above them when they have none of their own.
    */
@@ -597,6 +721,14 @@ export const Atlas = {
   /** SetTheme changes the appearance of every window. */
   setTheme(theme: Theme): Promise<Settings> {
     return call("Atlas.SetTheme", theme);
+  },
+  /**
+   * SetTrashDays changes how many days items stay in the trash before they
+   * are deleted for good: 7, 30 or 90, or 0 to keep them until the user
+   * empties it. Those in the trash longer go at once.
+   */
+  setTrashDays(days: number): Promise<Settings> {
+    return call("Atlas.SetTrashDays", days);
   },
   /**
    * SetWallpaperLook changes how the picture behind the main window shows.
@@ -622,6 +754,26 @@ export const Atlas = {
    */
   showMain(): Promise<void> {
     return call("Atlas.ShowMain");
+  },
+  /**
+   * Trash returns the items in the trash of every project, the last deleted
+   * first.
+   */
+  trash(): Promise<TrashEntry[]> {
+    return call("Atlas.Trash");
+  },
+  /** TrashCount returns how many items the trash holds. */
+  trashCount(): Promise<number> {
+    return call("Atlas.TrashCount");
+  },
+  /**
+   * TrashItems moves the items ids to the trash, in their order, all at
+   * once: when one fails, none moves. Each one's children not trashed move
+   * up a level, into its place, as with DeleteItems. It returns the batch,
+   * which RestoreBatch takes to undo it.
+   */
+  trashItems(ids: number[]): Promise<number> {
+    return call("Atlas.TrashItems", ids);
   },
 } as const;
 

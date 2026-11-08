@@ -36,6 +36,68 @@ class RuleWidget extends WidgetType {
   }
 }
 
+/** Copies text from a click, falling back on the old way where the page may not use the clipboard. */
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+    document.body.append(field);
+    field.select();
+    document.execCommand("copy");
+    field.remove();
+  }
+}
+
+/**
+ * The bar a code block shows instead of its opening fence: its language and
+ * a button that copies the code.
+ */
+class CodeHeaderWidget extends WidgetType {
+  constructor(
+    readonly lang: string,
+    readonly code: string,
+  ) {
+    super();
+  }
+  eq(other: CodeHeaderWidget) {
+    return other.lang === this.lang && other.code === this.code;
+  }
+  toDOM() {
+    const bar = document.createElement("span");
+    bar.className = "cm-md-fence-bar";
+    const lang = document.createElement("span");
+    lang.className = "cm-md-fence-lang";
+    lang.textContent = this.lang || "代码";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "cm-md-fence-copy";
+    copy.textContent = "复制";
+    copy.setAttribute("aria-label", "复制代码");
+    let timer = 0;
+    // Clicking the button neither moves the cursor nor takes the focus.
+    copy.addEventListener("mousedown", (e) => e.preventDefault());
+    copy.addEventListener("click", () => {
+      void copyText(this.code).then(() => {
+        copy.textContent = "已复制";
+        copy.dataset.copied = "";
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          copy.textContent = "复制";
+          delete copy.dataset.copied;
+        }, 1500);
+      });
+    });
+    bar.append(lang, copy);
+    return bar;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 /** A task's box, which a click checks or unchecks in the text. */
 class TaskWidget extends WidgetType {
   constructor(readonly checked: boolean) {
@@ -203,11 +265,23 @@ function build(view: EditorView): DecorationSet {
           const first = doc.lineAt(ref.from);
           const last = doc.lineAt(ref.to);
           const closed = last.number > first.number && /^\s*(`{3,}|~{3,})/.test(last.text);
+          // While the cursor is out of the block, its fences give way to a
+          // bar and an empty line; each keeps a line's height, so that
+          // nothing jumps as the cursor comes in.
+          const rendered = !isActive(ref.from, ref.to);
           for (let n = first.number; n <= last.number; n++) {
             let cls = "cm-md-fence";
             if (n === first.number) cls += " cm-md-fence-first cm-md-fence-edge";
             if (n === last.number) cls += " cm-md-fence-last" + (closed ? " cm-md-fence-edge" : "");
             line(doc.line(n).from, cls);
+          }
+          if (rendered) {
+            const info = node.getChild("CodeInfo");
+            const lang = info ? state.sliceDoc(info.from, info.to) : "";
+            const bodyEnd = closed ? last.number - 1 : last.number;
+            const code = bodyEnd > first.number ? state.sliceDoc(doc.line(first.number + 1).from, doc.line(bodyEnd).to) : "";
+            out.push(Decoration.replace({ widget: new CodeHeaderWidget(lang, code) }).range(first.from, first.to));
+            if (closed) out.push(hidden.range(last.from, last.to));
           }
           return false;
         }

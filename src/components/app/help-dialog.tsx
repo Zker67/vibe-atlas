@@ -15,6 +15,7 @@ import {
   Link2,
   ListChecks,
   ListTodo,
+  Maximize2,
   MousePointerClick,
   NotebookPen,
   PanelRight,
@@ -262,6 +263,14 @@ function QueueSection() {
         </li>
         <li>删除父改进点时，子改进点会上移一层，不会被一起删除。</li>
       </Points>
+      <Points>
+        <li>
+          删除的改进点先进侧栏左下角的「回收站」，不用确认；右下角的提示里点「撤销」或按 <K>Ctrl+Z</K>，放回原处。按住 <K>Shift</K> 再删除（<K>Shift+Delete</K>，或按住 <K>Shift</K> 点删除按钮、右键菜单的删除），就跳过回收站彻底删除，会先确认；按住时删除按钮变红，菜单里变成「彻底删除」。
+        </li>
+        <li>
+          回收站里是所有项目删除的改进点。恢复时回到原来的位置，当时上移的子改进点也放回它下面；原来的上级已经不在时放到项目最后。默认保留 30 天，在 设置 → 数据 里修改。在回收站里 <K>Enter</K> 恢复，<K>Delete</K> 彻底删除，<K>Esc</K> 返回。
+        </li>
+      </Points>
     </Section>
   );
 }
@@ -314,13 +323,13 @@ function DetailSection() {
           直接点选待办、进行中或完成；下方的时间线记下创建、开始、完成的时间和各段用时。
         </Feature>
         <Feature icon={Link2} title="链接">
-          可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。子改进点没有自己的链接时沿用上级的，可以在设置中关闭。
+          可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。子改进点没有自己的链接时沿用上级的，可以在设置中关闭。在设置里选一个会话来源（Claude Code、Codex 或 codeg）后，可以直接「选择会话」，会话链接显示成图标和会话名。
         </Feature>
         <Feature icon={Copy} title="复制给 AI">
           按 <K>C</K> 复制标题和备注，有子改进点时附上它们的清单和各自的备注，粘贴给 AI 即可。
         </Feature>
         <Feature icon={NotebookPen} title="备注">
-          支持 Markdown 格式。
+          支持 Markdown 格式。点「备注」右边的展开按钮进入沉浸式编辑（见「Markdown 备注」一节），按 <K>Esc</K> 关闭。
         </Feature>
         <Feature icon={ListChecks} title="选中多条时">
           显示「已选 N 条」和状态分布，可以一起改状态、类型、模块，复制、移到其他项目或删除；下面列出选中的条目，点一条只看它。
@@ -361,15 +370,24 @@ function MarkdownSection() {
         </div>
       </div>
       <Points>
-        <li>支持标题、列表、任务框、链接、引用、代码块等常用格式。</li>
+        <li>支持标题、列表、任务框、链接、引用、代码块、表格等常用格式。</li>
         <li>点击任务框可以直接勾选。</li>
+        <li>
+          在行首或空格后输入 <K>/</K> 弹出插入菜单：标题、列表、任务、引用、代码块、表格、分隔线、图片；继续输入可以筛选（中文、拼音首字母、英文都行），<K>Enter</K> 插入，<K>Esc</K> 关闭。
+        </li>
+        <li>
+          <K>Ctrl+F</K> 查找，<K>Ctrl+H</K> 替换。输入 <K>(</K> <K>[</K> <K>`</K> 等会自动补上另一半；选中文字再输入它们，或 <K>*</K> <K>_</K> <K>~</K>，就把文字包起来。
+        </li>
       </Points>
       <Feature icon={TextSelect} title="划词工具栏">
         用鼠标选中文字，上方会浮出工具栏：标题、粗体、斜体、删除线、行内代码、链接、引用、列表、任务、代码块。已有的格式会高亮，再点一次取消；按 <K>Esc</K> 收起。
       </Feature>
       <Feature icon={Images} title="图片">
-        <K>Ctrl+V</K> 粘贴截图，或把图片文件拖进来；一次放几张会并排显示。点图片看大图：滚轮缩放、拖动平移、双击切换原始大小、<K>←</K>
+        <K>Ctrl+V</K> 粘贴截图，或把图片文件拖进来；一次放几张会并排显示。从网页、Word 复制带图片的内容粘贴进来，格式和图片都会保留。点图片看大图：滚轮缩放、拖动平移、双击切换原始大小、<K>←</K>
         <K>→</K> 换一张。图片存在数据文件夹里；复制给 AI 时，图片换成本机路径。
+      </Feature>
+      <Feature icon={Maximize2} title="沉浸式编辑">
+        点详情里「备注」右边的展开按钮打开。顶栏可以直接改标题、状态、类型，复制给 AI，<K>Alt+PageUp</K> <K>Alt+PageDown</K> 切换上一条、下一条；左侧是大纲，点标题跳过去；标题旁的箭头收起一节；底部显示字数、行数和是否已保存。「排版」里调行宽、字号，打开专注模式（只突出正在写的段落）和打字机滚动（正在写的行保持在中间）；<K>F11</K> 铺满窗口。这些选择会记住。
       </Feature>
     </Section>
   );
@@ -402,6 +420,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["连续多选", ["Shift+↑ ↓"]],
       ["全选", ["Ctrl+A"]],
       ["取消选择", ["Esc"]],
+      ["撤销上一次删除", ["Ctrl+Z"]],
       ["设置", ["Ctrl+,"]],
       ["使用说明", ["F1"]],
     ],
@@ -418,7 +437,8 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["改成子改进点 / 移到上一级", ["Tab", "Shift+Tab"]],
       ["收起子改进点 / 回到上级", ["←"]],
       ["展开子改进点 / 进入第一条", ["→"]],
-      ["删除", ["Delete"]],
+      ["删除到回收站", ["Delete"]],
+      ["彻底删除（不进回收站）", ["Shift+Delete"]],
     ],
   },
   {
@@ -439,6 +459,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["切换类型", ["Tab", "Shift+Tab"]],
       ["搜索或新建项目", ["Ctrl+P"]],
       ["搜索或新建模块", ["Ctrl+M"]],
+      ["选择会话（设置了会话来源时）", ["Ctrl+L"]],
       ["轮换项目", ["↑ ↓"]],
       ["轮换模块", ["Ctrl+↑ ↓"]],
       ["返回标题 / 关闭", ["Esc"]],
@@ -453,9 +474,21 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["行内代码", ["Ctrl+E"]],
       ["删除线", ["Ctrl+Shift+X"]],
       ["插入链接", ["Ctrl+K"]],
+      ["插入菜单", ["/"]],
+      ["查找 / 替换", ["Ctrl+F", "Ctrl+H"]],
       ["缩进 / 取消缩进", ["Tab", "Shift+Tab"]],
       ["撤销", ["Ctrl+Z"]],
       ["重做", ["Ctrl+Y", "Ctrl+Shift+Z"]],
+    ],
+  },
+  {
+    icon: Maximize2,
+    title: "沉浸式编辑",
+    rows: [
+      ["上一条 / 下一条", ["Alt+PageUp", "Alt+PageDown"]],
+      ["铺满窗口", ["F11"]],
+      ["收起 / 展开这一节", ["Ctrl+Shift+[", "Ctrl+Shift+]"]],
+      ["关闭", ["Esc"]],
     ],
   },
 ];

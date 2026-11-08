@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import {
   AppWindow,
   ArrowRightLeft,
@@ -11,15 +11,15 @@ import {
   Folder,
   Globe,
   Link2,
+  Maximize2,
   NotebookPen,
   Pencil,
   Plus,
   Shapes,
-  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Item, ItemStatus, ItemType } from "@/mygo";
+import type { Item, ItemStatus, ItemType, Session } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { useDebouncedSave } from "@/lib/debounce";
 import { isComposing } from "@/lib/keys";
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Scroller } from "@/components/ui/scroller";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -56,10 +57,15 @@ import {
   useAtlas,
   useLinkSource,
 } from "@/state/atlas";
+import { openImmersive, useImmersive } from "@/state/immersive";
+import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
+import { AgentIcon } from "./agent-icon";
+import { DeleteButton } from "./delete-button";
 import { IconButton } from "./icon-button";
 import { TypeChip } from "./item-marks";
 import { confirmDeleteItem } from "./queue";
 import { SelectionDetail } from "./selection-detail";
+import { SessionPicker } from "./session-picker";
 
 /** The panel beside the queue: the selected item, to edit; several selected, what to do to them all. */
 export function ItemDetail() {
@@ -114,9 +120,7 @@ function Detail({ item }: { item: Item }) {
               <Copy />
             </IconButton>
             <MoveMenu item={item} />
-            <IconButton label="删除" shortcut="Delete" className="hover:text-destructive" onClick={() => confirmDeleteItem(item)}>
-              <Trash2 />
-            </IconButton>
+            <DeleteButton onDelete={(purge) => confirmDeleteItem(item, purge)} />
             <span aria-hidden className="mx-1 h-4 w-px bg-border" />
             <IconButton label="关闭" shortcut="Esc" onClick={() => select(0)}>
               <X />
@@ -349,7 +353,7 @@ function TitleField({ item }: { item: Item }) {
 export const QUIET_TRIGGER =
   "h-7 max-w-full border-transparent bg-transparent px-1.5 hover:bg-muted aria-expanded:bg-muted dark:bg-transparent dark:hover:bg-muted [&>svg:last-child]:opacity-50";
 
-function TypeSelect({ item }: { item: Item }) {
+export function TypeSelect({ item }: { item: Item }) {
   return (
     <Select value={item.type} onValueChange={(v) => void setItemType(item.id, v as ItemType)}>
       <SelectTrigger size="sm" aria-label="类型" className={QUIET_TRIGGER}>
@@ -428,6 +432,11 @@ function LinkField({ item }: { item: Item }) {
   const [open, setOpen] = useState(false);
   const editing = useRef(false);
   const source = useLinkSource(item.id);
+  const session = useSessionLook(source?.deeplink ?? "");
+  // Sessions to pick from, once a source is set in the settings.
+  const sessionSource = useAtlas((s) => s.settings?.sessionSource ?? "");
+  const folder = useAtlas((s) => s.projects.find((p) => p.id === s.projectId)?.folderPath ?? "");
+  const [picking, setPicking] = useState(false);
   useEffect(() => {
     if (!editing.current) setDraft(item.deeplink);
   }, [item.deeplink]);
@@ -449,40 +458,76 @@ function LinkField({ item }: { item: Item }) {
     }
   };
 
+  const pickSession = (s: Session) => {
+    rememberSession(s);
+    setPicking(false);
+    void save(s.link);
+  };
+  /** The field, with the list of sessions to pick from opening under it. */
+  const withPicker = (field: ReactElement) =>
+    sessionSource ? (
+      <Popover open={picking} onOpenChange={setPicking}>
+        <PopoverAnchor asChild>{field}</PopoverAnchor>
+        <PopoverContent align="start" className="w-[26rem] gap-0 p-0 pt-0.5">
+          <SessionPicker source={sessionSource} folder={folder} onPick={pickSession} onClose={() => setPicking(false)} />
+        </PopoverContent>
+      </Popover>
+    ) : (
+      field
+    );
+
   if (!open && !error) {
     if (!source) {
-      return (
-        <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setOpen(true)}>
-          <Plus />
-          添加链接
-        </Button>
+      return withPicker(
+        <div className="flex min-w-0 items-center gap-0.5">
+          <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setOpen(true)}>
+            <Plus />
+            添加链接
+          </Button>
+          {sessionSource && (
+            <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setPicking(true)}>
+              <AgentIcon agent={sessionSource} />
+              选择会话
+            </Button>
+          )}
+        </div>,
       );
     }
     const link = source.deeplink;
     // Taken from an item above: this one has no link of its own to unbind.
     const from = source.id !== item.id ? source.title : "";
     const look = linkLook(link);
-    return (
+    const label = session ? sessionLabel(session) : look.text;
+    return withPicker(
       <div className="group/link relative flex min-w-0 items-center">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={() => openDeeplink(item.id)}
-              className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 pr-14 text-left transition-colors duration-200 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className={cn(
+                "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left transition-colors duration-200 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                sessionSource ? "pr-20" : "pr-14",
+              )}
             >
-              <look.icon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{look.text}</span>
+              {session ? <AgentIcon agent={session.agent} /> : <look.icon className="size-3.5 shrink-0 text-muted-foreground" />}
+              <span className="truncate">{label}</span>
               {from && <span className="max-w-32 shrink-0 truncate text-xs text-muted-foreground">沿用「{from}」</span>}
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-80 break-all">
             {from && <span className="block opacity-70">沿用「{from}」的链接</span>}
-            打开 {link}
+            打开 {session ? label : link}
             <span className="ml-1.5 opacity-60">O</span>
+            {session && <span className="block opacity-60">{link}</span>}
           </TooltipContent>
         </Tooltip>
         <div className="absolute right-0.5 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-focus-within/link:opacity-100 group-hover/link:opacity-100">
+          {sessionSource && (
+            <IconButton size="icon-xs" label={from ? "为这一条单独选择会话" : "改成另一个会话"} onClick={() => setPicking(true)}>
+              <AgentIcon agent={sessionSource} className="size-3" />
+            </IconButton>
+          )}
           <IconButton size="icon-xs" label={from ? "为这一条单独设置链接" : "编辑链接"} onClick={() => setOpen(true)}>
             <Pencil />
           </IconButton>
@@ -499,7 +544,7 @@ function LinkField({ item }: { item: Item }) {
             </IconButton>
           )}
         </div>
-      </div>
+      </div>,
     );
   }
 
@@ -543,23 +588,40 @@ function LinkField({ item }: { item: Item }) {
   );
 }
 
-/** The notes, in the live preview editor; they save as the user pauses. */
+/**
+ * The notes, in the live preview editor; they save as the user pauses. They
+ * also open in the immersive dialog, to write at length without the rest
+ * around (immersive-note.tsx).
+ */
 function NoteField({ item }: { item: Item }) {
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
   const { schedule, flush } = useDebouncedSave((note) => {
     // The item may be gone meanwhile, deleted or moved to another project.
-    if (useAtlas.getState().items.some((i) => i.id === item.id)) void setItemNote(item.id, note);
+    if (useAtlas.getState().items.some((i) => i.id === item.id)) saving.current = setItemNote(item.id, note);
   });
+  // Bumped as the dialog closes: the editor starts over with the notes written there.
+  const round = useImmersive((s) => s.round);
+  // The dialog starts from the notes saved: what still waits is saved first.
+  const expand = async () => {
+    flush();
+    await saving.current;
+    openImmersive();
+  };
 
   return (
     <section aria-label="备注" className="mb-3 flex min-h-40 flex-1 flex-col gap-1">
       <h3 className="flex h-6 items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <NotebookPen className="size-3.5" />
         备注
+        <IconButton label="沉浸式编辑" size="icon-xs" className="ml-auto text-muted-foreground" onClick={() => void expand()}>
+          <Maximize2 />
+        </IconButton>
       </h3>
       <MarkdownEditor
+        key={round}
         value={item.note}
         className="-mx-2.5 flex-1 rounded-lg border border-transparent px-2.5 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 hover:bg-muted/50 focus-within:border-ring focus-within:bg-transparent focus-within:ring-3 focus-within:ring-ring/30"
-        placeholder="用 Markdown 写，边写边预览"
+        placeholder="用 Markdown 写，边写边预览；输入 / 插入格式"
         onChange={schedule}
         onBlur={flush}
         onOpenLink={openLink}

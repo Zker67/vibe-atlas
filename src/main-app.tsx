@@ -26,9 +26,12 @@ import {
   selectAllRows,
   visibleItems,
 } from "@/components/app/queue";
+import { ImmersiveNote } from "@/components/app/immersive-note";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
+import { TrashView } from "@/components/app/trash";
+import { purgeHeld } from "@/lib/purge-key";
 import {
   copyItem,
   copyItems,
@@ -43,6 +46,7 @@ import {
   toggleItemDone,
   toggleItemsDoing,
   toggleItemsDone,
+  undoTrash,
   useAtlas,
 } from "@/state/atlas";
 import { openHelp, openSettings } from "@/state/dialogs";
@@ -76,7 +80,9 @@ export function MainApp() {
           <div className="flex min-w-0 flex-1 pr-2 pb-2">
             <main className="app-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
               {loadError && <LoadError message={loadError} />}
-              {!ready ? null : project ? (
+              {!ready ? null : view === "trash" ? (
+                <TrashView />
+              ) : project ? (
                 view === "queue" ? (
                   <QueueLayout project={project} />
                 ) : (
@@ -99,6 +105,7 @@ export function MainApp() {
       )}
       <NameDialog />
       <ConfirmDialog />
+      <ImmersiveNote />
       <SettingsDialog />
       <HelpDialog />
       {/* Bottom right: clear of the field that adds items. */}
@@ -243,6 +250,17 @@ function useShortcuts() {
       if (e.shiftKey && !mod && s.view === "queue" && (key === "ArrowDown" || key === "ArrowUp") && !usesArrows(focus)) {
         e.preventDefault();
         extendSelection(key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+      // Ctrl+Z: the last deletion comes back from the trash.
+      if (mod && !e.shiftKey && key === "z" && undoTrash()) {
+        e.preventDefault();
+        return;
+      }
+      // Shift+Delete: deleted for good, past the trash, after asking.
+      if (key === "Delete" && !mod && purgeHeld(e) && s.view === "queue" && s.selectedIds.size) {
+        e.preventDefault();
+        confirmDeleteItems(selectedInOrder(), true);
         return;
       }
       if (!s.projectId || e.shiftKey) return;

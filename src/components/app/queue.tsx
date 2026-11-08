@@ -25,6 +25,7 @@ import {
   CornerLeftUp,
   ExternalLink,
   FileText,
+  Flame,
   Inbox,
   Link2,
   ListChecks,
@@ -96,11 +97,15 @@ import {
   toggleItemDoing,
   toggleItemDone,
   toggleSelected,
+  trashItems,
   useAtlas,
   useLinkSource,
   type Drop as ItemDrop,
 } from "@/state/atlas";
+import { PURGE_KEY, purgeKeyDown, usePurgeKey } from "@/lib/purge-key";
 import { askConfirm } from "@/state/dialogs";
+import { sessionLabel, useSessionLook } from "@/state/sessions";
+import { AgentIcon } from "./agent-icon";
 import { IconButton } from "./icon-button";
 import { StatusButton, TypeChip, TypeIcon } from "./item-marks";
 
@@ -327,34 +332,68 @@ export function expandOrDown() {
   else if (rows[at + 1]) select(rows[at + 1]!.item.id);
 }
 
-export function confirmDeleteItem(item: Item) {
+/**
+ * Delete: the item goes to the trash at once, a toast offering to undo. With
+ * purge (Shift held), it is deleted for good, after asking.
+ */
+export function confirmDeleteItem(item: Item, purge = false) {
+  if (!purge) {
+    void trashItems([item.id]);
+    return;
+  }
   const children = buildForest(useAtlas.getState().items).byId.get(item.id)?.children.length ?? 0;
   askConfirm({
-    title: `删除「${item.title}」？`,
-    description: children ? `删除后无法恢复。它的 ${children} 个子改进点会上移一层，不会被删除。` : "删除后无法恢复。",
-    confirmText: "删除",
+    title: `彻底删除「${item.title}」？`,
+    description: children
+      ? `不进回收站，删除后无法恢复。它的 ${children} 个子改进点会上移一层，不会被删除。`
+      : "不进回收站，删除后无法恢复。",
+    confirmText: "彻底删除",
     destructive: true,
     onConfirm: () => deleteItem(item.id),
   });
 }
 
-/** Delete on several: asks once, saying how many go and how many children move up. */
-export function confirmDeleteItems(ids: number[]) {
+/** Delete on several: all go to the trash at once; with purge, asks once, saying how many go and how many children move up. */
+export function confirmDeleteItems(ids: number[], purge = false) {
   const { items } = useAtlas.getState();
   if (ids.length === 1) {
     const item = items.find((i) => i.id === ids[0]);
-    if (item) confirmDeleteItem(item);
+    if (item) confirmDeleteItem(item, purge);
+    return;
+  }
+  if (!purge) {
+    void trashItems(ids);
     return;
   }
   const gone = new Set(ids);
   const up = items.filter((i) => gone.has(i.parentId) && !gone.has(i.id)).length;
   askConfirm({
-    title: `删除选中的 ${ids.length} 条改进点？`,
-    description: up ? `删除后无法恢复。它们的 ${up} 个子改进点会上移一层，不会被删除。` : "删除后无法恢复。",
-    confirmText: `删除 ${ids.length} 条`,
+    title: `彻底删除选中的 ${ids.length} 条改进点？`,
+    description: up
+      ? `不进回收站，删除后无法恢复。它们的 ${up} 个子改进点会上移一层，不会被删除。`
+      : "不进回收站，删除后无法恢复。",
+    confirmText: `彻底删除 ${ids.length} 条`,
     destructive: true,
     onConfirm: () => deleteItems(ids),
   });
+}
+
+/** The delete entry of a menu: 删除, or 彻底删除 while Shift is down. */
+function DeleteMenuItem({ onDelete, count }: { onDelete(purge: boolean): void; count?: number }) {
+  const purge = usePurgeKey();
+  const n = count && count > 1 ? ` ${count} 条` : "";
+  return (
+    <ContextMenuItem
+      variant="destructive"
+      // The menu's select event does not say whether Shift is down: ask the key itself.
+      onSelect={() => onDelete(purgeKeyDown())}
+      className={cn(purge && "bg-destructive/10")}
+    >
+      {purge ? <Flame /> : <Trash2 />}
+      {purge ? `彻底删除${n}` : `删除${n}`}
+      <ContextMenuShortcut>{purge ? `${PURGE_KEY}+Delete` : "Delete"}</ContextMenuShortcut>
+    </ContextMenuItem>
+  );
 }
 
 // ---- Dragging ----
@@ -1252,6 +1291,8 @@ function TreeProgress({ done, total }: { done: number; total: number }) {
 
 /** The link the row opens; one that comes from an item above shows fainter, and says so. */
 function LinkMark({ item, link, from }: { item: Item; link: string; from: string }) {
+  // A link to a session shows its agent, and its name in the tooltip.
+  const session = useSessionLook(link);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -1268,12 +1309,12 @@ function LinkMark({ item, link, from }: { item: Item; link: string; from: string
             from && "opacity-60",
           )}
         >
-          <Link2 className="size-3.5" />
+          {session ? <AgentIcon agent={session.agent} /> : <Link2 className="size-3.5" />}
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-80 break-all">
         {from && <span className="block opacity-70">沿用「{from}」的链接</span>}
-        {link}
+        {session ? sessionLabel(session) : link}
         <span className="ml-1.5 shrink-0 opacity-60">O</span>
       </TooltipContent>
     </Tooltip>
@@ -1447,11 +1488,7 @@ function ItemMenuItems({ item }: { item: Item }) {
         </ContextMenuSubContent>
       </ContextMenuSub>
       <ContextMenuSeparator />
-      <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteItem(item)}>
-        <Trash2 />
-        删除
-        <ContextMenuShortcut>Delete</ContextMenuShortcut>
-      </ContextMenuItem>
+      <DeleteMenuItem onDelete={(purge) => confirmDeleteItem(item, purge)} />
     </>
   );
 }
@@ -1541,11 +1578,7 @@ function SelectionMenuItems() {
         </ContextMenuSubContent>
       </ContextMenuSub>
       <ContextMenuSeparator />
-      <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteItems(ids)}>
-        <Trash2 />
-        删除 {ids.length} 条
-        <ContextMenuShortcut>Delete</ContextMenuShortcut>
-      </ContextMenuItem>
+      <DeleteMenuItem count={ids.length} onDelete={(purge) => confirmDeleteItems(ids, purge)} />
     </>
   );
 }

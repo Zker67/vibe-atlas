@@ -4,6 +4,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| `editor-input.test.ts` | Markdown 编辑器的输入辅助：自动配对（`autopair.ts`）、斜杠命令对文本的改动和筛选（`slash-commands.ts`）、沉浸式编辑的大纲和字数（`immersive.ts`） |
 | `editor-format.test.ts` | Markdown 编辑器的格式命令（`src/components/editor/format.ts`）：粗体、斜体、删除线、行内代码、链接的加上与取消，标题级别，列表、任务、引用、代码块；在真实的 CodeMirror 状态和 Markdown 解析器上运行 |
 
 ## 运行

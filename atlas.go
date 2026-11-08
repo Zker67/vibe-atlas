@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 
+	"github.com/Zker67/vibe-atlas/internal/sessions"
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
 
@@ -23,6 +27,8 @@ type Atlas struct {
 
 	mu sync.RWMutex
 	db *store.Store
+
+	sessions sessions.Reader
 }
 
 // Changed is broadcast to every window after projects, modules or items
@@ -102,6 +108,14 @@ type Settings struct {
 	// ShareLinks lets a sub-item without a link of its own open the link of
 	// the nearest item above it that has one. On by default.
 	ShareLinks bool `json:"shareLinks"`
+	// SessionSource is where the sessions to link items to are read from:
+	// Claude Code, Codex or codeg, one of them; "" (out of the box) for
+	// none.
+	SessionSource sessions.Source `json:"sessionSource"`
+	// TrashDays is how many days items stay in the trash before they are
+	// deleted for good, or 0 to keep them until the user empties it. 30 out
+	// of the box.
+	TrashDays int `json:"trashDays"`
 	// LookDefaults are the looks the app has out of the box.
 	LookDefaults LookDefaults `json:"lookDefaults"`
 	// DataDir is the folder of the database.
@@ -118,6 +132,8 @@ const (
 	keyEffects        = "effects"
 	keyBackground     = "background"
 	keyShareLinks     = "shareLinks"
+	keyTrashDays      = "trashDays"
+	keySessionSource  = "sessionSource"
 	keyCurrentProject = "currentProject"
 	keyLastCapture    = "lastCaptureProject"
 )
@@ -398,7 +414,8 @@ func (a *Atlas) MoveItemToProject(id, projectID int64) (store.Item, error) {
 	return it, err
 }
 
-// DeleteItem deletes an item. Its children move up a level, into its place.
+// DeleteItem deletes an item for good, past the trash. Its children move
+// up a level, into its place.
 func (a *Atlas) DeleteItem(id int64) error {
 	db, err := a.store()
 	if err != nil {
@@ -463,9 +480,9 @@ func (a *Atlas) MoveItemsToProject(ids []int64, projectID int64) ([]store.Item, 
 	return items, err
 }
 
-// DeleteItems deletes the items ids, all at once: when one fails, none is
-// deleted. Children not deleted move up into the place of the nearest
-// item above them that stays.
+// DeleteItems deletes the items ids for good, past the trash, all at
+// once: when one fails, none is deleted. Children not deleted move up into
+// the place of the nearest item above them that stays.
 func (a *Atlas) DeleteItems(ids []int64) error {
 	db, err := a.store()
 	if err != nil {
@@ -480,6 +497,106 @@ func (a *Atlas) DeleteItems(ids []int64) error {
 	}
 	a.changedAll(from)
 	return nil
+}
+
+// ---- Trash ----
+
+// TrashItems moves the items ids to the trash, in their order, all at
+// once: when one fails, none moves. Each one's children not trashed move
+// up a level, into its place, as with DeleteItems. It returns the batch,
+// which RestoreBatch takes to undo it.
+func (a *Atlas) TrashItems(ids []int64) (int64, error) {
+	db, err := a.store()
+	if err != nil {
+		return 0, err
+	}
+	from, err := projectsOf(db, ids)
+	if err != nil {
+		return 0, err
+	}
+	batch, err := db.TrashItems(ids)
+	if err != nil {
+		return 0, err
+	}
+	a.changedAll(from)
+	return batch, nil
+}
+
+// Trash returns the items in the trash of every project, the last deleted
+// first.
+func (a *Atlas) Trash() ([]store.TrashEntry, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return db.Trash()
+}
+
+// TrashCount returns how many items the trash holds.
+func (a *Atlas) TrashCount() (int, error) {
+	db, err := a.store()
+	if err != nil {
+		return 0, err
+	}
+	return db.TrashCount()
+}
+
+// RestoreTrash puts the items of the trash entries ids back where they
+// were, with the children that moved up when they went, all at once: when
+// one fails, none comes back. Without its parent, an item goes to the end
+// of its project's top level; without its module, it is 未分类.
+func (a *Atlas) RestoreTrash(ids []int64) ([]store.Item, error) {
+	return a.restore(func(db *store.Store) ([]store.Item, error) { return db.RestoreTrash(ids) })
+}
+
+// RestoreBatch puts back the items TrashItems moved to the trash together,
+// as RestoreTrash does: what undoing a deletion does.
+func (a *Atlas) RestoreBatch(batch int64) ([]store.Item, error) {
+	return a.restore(func(db *store.Store) ([]store.Item, error) { return db.RestoreBatch(batch) })
+}
+
+func (a *Atlas) restore(fn func(*store.Store) ([]store.Item, error)) ([]store.Item, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	items, err := fn(db)
+	if err != nil {
+		return nil, err
+	}
+	projects := make([]int64, 0, len(items))
+	for _, it := range items {
+		projects = append(projects, it.ProjectID)
+	}
+	a.changedAll(projects)
+	return items, nil
+}
+
+// PurgeTrash deletes the trash entries ids for good.
+func (a *Atlas) PurgeTrash(ids []int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	if err := db.PurgeTrash(ids); err != nil {
+		return err
+	}
+	a.changed(0)
+	return nil
+}
+
+// EmptyTrash deletes everything in the trash for good and returns how many
+// items there were.
+func (a *Atlas) EmptyTrash() (int, error) {
+	db, err := a.store()
+	if err != nil {
+		return 0, err
+	}
+	n, err := db.EmptyTrash()
+	if err == nil {
+		a.changed(0)
+	}
+	return n, err
 }
 
 // projectsOf returns the project of each of the items ids.
@@ -671,6 +788,9 @@ func openLink(link string) error {
 	if link == "" {
 		return errors.New("链接是空的")
 	}
+	if sessions.IsClaudeLink(link) {
+		return openClaudeSession(link)
+	}
 	if path, ok := store.LocalPath(link); ok {
 		if _, err := os.Stat(path); err != nil {
 			return fmt.Errorf("找不到这个文件或文件夹：%s", path)
@@ -684,6 +804,32 @@ func openLink(link string) error {
 		return fmt.Errorf("打不开这个链接，系统里可能没有能打开它的程序：%w", err)
 	}
 	return nil
+}
+
+// ---- Sessions ----
+
+// ListSessions lists the sessions of the source the user set, the newest
+// first: those that work in folder or a folder inside it, or all of them
+// when all is set or folder is "". None while no source is set.
+func (a *Atlas) ListSessions(folder string, all bool) ([]sessions.Session, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	if all {
+		folder = ""
+	}
+	return a.sessions.In(sessionSource(db), strings.TrimSpace(folder))
+}
+
+// SessionsOf finds the sessions links open, by link, to show their names:
+// only those of the source the user set.
+func (a *Atlas) SessionsOf(links []string) (map[string]sessions.Session, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return a.sessions.Find(sessionSource(db), links)
 }
 
 // ---- Overview ----
@@ -721,6 +867,8 @@ func (a *Atlas) Settings() (Settings, error) {
 		Glass:           glass(db),
 		WindowOpacity:   windowOpacity(db),
 		ShareLinks:      shareLinks(db),
+		SessionSource:   sessionSource(db),
+		TrashDays:       trashDays(db),
 		LookDefaults:    lookDefaults,
 		DataDir:         a.app.dataDir,
 	}
@@ -753,6 +901,14 @@ func background(db *store.Store) Background {
 func shareLinks(db *store.Store) bool {
 	v, _, _ := db.Setting(keyShareLinks)
 	return v != "off"
+}
+
+func sessionSource(db *store.Store) sessions.Source {
+	v, _, _ := db.Setting(keySessionSource)
+	if src := sessions.Source(v); sessions.Valid(src) {
+		return src
+	}
+	return sessions.None
 }
 
 func (a *Atlas) settingID(db *store.Store, key string) int64 {
@@ -898,6 +1054,95 @@ func setShareLinks(db *store.Store, on bool) error {
 		v = "on"
 	}
 	return db.SetSetting(keyShareLinks, v)
+}
+
+// SetSessionSource picks where the sessions to link items to are read
+// from: "claude", "codex" or "codeg"; "" for none.
+func (a *Atlas) SetSessionSource(src sessions.Source) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := setSessionSource(db, src); err != nil {
+		return Settings{}, err
+	}
+	a.settingsChanged()
+	return a.Settings()
+}
+
+func setSessionSource(db *store.Store, src sessions.Source) error {
+	if !sessions.Valid(src) {
+		return fmt.Errorf("未知的会话来源：%s", src)
+	}
+	return db.SetSetting(keySessionSource, string(src))
+}
+
+// defaultTrashDays is how long items stay in the trash out of the box.
+const defaultTrashDays = 30
+
+// trashDayChoices are the days the trash may keep items for; 0 keeps them
+// until the user empties it.
+var trashDayChoices = []int{0, 7, 30, 90}
+
+func trashDays(db *store.Store) int {
+	v, ok, _ := db.Setting(keyTrashDays)
+	if !ok {
+		return defaultTrashDays
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || !slices.Contains(trashDayChoices, n) {
+		return defaultTrashDays
+	}
+	return n
+}
+
+// SetTrashDays changes how many days items stay in the trash before they
+// are deleted for good: 7, 30 or 90, or 0 to keep them until the user
+// empties it. Those in the trash longer go at once.
+func (a *Atlas) SetTrashDays(days int) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if !slices.Contains(trashDayChoices, days) {
+		return Settings{}, errors.New("回收站只能保留 7、30、90 天，或者一直保留")
+	}
+	if err := db.SetSetting(keyTrashDays, strconv.Itoa(days)); err != nil {
+		return Settings{}, err
+	}
+	a.purgeOldTrash(db)
+	a.settingsChanged()
+	return a.Settings()
+}
+
+// purgeOldTrash deletes for good the items in the trash longer than the
+// user keeps them.
+func (a *Atlas) purgeOldTrash(db *store.Store) {
+	days := trashDays(db)
+	if days == 0 {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+	n, err := db.PurgeTrashBefore(cutoff)
+	if err != nil {
+		log.Println("emptying the old trash:", err)
+		return
+	}
+	if n > 0 {
+		log.Printf("deleted %d items in the trash longer than %d days", n, days)
+		a.changed(0)
+	}
+}
+
+// purgeTrashLater runs purgeOldTrash once the app has settled, off the way
+// of its windows, then every few hours: the app stays in the tray for days.
+func (a *Atlas) purgeTrashLater(db *store.Store) {
+	time.AfterFunc(5*time.Second, func() {
+		a.purgeOldTrash(db)
+		for range time.Tick(6 * time.Hour) {
+			a.purgeOldTrash(db)
+		}
+	})
 }
 
 // SetCurrentProject records the project open in the main window, which
