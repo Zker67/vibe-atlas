@@ -282,10 +282,9 @@ function sectionDrop(active: Item, section: ItemStatus): Drop | null {
  */
 /**
  * How much of a row, from its top and from its bottom, puts the item before
- * or after it; the middle left, a third or less, merges. Moving is what a
- * drag mostly does: it gets the larger share.
+ * or after it; the middle left, 40 %, merges or puts it inside.
  */
-const EDGE = 0.35;
+const EDGE = 0.3;
 
 function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, moving: ReadonlySet<number>): Drop | null {
   const hit = document.elementFromPoint(x, y);
