@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -112,6 +113,43 @@ func TestItemTextListsChildren(t *testing.T) {
 	}
 	if got := ItemText(b, nil); got != "后坐力" {
 		t.Fatalf("ItemText of a leaf = %q", got)
+	}
+}
+
+func TestItemsTextJoinsInOrder(t *testing.T) {
+	db := openStore(t)
+	p, err := db.CreateProject("规则恐怖")
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(title string, parent int64) store.Item {
+		it, err := db.CreateItem(store.NewItem{ProjectID: p.ID, ParentID: parent, Title: title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return it
+	}
+	x := add("武器手感", 0)
+	a := add("切枪卡一帧", x.ID)
+	y := add("地图边界", 0)
+	if _, err := db.SetItemNote(y.ID, "穿墙"); err != nil {
+		t.Fatal(err)
+	}
+
+	// a sits under x: it shows in x's list only. The order is the one asked.
+	got, err := ItemsText(db, []int64{y.ID, x.ID, a.ID, y.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "地图边界\n\n穿墙\n\n---\n\n武器手感\n\n- [ ] 切枪卡一帧"
+	if got != want {
+		t.Fatalf("ItemsText =\n%s\nwant\n%s", got, want)
+	}
+	if got, _ := ItemsText(db, []int64{a.ID}); got != "切枪卡一帧" {
+		t.Fatalf("ItemsText of one = %q", got)
+	}
+	if _, err := ItemsText(db, []int64{x.ID, 9999}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing item: %v", err)
 	}
 }
 

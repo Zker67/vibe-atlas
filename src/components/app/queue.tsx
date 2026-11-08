@@ -1,4 +1,15 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useSensor, useSensors, type DragStartEvent } from "@dnd-kit/core";
@@ -16,6 +27,7 @@ import {
   FileText,
   Inbox,
   Link2,
+  ListChecks,
   Pause,
   Play,
   RotateCcw,
@@ -28,7 +40,7 @@ import { isComposing } from "@/lib/keys";
 import { nextType, statusInfo, UNSORTED } from "@/lib/labels";
 import { elapsed, formatTime, useNow } from "@/lib/time";
 import { errorMessage, run } from "@/lib/api";
-import { buildForest, linkSource, subtreeIds, type Row, type TreeRows } from "@/lib/tree";
+import { ancestors, applyMove, buildForest, linkSource, subtreeIds, topMost, type Row, type TreeRows } from "@/lib/tree";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Scroller } from "@/components/ui/scroller";
@@ -36,6 +48,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
   ContextMenuSeparator,
@@ -49,33 +62,43 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   clearFilters,
   copyItem,
+  copyItems,
   createItem,
   deleteItem,
-  dropItem,
+  deleteItems,
+  dropItems,
   focusNewChild,
+  inQueueOrder,
   layoutQueue,
   matchesFilters,
   matchesStatus,
   mergeItems,
   moveItem,
   moveItemToProject,
+  moveItemsToProject,
   newChildTaken,
   openDeeplink,
   reopenItem,
+  reopenItems,
   reopenStatus,
   select,
   setCollapsed,
   setItemModule,
+  setItemsModule,
   setItemStatus,
+  setItemsStatus,
   setItemTitle,
   setSectionOpen,
+  setSelection,
   sharesLinks,
   statusChanges,
   toggleCollapsed,
   toggleItemDoing,
   toggleItemDone,
+  toggleSelected,
   useAtlas,
   useLinkSource,
+  type Drop as ItemDrop,
 } from "@/state/atlas";
 import { askConfirm } from "@/state/dialogs";
 import { IconButton } from "./icon-button";
@@ -141,29 +164,121 @@ export function renameInQueue(id: number): boolean {
 }
 
 /**
- * Tab: puts the item under the item of its level shown right above it, as
- * its last child. Nothing when none is: the first of its level stays.
+ * The item of id's level shown right above it, in the queue as s lays it
+ * out; 0 when none is: the first of its level.
  */
-export function indentItem(id: number) {
-  for (const trees of shownTrees(useAtlas.getState(), useQueueUi.getState().doneLimit)) {
+function indentTarget(s: QueueLayoutState, id: number): number {
+  for (const trees of shownTrees(s, useQueueUi.getState().doneLimit)) {
     const rows = trees.flatMap((t) => t.rows);
     const at = rows.findIndex((r) => r.item.id === id);
     if (at < 0) continue;
     const depth = rows[at]!.depth;
     for (let j = at - 1; j >= 0 && rows[j]!.depth >= depth; j--) {
-      if (rows[j]!.depth === depth) {
-        moveItem(id, rows[j]!.item.id, "inside");
-        return;
-      }
+      if (rows[j]!.depth === depth) return rows[j]!.item.id;
     }
-    return;
+    return 0;
   }
+  return 0;
 }
 
-/** Shift+Tab: takes the item a level up, right after its parent, as 「移到上一级」 does. */
-export function outdentItem(id: number) {
-  const item = useAtlas.getState().items.find((i) => i.id === id);
-  if (item?.parentId) moveItem(id, item.parentId, "after");
+/**
+ * Tab: puts each of the items under the item of its level shown right
+ * above it, as its last child, top to bottom, each where those before it
+ * left the queue. Nothing for the first of its level. One under another
+ * of them that went in goes along with it; under one that could not, it
+ * goes in on its own.
+ */
+export function indentItems(ids: number[]) {
+  const s = useAtlas.getState();
+  let items = s.items;
+  const moved = new Set<number>();
+  const drops: ItemDrop[] = [];
+  for (const id of inQueueOrder(items, ids)) {
+    if (ancestors(buildForest(items), id).some((a) => moved.has(a.id))) continue;
+    const target = indentTarget({ ...s, items }, id);
+    if (!target) continue;
+    drops.push({ id, move: { anchorId: target, place: "inside" }, status: null });
+    moved.add(id);
+    items = applyMove(items, id, target, "inside") ?? items;
+  }
+  void dropItems(drops);
+}
+
+/**
+ * Shift+Tab: takes each of the items a level up, right after its parent,
+ * as 「移到上一级」 does; their order stays. One under another of them that
+ * goes up goes along with it; under a top-level one, it goes up on its own.
+ */
+export function outdentItems(ids: number[]) {
+  const { items } = useAtlas.getState();
+  const forest = buildForest(items);
+  const parentOf = new Map(items.map((i) => [i.id, i.parentId]));
+  const ordered = inQueueOrder(items, ids);
+  const up = new Set(ordered.filter((id) => parentOf.get(id)));
+  const list = ordered.filter((id) => up.has(id) && !ancestors(forest, id).some((a) => up.has(a.id)));
+  // The last first: each goes right after its parent, before those already there.
+  list.reverse();
+  void dropItems(list.map((id) => ({ id, move: { anchorId: parentOf.get(id)!, place: "after" }, status: null })));
+}
+
+// ---- Selecting ----
+
+const visibleIds = () => visibleRows().map((r) => r.item.id);
+
+/**
+ * Shift+click, Shift+↑↓: selects the rows shown from the anchor, the row
+ * Shift goes on from, to id; with add, on top of what is selected. Without
+ * an anchor in sight, from the row the keys act from.
+ */
+export function selectRange(id: number, add = false) {
+  const s = useAtlas.getState();
+  const ids = visibleIds();
+  const to = ids.indexOf(id);
+  if (to < 0) return;
+  let from = ids.indexOf(s.selectAnchor);
+  if (from < 0) from = ids.indexOf(s.selectedId);
+  if (from < 0) {
+    select(id);
+    return;
+  }
+  const range = ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+  setSelection(add ? [...s.selectedIds, ...range] : range, id, ids[from]);
+}
+
+/** Shift+↑↓: moves the row the keys act from, the selection stretching from the anchor to it. */
+export function extendSelection(delta: number) {
+  const ids = visibleIds();
+  if (ids.length === 0) return;
+  const at = ids.indexOf(useAtlas.getState().selectedId);
+  if (at < 0) select(ids[delta > 0 ? 0 : ids.length - 1]!);
+  else selectRange(ids[Math.min(ids.length - 1, Math.max(0, at + delta))]!);
+}
+
+/** Ctrl+A: selects every row the queue shows. */
+export function selectAllRows() {
+  const ids = visibleIds();
+  if (ids.length === 0) return;
+  const { selectedId } = useAtlas.getState();
+  setSelection(ids, ids.includes(selectedId) ? selectedId : ids[0]!, ids[0]);
+}
+
+/** When the last drag of rows ended: the click that may follow it on the row picked up is no click. */
+let draggedAt = 0;
+
+/** A click on a row: selects it alone; with Ctrl / ⌘ adds it or takes it out; with Shift, the rows from the anchor. */
+function clickRow(id: number, e: ReactMouseEvent) {
+  if (performance.now() - draggedAt < 300) return;
+  const toggle = e.ctrlKey || e.metaKey;
+  if (e.shiftKey) selectRange(id, toggle);
+  else if (toggle) toggleSelected(id);
+  else select(id);
+}
+
+/** Right-click: a row of the selection keeps it and becomes the one the keys act from; another row is selected alone. */
+function selectForMenu(id: number) {
+  const s = useAtlas.getState();
+  if (s.selectedIds.size > 1 && s.selectedIds.has(id)) setSelection(s.selectedIds, id);
+  else select(id);
 }
 
 /** The item a new one of its level is being named under, from Shift+Enter in a title. */
@@ -200,6 +315,25 @@ export function confirmDeleteItem(item: Item) {
   });
 }
 
+/** Delete on several: asks once, saying how many go and how many children move up. */
+export function confirmDeleteItems(ids: number[]) {
+  const { items } = useAtlas.getState();
+  if (ids.length === 1) {
+    const item = items.find((i) => i.id === ids[0]);
+    if (item) confirmDeleteItem(item);
+    return;
+  }
+  const gone = new Set(ids);
+  const up = items.filter((i) => gone.has(i.parentId) && !gone.has(i.id)).length;
+  askConfirm({
+    title: `删除选中的 ${ids.length} 条改进点？`,
+    description: up ? `删除后无法恢复。它们的 ${up} 个子改进点会上移一层，不会被删除。` : "删除后无法恢复。",
+    confirmText: `删除 ${ids.length} 条`,
+    destructive: true,
+    onConfirm: () => deleteItems(ids),
+  });
+}
+
 // ---- Dragging ----
 
 /**
@@ -228,9 +362,15 @@ function sameDrop(a: Drop | null, b: Drop | null): boolean {
   return a.overId === b.overId && a.zone === b.zone && a.status === b.status && a.count === b.count;
 }
 
-/** The drag under way: the item dragged, it and what is under it, where it would land. */
-const useDrag = create<{ active: Item | null; moving: ReadonlySet<number>; drop: Drop | null }>(() => ({
+/**
+ * The drag under way: the row picked up; the group dragged, that row
+ * alone or, picked up from the selection, the items selected not under
+ * another of them, in the queue's order; they and what is under them;
+ * where they would land.
+ */
+const useDrag = create<{ active: Item | null; group: Item[]; moving: ReadonlySet<number>; drop: Drop | null }>(() => ({
   active: null,
+  group: [],
   moving: new Set(),
   drop: null,
 }));
@@ -254,18 +394,24 @@ interface RowInfo {
 /** What the queue shows, as the drop reads it. */
 interface DropMap {
   rows: Map<number, RowInfo>;
-  /** The first top-level item to do. */
-  firstTodo: number;
+  /** The top-level items to do, in their order. */
+  todoRoots: number[];
+}
+
+/** How many items take status when each of the group is dropped in its section, as statusChanges counts them. */
+function changesOf(group: Item[], status: ItemStatus): number {
+  const { items } = useAtlas.getState();
+  return group.reduce((n, g) => n + statusChanges(items, g.id, status).length, 0);
 }
 
 /**
- * What dropping the item on a section does; null when nothing changes.
- * The item takes the section's status, with what statusChanges picks under
- * it; a top-level item dropped on 待办 also goes first among the items to do.
+ * What dropping the group on a section does; null when nothing changes.
+ * Each takes the section's status, with what statusChanges picks under it;
+ * top-level items dropped on 待办 also go first among the items to do.
  */
-function sectionDrop(active: Item, section: ItemStatus): Drop | null {
-  const count = statusChanges(useAtlas.getState().items, active.id, section).length;
-  if (count === 0 && (section !== "todo" || active.parentId !== 0)) return null;
+function sectionDrop(group: Item[], section: ItemStatus): Drop | null {
+  const count = changesOf(group, section);
+  if (count === 0 && (section !== "todo" || !group.some((g) => g.parentId === 0))) return null;
   return { kind: "section", section, count };
 }
 
@@ -278,7 +424,9 @@ function sectionDrop(active: Item, section: ItemStatus): Drop | null {
  * for the section. The bottom of an open parent is the top of
  * its first child. Elsewhere in a section, its title included, the item
  * takes the section's status. On a module of the sidebar, other than its
- * own and its children's, the item goes to that module with them.
+ * own and its children's, the item goes to that module with them. A group
+ * of several lands the same way, one after the other, but merges with no
+ * row.
  */
 /**
  * How much of a row, from its top and from its bottom, puts the item before
@@ -286,7 +434,7 @@ function sectionDrop(active: Item, section: ItemStatus): Drop | null {
  */
 const EDGE = 0.3;
 
-function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, moving: ReadonlySet<number>): Drop | null {
+function dropAt(x: number, y: number, dx: number, map: DropMap, group: Item[], moving: ReadonlySet<number>): Drop | null {
   const hit = document.elementFromPoint(x, y);
   const target = hit?.closest<HTMLElement>("[data-module-drop]");
   if (target) {
@@ -297,7 +445,7 @@ function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, mo
   const el = hit?.closest<HTMLElement>("[data-queue-row]");
   if (!el) {
     const section = hit?.closest<HTMLElement>("[data-queue-section]")?.dataset.queueSection as ItemStatus | undefined;
-    return section ? sectionDrop(active, section) : null;
+    return section ? sectionDrop(group, section) : null;
   }
   const overId = Number(el.dataset.itemId);
   const info = map.rows.get(overId);
@@ -307,17 +455,18 @@ function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, mo
   const at = (y - r.top) / r.height;
   const middle: Zone = row.hasChildren ? "inside" : "merge";
   const zone: Zone = at < EDGE ? "before" : at > 1 - EDGE ? "after" : middle;
+  if (zone === "merge" && group.length > 1) return null;
   if (zone === "merge" || zone === "inside") return { kind: "row", overId, zone, status: null, count: 0 };
   const first = zone === "after" && row.hasChildren && !row.collapsed && info.next?.depth === row.depth + 1 ? info.next : undefined;
   const under = zone === "after" && dx >= INDENT;
   if (under && !first) return { kind: "row", overId, zone: "child", status: null, count: 0 };
-  if (row.depth === 0 && info.section === "done" && !under) return sectionDrop(active, info.section);
+  if (row.depth === 0 && info.section === "done" && !under) return sectionDrop(group, info.section);
   if (first) {
     if (moving.has(first.item.id)) return null;
     return { kind: "row", overId: first.item.id, zone: "before", status: null, count: 0 };
   }
   // Among the top-level items doing or to do, the item becomes one of them.
-  const count = row.depth === 0 ? statusChanges(useAtlas.getState().items, active.id, info.section).length : 0;
+  const count = row.depth === 0 ? changesOf(group, info.section) : 0;
   return { kind: "row", overId, zone, status: count ? info.section : null, count };
 }
 
@@ -330,19 +479,18 @@ function moduleChanges(moving: ReadonlySet<number>, moduleId: number): number[] 
 }
 
 /**
- * A row dropped on a module of the sidebar: the item and every item under
+ * Rows dropped on a module of the sidebar: the group and every item under
  * it go to the module. When the queue shows another module only, the rows
  * leave it: a toast says where they went.
  */
-async function dropOnModule(item: Item, moving: ReadonlySet<number>, moduleId: number) {
-  for (const id of moduleChanges(moving, moduleId)) {
-    if (!(await setItemModule(id, moduleId))) return;
-  }
+async function dropOnModule(item: Item, groupSize: number, moving: ReadonlySet<number>, moduleId: number) {
+  if (!(await setItemsModule(moduleChanges(moving, moduleId), moduleId))) return;
   const { moduleFilter, modules } = useAtlas.getState();
   if (moduleFilter !== "all" && moduleFilter !== moduleId) {
     const name = moduleId ? (modules.find((m) => m.id === moduleId)?.name ?? "") : UNSORTED;
-    const under = moving.size - 1;
-    toast.success(under > 0 ? `已移到「${name}」，子改进点 ${under} 条一起` : `已移到「${name}」`);
+    const under = moving.size - groupSize;
+    const what = groupSize > 1 ? `已把 ${groupSize} 条移到「${name}」` : `已移到「${name}」`;
+    toast.success(under > 0 ? `${what}，子改进点 ${under} 条一起` : what);
   } else {
     flashRow(item.id);
   }
@@ -365,7 +513,7 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
         t.rows.forEach((row, j) => rows.set(row.item.id, { row, section: SECTIONS[i]!, next: t.rows[j + 1] }));
       }
     });
-    return { rows, firstTodo: trees[1]?.[0]?.root.id ?? 0 };
+    return { rows, todoRoots: (trees[1] ?? []).map((t) => t.root.id) };
   }, [trees]);
   const current = useRef(map);
   useLayoutEffect(() => {
@@ -378,11 +526,15 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
 
   const onDragStart = ({ active: dragged, activatorEvent }: DragStartEvent) => {
     const id = Number(dragged.id);
-    const { items } = useAtlas.getState();
-    const item = items.find((i) => i.id === id);
+    const { items, selectedIds } = useAtlas.getState();
+    const forest = buildForest(items);
+    const item = forest.byId.get(id)?.item;
     if (!item) return;
-    const moving = subtreeIds(buildForest(items), id);
-    useDrag.setState({ active: item, moving, drop: null });
+    // Picked up from the selection, the selection goes; another row goes alone.
+    const ids = selectedIds.size > 1 && selectedIds.has(id) ? topMost(forest, inQueueOrder(items, selectedIds)) : [id];
+    const group = ids.map((v) => forest.byId.get(v)!.item);
+    const moving = new Set(ids.flatMap((v) => [...subtreeIds(forest, v)]));
+    useDrag.setState({ active: item, group, moving, drop: null });
     document.documentElement.classList.add("dragging-rows");
     const pointer = { x: 0, y: 0 };
     if (activatorEvent instanceof PointerEvent || activatorEvent instanceof MouseEvent) {
@@ -391,7 +543,7 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
     }
     const startX = pointer.x;
     const update = () => {
-      const next = dropAt(pointer.x, pointer.y, pointer.x - startX, current.current, item, moving);
+      const next = dropAt(pointer.x, pointer.y, pointer.x - startX, current.current, group, moving);
       if (!sameDrop(useDrag.getState().drop, next)) useDrag.setState({ drop: next });
     };
     const onMove = (e: PointerEvent) => {
@@ -414,21 +566,42 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
 
   const finish = (apply: boolean) => {
     stop.current();
-    const { active: item, moving, drop } = useDrag.getState();
-    useDrag.setState({ active: null, moving: new Set(), drop: null });
+    const { active: item, group, moving, drop } = useDrag.getState();
+    useDrag.setState({ active: null, group: [], moving: new Set(), drop: null });
+    if (item) draggedAt = performance.now();
     if (!apply || !drop || !item) return;
     const id = item.id;
     if (drop.kind === "module") {
-      void dropOnModule(item, moving, drop.moduleId);
+      void dropOnModule(item, group.length, moving, drop.moduleId);
     } else if (drop.kind === "section") {
-      const { firstTodo } = current.current;
-      const toTop = drop.section === "todo" && item.parentId === 0 && firstTodo !== 0 && firstTodo !== id;
-      void dropItem(id, toTop ? { anchorId: firstTodo, place: "before" } : null, drop.count ? drop.section : null);
+      // The top-level ones dropped on 待办 go first among the items to do, in
+      // their order: before the first one not dragged. One that is first
+      // already, dragged alone, stays.
+      const roots = current.current.todoRoots;
+      const first = group.length === 1 && moving.has(roots[0] ?? 0) ? 0 : (roots.find((v) => !moving.has(v)) ?? 0);
+      let prev = 0;
+      const drops = group.map((g): ItemDrop => {
+        let move: ItemDrop["move"] = null;
+        if (drop.section === "todo" && g.parentId === 0 && first) {
+          move = prev ? { anchorId: prev, place: "after" } : { anchorId: first, place: "before" };
+          prev = g.id;
+        }
+        return { id: g.id, move, status: drop.count ? drop.section : null };
+      });
+      void dropItems(drops);
       flashRow(id);
     } else if (drop.zone === "merge") {
       void mergeItems(id, drop.overId).then((parent) => parent && flashRow(parent.id));
     } else {
-      void dropItem(id, { anchorId: drop.overId, place: drop.zone === "child" ? "inside" : drop.zone }, drop.status);
+      // The first lands where dropped, each next one right after the one before it; inside, each as the last child.
+      const place = drop.zone === "child" ? "inside" : drop.zone;
+      let prev = 0;
+      const drops = group.map((g): ItemDrop => {
+        const move: ItemDrop["move"] = prev && place !== "inside" ? { anchorId: prev, place: "after" } : { anchorId: drop.overId, place };
+        prev = g.id;
+        return { id: g.id, move, status: drop.status };
+      });
+      void dropItems(drops);
       flashRow(id);
     }
   };
@@ -476,6 +649,117 @@ function DragPreview({ item, under }: { item: Item; under: number }) {
   );
 }
 
+// ---- Selecting with a box ----
+
+/** How near the top or the bottom of the queue, in px, the box being drawn scrolls it. */
+const MARQUEE_EDGE = 40;
+/** How far, in px, the pointer goes before a box shows. */
+const MARQUEE_START = 4;
+
+/**
+ * Lets the pointer draw a box from the queue's blank ground, the rows and
+ * their controls aside: the rows it spans, top to bottom, are selected as
+ * it grows, on top of what was selected with Ctrl / ⌘ or Shift held. Near
+ * the top or the bottom the queue scrolls. A press that does not move
+ * clears the selection, as a click on the ground did. The box, drawn in
+ * the content, scrolls with it.
+ */
+function useMarquee(viewport: RefObject<HTMLDivElement | null>, box: RefObject<HTMLDivElement | null>) {
+  const stop = useRef<() => void>(() => {});
+  useEffect(() => () => stop.current(), []);
+
+  return (e: ReactPointerEvent<HTMLDivElement>) => {
+    const v = viewport.current;
+    const b = box.current;
+    if (!v || !b || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-queue-row], [data-queue-draft], button, a, input, textarea")) return;
+    stop.current();
+    e.preventDefault();
+    // A field being edited saves, as when the user clicks elsewhere.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    const s = useAtlas.getState();
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!add) select(0);
+    const base = add ? [...s.selectedIds] : [];
+    const fallback = add ? s.selectedId : 0;
+    const pointer = { x: e.clientX, y: e.clientY };
+    const start = { x: e.clientX - v.getBoundingClientRect().left, y: e.clientY - v.getBoundingClientRect().top + v.scrollTop };
+    const id = e.pointerId;
+    try {
+      v.setPointerCapture(id);
+    } catch {
+      // A pointer that is no longer down has nothing to capture: the window's events still come.
+    }
+    let drawing = false;
+    let frame = 0;
+    let last = "";
+
+    const draw = () => {
+      frame = 0;
+      const r = v.getBoundingClientRect();
+      const over = pointer.y < r.top + MARQUEE_EDGE ? pointer.y - r.top - MARQUEE_EDGE : pointer.y > r.bottom - MARQUEE_EDGE ? pointer.y - r.bottom + MARQUEE_EDGE : 0;
+      if (over) v.scrollTop += Math.max(-20, Math.min(20, over / 2));
+      const y = Math.max(0, Math.min(v.scrollHeight, pointer.y - r.top + v.scrollTop));
+      const x = Math.max(0, Math.min(v.clientWidth, pointer.x - r.left));
+      const top = Math.min(start.y, y);
+      const bottom = Math.max(start.y, y);
+      b.style.top = `${top}px`;
+      b.style.height = `${bottom - top}px`;
+      b.style.left = `${Math.min(start.x, x)}px`;
+      b.style.width = `${Math.abs(x - start.x)}px`;
+      b.hidden = false;
+      // Rows are hit by how far the box goes up and down: they span the column.
+      const hit: number[] = [];
+      for (const el of v.querySelectorAll<HTMLElement>("[data-queue-row]")) {
+        const er = el.getBoundingClientRect();
+        const at = er.top - r.top + v.scrollTop;
+        if (at < bottom && at + er.height > top) hit.push(Number(el.dataset.itemId));
+      }
+      const ids = [...new Set([...base, ...hit])];
+      const key = ids.join(",");
+      if (key !== last) {
+        last = key;
+        // The keys go on from the row at the edge the box grows to; Shift from the one it started at.
+        const down = y >= start.y;
+        const lead = hit.length ? (down ? hit.at(-1)! : hit[0]!) : fallback;
+        const tail = hit.length ? (down ? hit[0]! : hit.at(-1)!) : s.selectAnchor;
+        setSelection(ids, lead, tail);
+      }
+      // Held at an edge, the queue keeps scrolling.
+      if (over) frame = requestAnimationFrame(draw);
+    };
+    const schedule = () => {
+      if (drawing && !frame) frame = requestAnimationFrame(draw);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      pointer.x = ev.clientX;
+      pointer.y = ev.clientY;
+      if (!drawing && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < MARQUEE_START) return;
+      drawing = true;
+      schedule();
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId === id) stop.current();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    v.addEventListener("scroll", schedule);
+    stop.current = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      v.removeEventListener("scroll", schedule);
+      if (v.hasPointerCapture(id)) v.releasePointerCapture(id);
+      b.hidden = true;
+      stop.current = () => {};
+    };
+  };
+}
+
 // ---- The queue ----
 
 export function Queue() {
@@ -487,10 +771,14 @@ export function Queue() {
   const collapsed = useAtlas((s) => s.collapsed);
   const sectionOpen = useAtlas((s) => s.sectionOpen);
   const selectedId = useAtlas((s) => s.selectedId);
+  const selectedIds = useAtlas((s) => s.selectedIds);
   const flashId = useQueueUi((s) => s.flashId);
   const doneLimit = useQueueUi((s) => s.doneLimit);
   const draftAfter = useDraftAfter((s) => s.id);
   const shared = useAtlas(sharesLinks);
+  const viewport = useRef<HTMLDivElement>(null);
+  const marquee = useRef<HTMLDivElement>(null);
+  const startMarquee = useMarquee(viewport, marquee);
 
   const { doing, todo, done } = useMemo(
     () => layoutQueue({ items, typeFilter, moduleFilter, statusFilter, collapsed }),
@@ -506,9 +794,16 @@ export function Queue() {
   // The module shows on each row unless the queue shows one module only.
   const moduleOf = (item: Item) => (moduleFilter === "all" ? (moduleNames.get(item.moduleId) ?? "") : "");
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  const rows = (trees: TreeRows[]) =>
-    trees.flatMap((t) => {
+  const many = selectedIds.size > 1;
+  const rows = (trees: TreeRows[]) => {
+    // Selected rows next to each other in a section join into one block.
+    const flat = trees.flatMap((t) => t.rows);
+    const picked = (i: number) => i >= 0 && i < flat.length && selectedIds.has(flat[i]!.item.id);
+    let n = 0;
+    return trees.flatMap((t) => {
       const out = t.rows.map((r) => {
+        const i = n++;
+        const selected = selectedIds.has(r.item.id);
         const source = linkSource(byId, r.item.id, shared);
         return (
           <ItemRow
@@ -524,7 +819,11 @@ export function Queue() {
             moduleName={moduleOf(r.item)}
             link={source?.deeplink ?? ""}
             linkFrom={source && source.id !== r.item.id ? source.title : ""}
-            selected={r.item.id === selectedId}
+            selected={selected}
+            focus={r.item.id === selectedId}
+            many={many}
+            joinTop={selected && picked(i - 1)}
+            joinBottom={selected && picked(i + 1)}
             flash={r.item.id === flashId}
           />
         );
@@ -539,6 +838,7 @@ export function Queue() {
       }
       return out;
     });
+  };
 
   const filtered = typeFilter !== "all" || moduleFilter !== "all" || statusFilter !== "all";
   const nothing = doing.length + todo.length + done.length === 0;
@@ -548,13 +848,13 @@ export function Queue() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Scroller
-        className="flex-1"
-        viewportClassName="px-3 pt-2 pb-4"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) select(0);
-        }}
-      >
+      <Scroller ref={viewport} className="flex-1" viewportClassName="relative px-3 pt-2 pb-4" onPointerDown={startMarquee}>
+        <div
+          ref={marquee}
+          aria-hidden
+          hidden
+          className="pointer-events-none absolute z-20 rounded-[4px] border border-primary/60 bg-primary/10"
+        />
         {nothing ? (
           <QueueEmpty filtered={filtered && items.length > 0} />
         ) : (
@@ -619,7 +919,7 @@ function QueueSection({ section, count, collapsible, empty, children }: QueueSec
   const dragging = useDrag((s) => s.active !== null);
   const target = useDrag((s) => s.drop?.kind === "section" && s.drop.section === section);
   const changes = useDrag((s) => (s.drop?.kind === "section" && s.drop.section === section ? s.drop.count : 0));
-  const toTop = useDrag((s) => section === "todo" && s.active?.parentId === 0);
+  const toTop = useDrag((s) => section === "todo" && s.group.some((g) => g.parentId === 0));
   if (empty && section === "done" && !dragging) return null;
   const Icon = info.icon;
   const title = (
@@ -706,6 +1006,13 @@ interface ItemRowProps {
   link: string;
   linkFrom: string;
   selected: boolean;
+  /** It is the one the keys act from. */
+  focus: boolean;
+  /** Several rows are selected. */
+  many: boolean;
+  /** The rows right above and right under it are selected too, as it is: they join into one block. */
+  joinTop: boolean;
+  joinBottom: boolean;
   flash: boolean;
 }
 
@@ -722,19 +1029,23 @@ const ItemRow = memo(function ItemRow({
   link,
   linkFrom,
   selected,
+  focus,
+  many,
+  joinTop,
+  joinBottom,
   flash,
 }: ItemRowProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (selected || flash) ref.current?.scrollIntoView({ block: "nearest" });
-  }, [selected, flash]);
+    if (focus || flash) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [focus, flash]);
   const { setNodeRef, listeners } = useDraggable({ id: item.id });
   const zone = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.zone : null));
   const becomes = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.status : null));
   const becomesCount = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.count : 0));
   const moving = useDrag((s) => s.moving.has(item.id));
-  // The row picked up, not those under it: where it was shows as an outline.
-  const picked = useDrag((s) => s.active?.id === item.id);
+  // The rows picked up, not those under them: where they were shows as an outline.
+  const picked = useDrag((s) => s.group.some((g) => g.id === item.id));
   const isDone = item.status === "done";
   // Renamed after a double click, or after Enter asked for it.
   const [renamingHere, setRenaming] = useState(false);
@@ -748,7 +1059,7 @@ const ItemRow = memo(function ItemRow({
   const left = PAD + depth * INDENT;
 
   return (
-    <ContextMenu onOpenChange={(open) => open && select(item.id)}>
+    <ContextMenu onOpenChange={(open) => open && selectForMenu(item.id)}>
       <ContextMenuTrigger asChild>
         <div
           ref={(el) => {
@@ -758,17 +1069,22 @@ const ItemRow = memo(function ItemRow({
           {...listeners}
           data-queue-row=""
           data-item-id={item.id}
-          aria-current={selected || undefined}
-          onClick={() => select(item.id)}
+          aria-current={focus || undefined}
+          onClick={(e) => clickRow(item.id, e)}
           onDoubleClick={(e) => {
             // The circle, the arrow and the row's buttons keep their own clicks.
             if ((e.target as HTMLElement).closest("button, a, input")) return;
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
             setRenaming(true);
           }}
           style={{ paddingLeft: left }}
           className={cn(
-            "signal-row group relative flex h-9 items-center gap-2 rounded-md pr-2 transition-[background-color,opacity,box-shadow] duration-100",
+            "signal-row group relative flex h-9 items-center gap-2 rounded-md pr-2 transition-[background-color,opacity,box-shadow,border-radius] duration-100",
             selected ? "bg-accent" : "hover:bg-accent/50",
+            joinTop && "rounded-t-none",
+            joinBottom && "rounded-b-none",
+            // Among several, the one the keys act from has a thin line.
+            focus && many && !zone && "shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_45%,transparent)]",
             flash && "row-flash",
             moving && "opacity-40",
             picked && "bg-muted/40 outline-1 -outline-offset-1 outline-primary/40 outline-dashed",
@@ -818,7 +1134,7 @@ const ItemRow = memo(function ItemRow({
             {item.note.trim() && <FileText aria-label="有备注" className="size-3.5 shrink-0 text-muted-foreground" />}
             {link && <LinkMark item={item} link={link} from={linkFrom} />}
             <RowTime item={item} />
-            {!isDone && <RowActions item={item} shown={selected} />}
+            {!isDone && <RowActions item={item} shown={selected && !many} />}
           </div>
           {zone && <DropMark zone={zone} status={becomes} count={becomesCount} left={left + (nested ? 24 : 0)} />}
         </div>
@@ -830,11 +1146,17 @@ const ItemRow = memo(function ItemRow({
           if (useAtlas.getState().newChildFor) e.preventDefault();
         }}
       >
-        <ItemMenuItems item={item} />
+        <RowMenuItems item={item} />
       </ContextMenuContent>
     </ContextMenu>
   );
 });
+
+/** The right-click menu of a row: for the selection when the row is one of several selected, else for the row. */
+function RowMenuItems({ item }: { item: Item }) {
+  const ofSelection = useAtlas((s) => s.selectedIds.size > 1 && s.selectedIds.has(item.id));
+  return ofSelection ? <SelectionMenuItems /> : <ItemMenuItems item={item} />;
+}
 
 /**
  * Where the row dragged would land: a line before or after this row, with
@@ -1105,6 +1427,100 @@ function ItemMenuItems({ item }: { item: Item }) {
       <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteItem(item)}>
         <Trash2 />
         删除
+        <ContextMenuShortcut>Delete</ContextMenuShortcut>
+      </ContextMenuItem>
+    </>
+  );
+}
+
+/** What the right-click menu offers for several items selected, in the queue's order. It mounts only while the menu is open. */
+function SelectionMenuItems() {
+  const items = useAtlas((s) => s.items);
+  const selectedIds = useAtlas((s) => s.selectedIds);
+  const projects = useAtlas((s) => s.projects);
+  const projectId = useAtlas((s) => s.projectId);
+  const modules = useAtlas((s) => s.modules);
+  const ids = useMemo(() => inQueueOrder(items, selectedIds), [items, selectedIds]);
+  const chosen = items.filter((i) => selectedIds.has(i.id));
+  const all = (status: ItemStatus) => chosen.every((i) => i.status === status);
+  const others = projects.filter((p) => p.id !== projectId);
+  // The module they are all in, if one.
+  const module = chosen.every((i) => i.moduleId === chosen[0]?.moduleId) ? String(chosen[0]?.moduleId ?? "") : "";
+  return (
+    <>
+      <ContextMenuLabel className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+        <ListChecks className="size-3.5" />
+        已选 <span className="meta-mono">{ids.length}</span> 条
+      </ContextMenuLabel>
+      <ContextMenuSeparator />
+      {all("done") && (
+        <ContextMenuItem onSelect={() => void reopenItems(ids)}>
+          <RotateCcw />
+          重新打开
+          <ContextMenuShortcut>Space</ContextMenuShortcut>
+        </ContextMenuItem>
+      )}
+      {!all("doing") && (
+        <ContextMenuItem onSelect={() => void setItemsStatus(ids, "doing")}>
+          <Play />
+          开始进行
+          <ContextMenuShortcut>S</ContextMenuShortcut>
+        </ContextMenuItem>
+      )}
+      {!all("done") && (
+        <ContextMenuItem onSelect={() => void setItemsStatus(ids, "done")}>
+          <CircleCheck />
+          标为完成
+          <ContextMenuShortcut>Space</ContextMenuShortcut>
+        </ContextMenuItem>
+      )}
+      {!all("todo") && (
+        <ContextMenuItem onSelect={() => void setItemsStatus(ids, "todo")}>
+          <Pause />
+          改为待办
+          {all("doing") && <ContextMenuShortcut>S</ContextMenuShortcut>}
+        </ContextMenuItem>
+      )}
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={() => void copyItems(ids)}>
+        <Copy />
+        复制给 AI
+        <ContextMenuShortcut>C</ContextMenuShortcut>
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Boxes />
+          移到模块
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="max-h-80 w-44 overflow-y-auto">
+          <ContextMenuRadioGroup value={module} onValueChange={(v) => void setItemsModule(ids, Number(v))}>
+            <ContextMenuRadioItem value="0">{UNSORTED}</ContextMenuRadioItem>
+            {modules.map((m) => (
+              <ContextMenuRadioItem key={m.id} value={String(m.id)}>
+                <span className="truncate">{m.name}</span>
+              </ContextMenuRadioItem>
+            ))}
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger disabled={others.length === 0}>
+          <ArrowRightLeft />
+          移到其他项目
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="max-h-80 w-48 overflow-y-auto">
+          {others.map((p) => (
+            <ContextMenuItem key={p.id} onSelect={() => void moveItemsToProject(ids, p.id)}>
+              <span className="truncate">{p.name}</span>
+            </ContextMenuItem>
+          ))}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteItems(ids)}>
+        <Trash2 />
+        删除 {ids.length} 条
         <ContextMenuShortcut>Delete</ContextMenuShortcut>
       </ContextMenuItem>
     </>

@@ -65,6 +65,16 @@ export function subtreeIds(forest: Forest, root: number): Set<number> {
   return out;
 }
 
+/** ids without those that sit under another of them, in their order. */
+export function topMost(forest: Forest, ids: Iterable<number>): number[] {
+  const list = [...ids];
+  const all = new Set(list);
+  return list.filter((id) => {
+    for (let n = forest.byId.get(id)?.parent; n; n = n.parent) if (all.has(n.item.id)) return false;
+    return true;
+  });
+}
+
 /** How many items sit under node, and how many of them are done. */
 export function progress(node: TreeNode): { done: number; total: number } {
   let done = 0;
@@ -182,6 +192,17 @@ export function queueTrees(forest: Forest, matches: (item: Item) => boolean, col
   const doneAt = (t: TreeRows) => scans.get(t.root.id)!.doneAt;
   out.done.sort((a, b) => doneAt(b) - doneAt(a) || a.root.id - b.root.id);
   return out;
+}
+
+/**
+ * Where each item stands in the queue, top to bottom, as it shows with
+ * nothing filtered or collapsed: for doing to several items in order.
+ */
+export function queueOrder(forest: Forest): Map<number, number> {
+  const t = queueTrees(forest, () => true, new Set());
+  const at = new Map<number, number>();
+  for (const tree of [...t.doing, ...t.todo, ...t.done]) for (const r of tree.rows) at.set(r.item.id, at.size);
+  return at;
 }
 
 // ---- Moving ----

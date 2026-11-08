@@ -16,11 +16,14 @@ import { ProjectBar, QueueFilters } from "@/components/app/project-header";
 import {
   collapseOrUp,
   confirmDeleteItem,
+  confirmDeleteItems,
   expandOrDown,
-  indentItem,
-  outdentItem,
+  extendSelection,
+  indentItems,
+  outdentItems,
   Queue,
   renameInQueue,
+  selectAllRows,
   visibleItems,
 } from "@/components/app/queue";
 import { SettingsDialog } from "@/components/app/settings-dialog";
@@ -28,14 +31,18 @@ import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
 import {
   copyItem,
+  copyItems,
   focusNewItem,
   init,
   itemLinkSource,
   openDeeplink,
   refresh,
   select,
+  selectedInOrder,
   toggleItemDoing,
   toggleItemDone,
+  toggleItemsDoing,
+  toggleItemsDone,
   useAtlas,
 } from "@/state/atlas";
 import { openHelp, openSettings } from "@/state/dialogs";
@@ -225,11 +232,17 @@ function useShortcuts() {
       const focus = document.activeElement;
       if (overlayOpen() || isTypingTarget(focus)) return;
       const s = useAtlas.getState();
-      // Tab, Shift+Tab: the selected item a level in or out. On a control, Tab moves the keyboard as ever.
-      if (key === "Tab" && !mod && s.view === "queue" && s.selectedId && !onControl(focus)) {
+      // Tab, Shift+Tab: the selected items a level in or out. On a control, Tab moves the keyboard as ever.
+      if (key === "Tab" && !mod && s.view === "queue" && s.selectedIds.size && !onControl(focus)) {
         e.preventDefault();
-        if (e.shiftKey) outdentItem(s.selectedId);
-        else indentItem(s.selectedId);
+        if (e.shiftKey) outdentItems(selectedInOrder());
+        else indentItems(selectedInOrder());
+        return;
+      }
+      // Shift+↑ ↓: the selection stretches to the row above or below.
+      if (e.shiftKey && !mod && s.view === "queue" && (key === "ArrowDown" || key === "ArrowUp") && !usesArrows(focus)) {
+        e.preventDefault();
+        extendSelection(key === "ArrowDown" ? 1 : -1);
         return;
       }
       if (!s.projectId || e.shiftKey) return;
@@ -241,12 +254,19 @@ function useShortcuts() {
       }
       if (s.view !== "queue") return;
       const item = s.items.find((i) => i.id === s.selectedId);
+      // With several selected, the keys act on all of them, in the queue's order.
+      const many = s.selectedIds.size > 1;
+      const ids = many ? selectedInOrder() : [];
 
       if (mod) {
-        // Ctrl+C copies the item, unless the user selected text to copy.
+        if (key === "a") {
+          e.preventDefault();
+          selectAllRows();
+        }
+        // Ctrl+C copies the items, unless the user selected text to copy.
         if (key === "c" && item && !window.getSelection()?.toString()) {
           e.preventDefault();
-          void copyItem(item.id);
+          void (many ? copyItems(ids) : copyItem(item.id));
         }
         return;
       }
@@ -264,7 +284,7 @@ function useShortcuts() {
           moveSelection(-1);
           return;
         case "Escape":
-          if (s.selectedId) {
+          if (s.selectedId || s.selectedIds.size) {
             e.preventDefault();
             select(0);
           }
@@ -285,32 +305,35 @@ function useShortcuts() {
         case " ":
           if (onControl(focus)) return;
           e.preventDefault();
-          toggleItemDone(item);
+          if (many) toggleItemsDone(ids);
+          else toggleItemDone(item);
           break;
         case "s":
           e.preventDefault();
-          toggleItemDoing(item);
+          if (many) toggleItemsDoing(ids);
+          else toggleItemDoing(item);
           break;
         case "c":
           e.preventDefault();
-          void copyItem(item.id);
+          void (many ? copyItems(ids) : copyItem(item.id));
           break;
         case "o":
-          if (itemLinkSource(item.id)) {
+          if (!many && itemLinkSource(item.id)) {
             e.preventDefault();
             openDeeplink(item.id);
           }
           break;
         case "Enter":
         case "e":
-          if (key === "Enter" && onControl(focus)) return;
+          if (many || (key === "Enter" && onControl(focus))) return;
           e.preventDefault();
           // In the queue the row itself turns into the field; elsewhere the detail's title does.
           if (!renameInQueue(item.id)) editTitle();
           break;
         case "Delete":
           e.preventDefault();
-          confirmDeleteItem(item);
+          if (many) confirmDeleteItems(ids);
+          else confirmDeleteItem(item);
           break;
       }
     };

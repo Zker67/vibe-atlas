@@ -59,10 +59,13 @@ import {
 import { IconButton } from "./icon-button";
 import { TypeChip } from "./item-marks";
 import { confirmDeleteItem } from "./queue";
+import { SelectionDetail } from "./selection-detail";
 
-/** The panel beside the queue: the selected item, to edit. */
+/** The panel beside the queue: the selected item, to edit; several selected, what to do to them all. */
 export function ItemDetail() {
+  const many = useAtlas((s) => s.selectedIds.size > 1);
   const item = useAtlas((s) => s.items.find((i) => i.id === s.selectedId));
+  if (many) return <SelectionDetail />;
   if (!item) return <DetailEmpty />;
   // A new key per item: the fields and the editor start over with its text.
   return <Detail key={item.id} item={item} />;
@@ -70,6 +73,8 @@ export function ItemDetail() {
 
 const KEYS: [string, string][] = [
   ["↑ ↓", "选择上一条、下一条"],
+  ["Shift+↑ ↓", "连续多选，也可以按住 Ctrl / Shift 点选"],
+  ["Ctrl+A", "全选"],
   ["Space", "标为完成，或重新打开"],
   ["S", "开始进行，或退回待办"],
   ["C", "复制给 AI"],
@@ -142,7 +147,7 @@ function Detail({ item }: { item: Item }) {
 }
 
 /** One row of the properties: its name, faint, on the left; its value on the right. */
-function Prop({ label, icon: Icon, top, children }: { label: string; icon: LucideIcon; top?: boolean; children: ReactNode }) {
+export function Prop({ label, icon: Icon, top, children }: { label: string; icon: LucideIcon; top?: boolean; children: ReactNode }) {
   return (
     <div className="contents">
       <dt className={cn("flex h-7 items-center gap-1.5 text-xs text-muted-foreground", top && "self-start")}>
@@ -187,17 +192,22 @@ const STATUS_CHIP: Record<ItemStatus, string> = {
 
 /** The item's status as three segments, 待办 | 进行中 | 完成: a click picks one. */
 function StatusSegments({ item }: { item: Item }) {
+  return <StatusPicker value={item.status} onPick={(status) => void setItemStatus(item.id, status)} />;
+}
+
+/** Three segments, 待办 | 进行中 | 完成, value lit, none for a mix: a click on another picks it. */
+export function StatusPicker({ value, onPick }: { value: ItemStatus | null; onPick(status: ItemStatus): void }) {
   return (
     <div role="group" aria-label="状态" className="inline-flex h-7 max-w-full items-center gap-0.5 rounded-lg bg-muted p-0.5">
       {STATUSES.map((s) => {
-        const on = s.value === item.status;
+        const on = s.value === value;
         return (
           <button
             key={s.value}
             type="button"
             aria-pressed={on}
             onClick={() => {
-              if (!on) void setItemStatus(item.id, s.value);
+              if (!on) onPick(s.value);
             }}
             className={cn(
               "inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] duration-200 hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
@@ -336,7 +346,7 @@ function TitleField({ item }: { item: Item }) {
 }
 
 /** A select that reads as its value, and shows it is one under the pointer. */
-const QUIET_TRIGGER =
+export const QUIET_TRIGGER =
   "h-7 max-w-full border-transparent bg-transparent px-1.5 hover:bg-muted aria-expanded:bg-muted dark:bg-transparent dark:hover:bg-muted [&>svg:last-child]:opacity-50";
 
 function TypeSelect({ item }: { item: Item }) {

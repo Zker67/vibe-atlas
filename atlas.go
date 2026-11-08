@@ -415,6 +415,97 @@ func (a *Atlas) DeleteItem(id int64) error {
 	return nil
 }
 
+// SetItemsType changes the kind of the items ids, all at once: when one
+// fails, none changes.
+func (a *Atlas) SetItemsType(ids []int64, itemType store.ItemType) ([]store.Item, error) {
+	return a.editItems(func(db *store.Store) ([]store.Item, error) { return db.SetItemsType(ids, itemType) })
+}
+
+// SetItemsModule puts the items ids in a module of their project, or in
+// none when moduleID is 0, all at once: when one fails, none changes.
+func (a *Atlas) SetItemsModule(ids []int64, moduleID int64) ([]store.Item, error) {
+	return a.editItems(func(db *store.Store) ([]store.Item, error) { return db.SetItemsModule(ids, moduleID) })
+}
+
+func (a *Atlas) editItems(fn func(*store.Store) ([]store.Item, error)) ([]store.Item, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	items, err := fn(db)
+	if err == nil {
+		projects := make([]int64, 0, len(items))
+		for _, it := range items {
+			projects = append(projects, it.ProjectID)
+		}
+		a.changedAll(projects)
+	}
+	return items, err
+}
+
+// MoveItemsToProject moves the items ids, with the items under them, to
+// another project, in their order, at the top level and without a module,
+// all at once: when one fails, none moves. Those under another of ids go
+// along with it, under it.
+func (a *Atlas) MoveItemsToProject(ids []int64, projectID int64) ([]store.Item, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	from, err := projectsOf(db, ids)
+	if err != nil {
+		return nil, err
+	}
+	items, err := db.MoveItemsToProject(ids, projectID)
+	if err == nil {
+		a.changedAll(append(from, projectID))
+	}
+	return items, err
+}
+
+// DeleteItems deletes the items ids, all at once: when one fails, none is
+// deleted. Children not deleted move up into the place of the nearest
+// item above them that stays.
+func (a *Atlas) DeleteItems(ids []int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	from, err := projectsOf(db, ids)
+	if err != nil {
+		return err
+	}
+	if err := db.DeleteItems(ids); err != nil {
+		return err
+	}
+	a.changedAll(from)
+	return nil
+}
+
+// projectsOf returns the project of each of the items ids.
+func projectsOf(db *store.Store, ids []int64) ([]int64, error) {
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		it, err := db.Item(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it.ProjectID)
+	}
+	return out, nil
+}
+
+// changedAll tells every window about each of the projects once.
+func (a *Atlas) changedAll(projectIDs []int64) {
+	seen := map[int64]bool{}
+	for _, id := range projectIDs {
+		if !seen[id] {
+			seen[id] = true
+			a.changed(id)
+		}
+	}
+}
+
 // ItemText is what copying an item puts on the clipboard: its title, its
 // notes, then the items under it as a task list, done ones ticked, the
 // notes of each indented under it. descendants are as Store.Descendants
@@ -474,6 +565,59 @@ func (a *Atlas) CopyItem(id int64) error {
 		return err
 	}
 	mygo.Clipboard.WriteText(ItemText(it, descendants))
+	return nil
+}
+
+// ItemsText is what copying the items ids puts on the clipboard: each one
+// as ItemText has it, in their order, apart by a rule. One under another
+// of ids shows only in that one's list.
+func ItemsText(db *store.Store, ids []int64) (string, error) {
+	type entry struct {
+		it          store.Item
+		descendants []store.Item
+	}
+	entries := make([]entry, 0, len(ids))
+	under := map[int64]bool{}
+	seen := map[int64]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		it, err := db.Item(id)
+		if err != nil {
+			return "", err
+		}
+		descendants, err := db.Descendants(id)
+		if err != nil {
+			return "", err
+		}
+		for _, d := range descendants {
+			under[d.ID] = true
+		}
+		entries = append(entries, entry{it, descendants})
+	}
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !under[e.it.ID] {
+			parts = append(parts, ItemText(e.it, e.descendants))
+		}
+	}
+	return strings.Join(parts, "\n\n---\n\n"), nil
+}
+
+// CopyItems copies the items ids, as ItemsText has them, to paste to an
+// AI.
+func (a *Atlas) CopyItems(ids []int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	text, err := ItemsText(db, ids)
+	if err != nil {
+		return err
+	}
+	mygo.Clipboard.WriteText(text)
 	return nil
 }
 

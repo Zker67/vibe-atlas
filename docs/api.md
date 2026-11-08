@@ -17,7 +17,8 @@
 | 项目文件夹 | `chooseProjectFolder`、`clearProjectFolder`、`openProjectFolder` | 选择时弹出系统对话框，取消时原样返回项目 |
 | 模块 | `modules`、`createModule`、`renameModule`、`deleteModule`、`reorderModules` | `deleteModule` 返回变成「未分类」的改进点条数 |
 | 改进点 | `items`、`createItem`、`setItemTitle`、`setItemType`、`setItemModule`、`setItemNote`、`setItemDeeplink`、`setItemStatus`、`reopenItem`、`moveItem`、`mergeItems`、`moveItemToProject`、`deleteItem` | `items` 是项目的全部改进点（含子改进点），前端按 `parentId` 和 `sortOrder` 建树。`moveItem(id, anchorId, place)`：`place` 为 `before` / `after`（放到 anchor 同一层的前后）或 `inside`（成为 anchor 的最后一个子改进点）。`mergeItems(id, targetId)` 在 target 的位置新建父改进点并返回它。`moveItemToProject` 带上子孙；`deleteItem` 让子改进点上移一层 |
-| 复制与链接 | `copyItem`、`openDeeplink`、`openLink` | `copyItem` 复制标题和备注（连同子改进点的清单和备注，不带链接）；`openDeeplink` 在开关打开时，子改进点没有链接就打开最近一层上级的；`file:` 链接打开前先检查文件是否存在 |
+| 多条改进点 | `setItemsType`、`setItemsModule`、`moveItemsToProject`、`deleteItems` | 队列多选用：参数是 `ids`，每个方法在一个事务里完成，任何一条失败整组都不改，成功后每个涉及的项目只发一次 `changed`。`setItemsModule` 只改这些条目本身；`moveItemsToProject` 按 `ids` 的顺序排到目标项目最后，在另一条下面的跟着上级走、保持层级；`deleteItems` 让没删的子改进点上移到最近一层没删的上级的位置。批量改状态和拖动不新增接口，前端依次调用 `setItemStatus` / `reopenItem` / `moveItem` |
+| 复制与链接 | `copyItem`、`copyItems`、`openDeeplink`、`openLink` | `copyItem` 复制标题和备注（连同子改进点的清单和备注，不带链接）；`copyItems(ids)` 按 `ids` 的顺序把每条按 `copyItem` 的格式连起来，条与条之间用 `---` 分隔，在另一条下面的只出现在上级的清单里；`openDeeplink` 在开关打开时，子改进点没有链接就打开最近一层上级的；`file:` 链接打开前先检查文件是否存在 |
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
 | 设置 | `settings`、`setShortcut`、`setBossKey`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setShareLinks`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；快速记录和老板键不能相同；`setBossKey("")` 清除老板键；`pauseShortcut` 在录制新快捷键时临时释放两个全局快捷键 |
 | 背景与透明度 | `chooseWallpaper`、`clearWallpaper`、`setWallpaperLook`、`setGlass`、`setWindowOpacity`、`previewWindowOpacity` | `chooseWallpaper` 打开系统的选择文件窗口，取消时返回原设置；图片只收 PNG、JPG、WebP、GIF、BMP，最大 20 MB，并按内容校验类型。数值超出范围时由 Go 限制到范围内。`previewWindowOpacity` 只改窗口，不保存 |

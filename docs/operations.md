@@ -61,7 +61,7 @@ bun run build
 VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录>\report.json' "build/windows-amd64/Vibe Atlas.exe"
 ```
 
-退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响）。
+退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响），以及队列多选的检查（`select`：用真实的鼠标和键盘事件依次检查单击、`Ctrl` 加选、`Shift` / `Ctrl+Shift` 连选、详情显示「已选 N 条」、`Space` 一起完成再一起重新打开、`Esc`、`Ctrl+A`、空白处框选、整组拖到另一条上沿、`Tab` / `Shift+Tab`、`Shift+↓`）。
 
 本机已经开着 Vibe Atlas 时，两个实例会争用同一个 WebView2 数据目录，测试程序报 `creating the WebView2 controller failed (HRESULT 0x8007139f)`。再加一个环境变量 `WEBVIEW2_USER_DATA_FOLDER='<临时目录>\webview'` 即可，不用关掉正在用的程序；这时快捷键会因为被占用而注册失败，属于正常。
 

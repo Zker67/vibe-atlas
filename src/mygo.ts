@@ -324,6 +324,13 @@ export const Atlas = {
   copyItem(id: number): Promise<void> {
     return call("Atlas.CopyItem", id);
   },
+  /**
+   * CopyItems copies the items ids, as ItemsText has them, to paste to an
+   * AI.
+   */
+  copyItems(ids: number[]): Promise<void> {
+    return call("Atlas.CopyItems", ids);
+  },
   /** CreateItem adds an item to do at the end of the project's list. */
   createItem(item: NewItem): Promise<Item> {
     return call("Atlas.CreateItem", item);
@@ -339,6 +346,14 @@ export const Atlas = {
   /** DeleteItem deletes an item. Its children move up a level, into its place. */
   deleteItem(id: number): Promise<void> {
     return call("Atlas.DeleteItem", id);
+  },
+  /**
+   * DeleteItems deletes the items ids, all at once: when one fails, none is
+   * deleted. Children not deleted move up into the place of the nearest
+   * item above them that stays.
+   */
+  deleteItems(ids: number[]): Promise<void> {
+    return call("Atlas.DeleteItems", ids);
   },
   /**
    * DeleteModule deletes a module; its items stay in the project, without a
@@ -388,6 +403,15 @@ export const Atlas = {
    */
   moveItemToProject(id: number, projectID: number): Promise<Item> {
     return call("Atlas.MoveItemToProject", id, projectID);
+  },
+  /**
+   * MoveItemsToProject moves the items ids, with the items under them, to
+   * another project, in their order, at the top level and without a module,
+   * all at once: when one fails, none moves. Those under another of ids go
+   * along with it, under it.
+   */
+  moveItemsToProject(ids: number[], projectID: number): Promise<Item[]> {
+    return call("Atlas.MoveItemsToProject", ids, projectID);
   },
   /** OpenDataFolder opens the folder of the database in the file manager. */
   openDataFolder(): Promise<void> {
@@ -517,6 +541,20 @@ export const Atlas = {
   /** SetItemType changes the kind of an item. */
   setItemType(id: number, itemType: ItemType): Promise<Item> {
     return call("Atlas.SetItemType", id, itemType);
+  },
+  /**
+   * SetItemsModule puts the items ids in a module of their project, or in
+   * none when moduleID is 0, all at once: when one fails, none changes.
+   */
+  setItemsModule(ids: number[], moduleID: number): Promise<Item[]> {
+    return call("Atlas.SetItemsModule", ids, moduleID);
+  },
+  /**
+   * SetItemsType changes the kind of the items ids, all at once: when one
+   * fails, none changes.
+   */
+  setItemsType(ids: number[], itemType: ItemType): Promise<Item[]> {
+    return call("Atlas.SetItemsType", ids, itemType);
   },
   /** SetProjectDescription replaces a project's notes, in Markdown. */
   setProjectDescription(id: number, description: string): Promise<Project> {

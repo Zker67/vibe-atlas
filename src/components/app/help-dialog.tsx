@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   Link2,
+  ListChecks,
   ListTodo,
   MousePointerClick,
   NotebookPen,
@@ -244,6 +245,9 @@ function QueueSection() {
         <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
         <li>侧栏的项目和模块可以拖动排序，双击直接改名。</li>
         <li>右键单击改进点，可以修改状态、添加子改进点、移动或删除。</li>
+        <li>
+          按住 <K>Ctrl</K> 单击加选，按住 <K>Shift</K> 单击连选，也可以在空白处拖出选择框。选中多条后，右键菜单、快捷键和右侧详情都对整组生效；从选中的行开始拖动，整组一起移动。
+        </li>
         <li>点击分区标题，收起或展开进行中、待办、已完成。</li>
         <li>把改进点拖到另一个分区的标题或空白处，就改成那个状态；分区收起时也可以拖到标题上。</li>
         <li>把改进点拖到侧栏的模块上，就改成那个模块，子改进点一起改。</li>
@@ -316,6 +320,9 @@ function DetailSection() {
         <Feature icon={NotebookPen} title="备注">
           支持 Markdown 格式。
         </Feature>
+        <Feature icon={ListChecks} title="选中多条时">
+          显示「已选 N 条」和状态分布，可以一起改状态、类型、模块，复制、移到其他项目或删除；下面列出选中的条目，点一条只看它。
+        </Feature>
       </div>
     </Section>
   );
@@ -383,6 +390,8 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
     rows: [
       ["新增改进点", ["N"]],
       ["上一条 / 下一条", ["↑ ↓", "K J"]],
+      ["连续多选", ["Shift+↑ ↓"]],
+      ["全选", ["Ctrl+A"]],
       ["取消选择", ["Esc"]],
       ["设置", ["Ctrl+,"]],
       ["使用说明", ["F1"]],

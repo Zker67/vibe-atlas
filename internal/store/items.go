@@ -249,6 +249,34 @@ func (s *Store) updateItem(id int64, fn func(tx *sql.Tx, it Item) error) (Item, 
 	return it, err
 }
 
+// updateItems runs fn on each of the items ids in one transaction, in
+// order, and returns them as fn left them: when fn fails on one, none of
+// them changes.
+func (s *Store) updateItems(ids []int64, fn func(tx *sql.Tx, it Item) error) ([]Item, error) {
+	var out []Item
+	err := s.inTx(func(tx *sql.Tx) error {
+		for _, id := range ids {
+			current, err := itemIn(tx, id)
+			if err != nil {
+				return err
+			}
+			if err := fn(tx, current); err != nil {
+				return err
+			}
+		}
+		out = make([]Item, 0, len(ids))
+		for _, id := range ids {
+			it, err := itemIn(tx, id)
+			if err != nil {
+				return err
+			}
+			out = append(out, it)
+		}
+		return nil
+	})
+	return out, err
+}
+
 // SetItemTitle changes the title of an item. A title the user gives is
 // theirs: the app no longer makes it from the item's children.
 func (s *Store) SetItemTitle(id int64, title string) (Item, error) {
@@ -269,22 +297,45 @@ func (s *Store) SetItemType(id int64, t ItemType) (Item, error) {
 	if !t.valid() {
 		return Item{}, userErr("未知的类型：%s", t)
 	}
-	return s.updateItem(id, func(tx *sql.Tx, _ Item) error {
-		_, err := tx.Exec(`UPDATE items SET type = ?, updated_at = ? WHERE id = ?`, t, s.millis(), id)
+	return s.updateItem(id, s.setType(t))
+}
+
+// SetItemsType changes the kind of the items ids, all at once: when one
+// fails, none changes.
+func (s *Store) SetItemsType(ids []int64, t ItemType) ([]Item, error) {
+	if !t.valid() {
+		return nil, userErr("未知的类型：%s", t)
+	}
+	return s.updateItems(ids, s.setType(t))
+}
+
+func (s *Store) setType(t ItemType) func(tx *sql.Tx, it Item) error {
+	return func(tx *sql.Tx, it Item) error {
+		_, err := tx.Exec(`UPDATE items SET type = ?, updated_at = ? WHERE id = ?`, t, s.millis(), it.ID)
 		return err
-	})
+	}
 }
 
 // SetItemModule puts an item in a module of its project, or in none when
 // moduleID is 0.
 func (s *Store) SetItemModule(id, moduleID int64) (Item, error) {
-	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
+	return s.updateItem(id, s.setModule(moduleID))
+}
+
+// SetItemsModule puts the items ids in a module, as SetItemModule does,
+// all at once: when one fails, none changes.
+func (s *Store) SetItemsModule(ids []int64, moduleID int64) ([]Item, error) {
+	return s.updateItems(ids, s.setModule(moduleID))
+}
+
+func (s *Store) setModule(moduleID int64) func(tx *sql.Tx, it Item) error {
+	return func(tx *sql.Tx, it Item) error {
 		if err := checkModule(tx, it.ProjectID, moduleID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE items SET module_id = ?, updated_at = ? WHERE id = ?`, nullable(moduleID), s.millis(), id)
+		_, err := tx.Exec(`UPDATE items SET module_id = ?, updated_at = ? WHERE id = ?`, nullable(moduleID), s.millis(), it.ID)
 		return err
-	})
+	}
 }
 
 // SetItemNote replaces the notes of an item.
@@ -636,7 +687,33 @@ func (s *Store) Descendants(id int64) ([]Item, error) {
 // MoveItemToProject moves an item, with the items under it, to another
 // project: at the end of its list, at the top level, all without a module.
 func (s *Store) MoveItemToProject(id, projectID int64) (Item, error) {
-	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
+	return s.updateItem(id, s.moveToProject(projectID))
+}
+
+// MoveItemsToProject moves the items ids to another project, as
+// MoveItemToProject does, in their order, all at once: when one fails,
+// none moves. Those under another of ids go along with it, under it.
+func (s *Store) MoveItemsToProject(ids []int64, projectID int64) ([]Item, error) {
+	move := s.moveToProject(projectID)
+	return s.updateItems(ids, func(tx *sql.Tx, it Item) error {
+		for _, other := range ids {
+			if other == it.ID {
+				continue
+			}
+			under, err := within(tx, it.ID, other)
+			if err != nil {
+				return err
+			}
+			if under {
+				return nil
+			}
+		}
+		return move(tx, it)
+	})
+}
+
+func (s *Store) moveToProject(projectID int64) func(tx *sql.Tx, it Item) error {
+	return func(tx *sql.Tx, it Item) error {
 		if it.ProjectID == projectID {
 			return nil
 		}
@@ -647,7 +724,7 @@ func (s *Store) MoveItemToProject(id, projectID int64) (Item, error) {
 		if err != nil {
 			return err
 		}
-		ids, err := subtreeIDs(tx, id)
+		ids, err := subtreeIDs(tx, it.ID)
 		if err != nil {
 			return err
 		}
@@ -657,41 +734,57 @@ func (s *Store) MoveItemToProject(id, projectID int64) (Item, error) {
 				return err
 			}
 		}
-		if _, err := tx.Exec(`UPDATE items SET parent_id = NULL, sort_order = ? WHERE id = ?`, order, id); err != nil {
+		if _, err := tx.Exec(`UPDATE items SET parent_id = NULL, sort_order = ? WHERE id = ?`, order, it.ID); err != nil {
 			return err
 		}
 		return syncAutoTitles(tx, it.ParentID)
-	})
+	}
 }
 
 // DeleteItem deletes an item. Its children move up a level, into its place.
 func (s *Store) DeleteItem(id int64) error {
+	return s.inTx(func(tx *sql.Tx) error { return deleteItemIn(tx, id) })
+}
+
+// DeleteItems deletes the items ids, as DeleteItem does each, all at once:
+// when one fails, none is deleted. Children not deleted move up into the
+// place of the nearest item above them that stays.
+func (s *Store) DeleteItems(ids []int64) error {
 	return s.inTx(func(tx *sql.Tx) error {
-		it, err := itemIn(tx, id)
-		if err != nil {
-			return err
-		}
-		children, err := childIDs(tx, it.ProjectID, id)
-		if err != nil {
-			return err
-		}
-		if len(children) > 0 {
-			siblings, err := childIDs(tx, it.ProjectID, it.ParentID)
-			if err != nil {
-				return err
-			}
-			at := slices.Index(siblings, id)
-			siblings = slices.Concat(siblings[:at], children, siblings[at+1:])
-			if _, err := tx.Exec(`UPDATE items SET parent_id = ? WHERE parent_id = ?`, nullable(it.ParentID), id); err != nil {
-				return err
-			}
-			if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, siblings); err != nil {
+		for _, id := range ids {
+			if err := deleteItemIn(tx, id); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
-			return err
-		}
-		return syncAutoTitles(tx, it.ParentID)
+		return nil
 	})
+}
+
+func deleteItemIn(tx *sql.Tx, id int64) error {
+	it, err := itemIn(tx, id)
+	if err != nil {
+		return err
+	}
+	children, err := childIDs(tx, it.ProjectID, id)
+	if err != nil {
+		return err
+	}
+	if len(children) > 0 {
+		siblings, err := childIDs(tx, it.ProjectID, it.ParentID)
+		if err != nil {
+			return err
+		}
+		at := slices.Index(siblings, id)
+		siblings = slices.Concat(siblings[:at], children, siblings[at+1:])
+		if _, err := tx.Exec(`UPDATE items SET parent_id = ? WHERE parent_id = ?`, nullable(it.ParentID), id); err != nil {
+			return err
+		}
+		if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, siblings); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return syncAutoTitles(tx, it.ParentID)
 }

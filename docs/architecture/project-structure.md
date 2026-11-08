@@ -64,6 +64,7 @@
 | `atlas.go` | 绑定给前端的 `Atlas` 服务和事件，调用数据层并广播变化 |
 | `smoke.go` | 打包后冒烟测试（只在设置了 `VIBE_ATLAS_SMOKE_REPORT` 时运行） |
 | `smoke_capture.go` | 冒烟测试里驱动快速记录小窗：高度随内容伸缩、`Shift+Enter` 展开详情、带链接保存 |
+| `smoke_select.go` | 冒烟测试里驱动队列多选：点选、连选、批量完成、框选、整组拖动、`Tab` |
 | `internal/store/` | 数据层：SQLite 读写、迁移、规则校验、链接格式、总览汇总，以及集成测试。见 [README](../../internal/store/README.md) |
 | `resources/` | 程序图标和托盘图标 |
 

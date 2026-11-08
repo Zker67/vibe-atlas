@@ -13,7 +13,18 @@ import {
   type Settings,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
-import { ancestors, applyMove, buildForest, linkSource, queueTrees, subtreeIds, type QueueTrees, type TreeNode } from "@/lib/tree";
+import {
+  ancestors,
+  applyMove,
+  buildForest,
+  linkSource,
+  queueOrder,
+  queueTrees,
+  subtreeIds,
+  topMost,
+  type QueueTrees,
+  type TreeNode,
+} from "@/lib/tree";
 
 export type View = "queue" | "overview";
 export type TypeFilter = ItemType | "all";
@@ -36,8 +47,16 @@ interface AtlasState {
   typeFilter: TypeFilter;
   moduleFilter: ModuleFilter;
   statusFilter: StatusFilter;
-  /** The item shown in the detail panel, 0 for none. */
+  /**
+   * The item the keys act from, 0 for none: the one the detail panel shows
+   * while it is the only one selected. With several selected, it is one of
+   * them, the one clicked last.
+   */
   selectedId: number;
+  /** The items selected in the queue, selectedId among them. */
+  selectedIds: ReadonlySet<number>;
+  /** Where Shift+click and Shift+↑↓ select from. */
+  selectAnchor: number;
   /** Which sections of the queue show their items: 进行中, 待办, 已完成. */
   sectionOpen: Readonly<Record<ItemStatus, boolean>>;
   /** Bumped to move the keyboard to the field that adds items. */
@@ -90,6 +109,8 @@ export const useAtlas = create<AtlasState>(() => ({
   moduleFilter: "all",
   statusFilter: "all",
   selectedId: 0,
+  selectedIds: new Set<number>(),
+  selectAnchor: 0,
   sectionOpen: loadSectionOpen(),
   focusNewItem: 0,
   collapsed: loadCollapsed(),
@@ -99,10 +120,51 @@ export const useAtlas = create<AtlasState>(() => ({
 const get = useAtlas.getState;
 const set = useAtlas.setState;
 
+const NONE: ReadonlySet<number> = new Set();
+
+/** The selection with only id in it, or nothing for 0; Shift+click goes on from it. */
+function only(id: number): Pick<AtlasState, "selectedId" | "selectedIds" | "selectAnchor"> {
+  return { selectedId: id, selectedIds: id ? new Set([id]) : NONE, selectAnchor: id };
+}
+
+/** The selection without the items keep turns down; the same one when none goes. */
+function keepSelected(
+  s: Pick<AtlasState, "selectedId" | "selectedIds">,
+  keep: (id: number) => boolean,
+): Pick<AtlasState, "selectedId" | "selectedIds"> {
+  if ([...s.selectedIds].every(keep) && (s.selectedId === 0 || keep(s.selectedId))) {
+    return { selectedId: s.selectedId, selectedIds: s.selectedIds };
+  }
+  const selectedIds = new Set([...s.selectedIds].filter(keep));
+  const selectedId = s.selectedId && keep(s.selectedId) ? s.selectedId : ([...selectedIds].at(-1) ?? 0);
+  return { selectedId, selectedIds: selectedIds.size ? selectedIds : NONE };
+}
+
 // ---- Loading ----
 
 let loading: Promise<void> | null = null;
 let again = false;
+
+let holds = 0;
+let missed = false;
+
+/**
+ * Runs fn with the fetches that the changes Go reports start held back,
+ * then makes one, if any came meanwhile: for steps that Go applies one by
+ * one, which would show half done.
+ */
+async function holdRefresh(fn: () => Promise<void>) {
+  holds++;
+  try {
+    await fn();
+  } finally {
+    holds--;
+    if (holds === 0 && missed) {
+      missed = false;
+      void refresh();
+    }
+  }
+}
 
 /**
  * Fetches the projects and what the open project shows. Calls made while a
@@ -145,6 +207,7 @@ async function load() {
     set({ projects });
     return;
   }
+  const present = new Set(items.map((i) => i.id));
   set((s) => ({
     ready: true,
     loadError: "",
@@ -153,7 +216,7 @@ async function load() {
     modules,
     items,
     overview: overview ?? (s.overview?.projectId === projectId ? s.overview : null),
-    selectedId: items.some((i) => i.id === s.selectedId) ? s.selectedId : 0,
+    ...keepSelected(s, (id) => present.has(id)),
     moduleFilter:
       s.moduleFilter === "all" || s.moduleFilter === 0 || modules.some((m) => m.id === s.moduleFilter)
         ? s.moduleFilter
@@ -168,7 +231,10 @@ let started = false;
 export async function init() {
   if (started) return;
   started = true;
-  events.changed.on(() => void refresh());
+  events.changed.on(() => {
+    if (holds) missed = true;
+    else void refresh();
+  });
   events.settingsChanged.on((settings) => set({ settings }));
   try {
     const settings = await Atlas.settings();
@@ -184,7 +250,7 @@ export async function init() {
 
 export function openProject(id: number) {
   if (id === get().projectId) return;
-  set({ projectId: id, selectedId: 0, typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [] });
+  set({ projectId: id, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [] });
   void Atlas.setCurrentProject(id);
   void refresh();
 }
@@ -194,8 +260,43 @@ export function setView(view: View) {
   if (view === "overview") void refresh();
 }
 
+/** Selects the item alone, or nothing for 0. */
 export function select(id: number) {
-  set({ selectedId: id });
+  set(only(id));
+}
+
+/**
+ * Selects the items ids, cursor the one the keys act from (the last of ids
+ * when it is not one of them), and anchor where Shift goes on from.
+ */
+export function setSelection(ids: Iterable<number>, cursor: number, anchor = get().selectAnchor) {
+  const selectedIds = new Set(ids);
+  const selectedId = selectedIds.has(cursor) ? cursor : ([...selectedIds].at(-1) ?? 0);
+  set({ selectedIds: selectedIds.size ? selectedIds : NONE, selectedId, selectAnchor: anchor });
+}
+
+/** Ctrl+click: adds the item to the selection or takes it out; Shift goes on from it. */
+export function toggleSelected(id: number) {
+  const s = get();
+  const next = new Set(s.selectedIds);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  const cursor = next.has(id) ? id : next.has(s.selectedId) ? s.selectedId : ([...next].at(-1) ?? 0);
+  setSelection(next, cursor, id);
+}
+
+/** ids in the queue's order, top to bottom, as it shows with nothing filtered or collapsed. */
+export function inQueueOrder(items: Item[], ids: Iterable<number>): number[] {
+  const at = queueOrder(buildForest(items));
+  const list = [...new Set(ids)].filter((id) => at.has(id));
+  list.sort((a, b) => at.get(a)! - at.get(b)!);
+  return list;
+}
+
+/** The ids of the items selected, in the queue's order. */
+export function selectedInOrder(): number[] {
+  const s = get();
+  return inQueueOrder(s.items, s.selectedIds);
 }
 
 /** Shows an item in the queue, from the overview: clears filters that hide it, opens its parents. */
@@ -208,7 +309,7 @@ export function showItem(item: Item) {
   set({
     statusFilter: matchesStatus(item, s.statusFilter) ? s.statusFilter : "all",
     view: "queue",
-    selectedId: item.id,
+    ...only(item.id),
     ...(hidden ? { typeFilter: "all" as const, moduleFilter: "all" as const } : {}),
   });
   const section = sectionOf(item.id);
@@ -262,7 +363,7 @@ export function focusNewItem() {
 
 /** Selects an item and moves the keyboard to the field that adds a child to it. */
 export function focusNewChild(id: number) {
-  set({ view: "queue", selectedId: id, newChildFor: id });
+  set({ view: "queue", ...only(id), newChildFor: id });
 }
 
 /** The field under the queue stops adding children (focusNewChild). */
@@ -374,7 +475,7 @@ export async function deleteProject(id: number) {
   if (await runOk(Atlas.deleteProject(id))) {
     set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
     if (get().projectId === id) {
-      set({ projectId: 0, selectedId: 0, items: [], modules: [], overview: null });
+      set({ projectId: 0, ...only(0), items: [], modules: [], overview: null });
     }
     void refresh();
   }
@@ -462,10 +563,7 @@ async function applyStatus(id: number, status: ItemStatus) {
  * it takes back what it carried.
  */
 export async function setItemStatus(id: number, status: ItemStatus) {
-  const items = get().items;
-  const change = statusChange(items, id, status, false);
-  const start = startMove(items, id, change.plan);
-  await applyChange(start ? [start] : [], change);
+  await applySteps([{ kind: "status", id, status }]);
 }
 
 /** A move of an item, with those under it, as Store.MoveItem makes it. */
@@ -494,18 +592,56 @@ function startMove(items: Item[], id: number, plan: ReadonlyMap<number, ItemStat
   return last ? { id: root.item.id, anchorId: last.item.id, place: "after" } : null;
 }
 
-/**
- * Shows a change at once, the moves then the statuses, and has Go apply it
- * in that order: the item with what Go carries along with it in one call,
- * then, one by one, what else the change gives a status to.
- */
-async function applyChange(moves: Move[], change: StatusChange | null) {
+/** A change to one item: a status given by hand, a reopening, or a drop in the queue. */
+type Step =
+  | { kind: "status"; id: number; status: ItemStatus }
+  | { kind: "reopen"; id: number }
+  | { kind: "drop"; id: number; move: { anchorId: number; place: Place } | null; status: ItemStatus | null };
+
+/** What a step does: the moves, then the statuses. */
+interface Plan {
+  moves: Move[];
+  change: StatusChange | null;
+}
+
+/** What the step does to the items as they are; null when it changes nothing. */
+function planStep(items: Item[], step: Step): Plan | null {
+  let change: StatusChange | null = null;
+  let moves: Move[] = [];
+  switch (step.kind) {
+    case "status": {
+      change = statusChange(items, step.id, step.status, false);
+      const start = startMove(items, step.id, change.plan);
+      moves = start ? [start] : [];
+      break;
+    }
+    case "reopen": {
+      const item = items.find((i) => i.id === step.id);
+      if (item?.status !== "done") return null;
+      change = statusChange(items, step.id, reopenStatus(item), false, true);
+      const start = startMove(items, step.id, change.plan);
+      moves = start ? [start] : [];
+      break;
+    }
+    case "drop": {
+      change = step.status ? statusChange(items, step.id, step.status, true) : null;
+      // Put where the user dropped it, the item stays there; started from the
+      // title of 进行中, its tree goes to the end of it.
+      const start = step.move || !change ? null : startMove(items, step.id, change.plan);
+      moves = step.move ? [{ id: step.id, ...step.move }] : start ? [start] : [];
+      break;
+    }
+  }
+  if (moves.length === 0 && !change?.plan.size) return null;
+  return { moves, change };
+}
+
+/** The items as they are once Go applied the plan: the moves, then the statuses. */
+function planned(items: Item[], { moves, change }: Plan): Item[] {
   const plan = change?.plan ?? new Map<number, ItemStatus>();
-  if (moves.length === 0 && plan.size === 0) return;
   const byGo = (v: number, to: ItemStatus) => change?.carried.get(v) === to;
-  let items = get().items;
   for (const m of moves) items = applyMove(items, m.id, m.anchorId, m.place) ?? items;
-  items = items.map((i) => {
+  return items.map((i) => {
     const to = plan.get(i.id);
     if (!to || !change) return i;
     if (byGo(i.id, to)) {
@@ -514,19 +650,53 @@ async function applyChange(moves: Move[], change: StatusChange | null) {
     if (i.id === change.id && change.reopen) return { ...i, status: to, doneAt: 0, doneWith: 0 };
     return { ...withStatus(i, to), doneWith: 0 };
   });
-  set({ items });
+}
+
+/**
+ * Has Go apply the plan in its order: the moves; the item with what Go
+ * carries along with it, in one call; then, one by one, what else the plan
+ * gives a status to. False when a move failed.
+ */
+async function send({ moves, change }: Plan): Promise<boolean> {
   for (const m of moves) {
-    if (m.place === "inside") expand([m.anchorId]);
-    if (!(await runOk(Atlas.moveItem(m.id, m.anchorId, m.place)))) {
-      void refresh();
-      return;
-    }
+    if (!(await runOk(Atlas.moveItem(m.id, m.anchorId, m.place)))) return false;
   }
-  if (!change) return;
+  if (!change) return true;
+  const { plan } = change;
+  const byGo = (v: number, to: ItemStatus) => change.carried.get(v) === to;
   if (plan.has(change.id) || [...plan].some(([v, to]) => byGo(v, to))) {
     await editItem(change.reopen ? Atlas.reopenItem(change.id) : Atlas.setItemStatus(change.id, change.status));
   }
   for (const [v, to] of plan) if (v !== change.id && !byGo(v, to)) await applyStatus(v, to);
+  return true;
+}
+
+/**
+ * Makes the steps, each on the items as those before it left them: shows
+ * what they all change at once, then has Go apply them in that order, the
+ * fetches held back until the end. A move that fails stops the rest, and
+ * what Go has is fetched.
+ */
+async function applySteps(steps: Step[]) {
+  let items = get().items;
+  const plans: Plan[] = [];
+  for (const step of steps) {
+    const p = planStep(items, step);
+    if (!p) continue;
+    items = planned(items, p);
+    plans.push(p);
+  }
+  if (plans.length === 0) return;
+  set({ items });
+  expand(plans.flatMap((p) => p.moves.filter((m) => m.place === "inside").map((m) => m.anchorId)));
+  await holdRefresh(async () => {
+    for (const p of plans) {
+      if (!(await send(p))) {
+        void refresh();
+        return;
+      }
+    }
+  });
 }
 
 /**
@@ -541,12 +711,7 @@ export const reopenStatus = (item: Item): ItemStatus => (item.startedAt ? "doing
  * doing, its tree goes to the end of 进行中, as when it starts.
  */
 export async function reopenItem(id: number) {
-  const items = get().items;
-  const item = items.find((i) => i.id === id);
-  if (item?.status !== "done") return;
-  const change = statusChange(items, id, reopenStatus(item), false, true);
-  const start = startMove(items, id, change.plan);
-  await applyChange(start ? [start] : [], change);
+  await applySteps([{ kind: "reopen", id }]);
 }
 
 /** The status a click on an item's circle gives it: done, or back to the status before. */
@@ -637,13 +802,19 @@ export function statusChanges(items: Item[], id: number, status: ItemStatus): nu
  * applies them in that order.
  */
 export async function dropItem(id: number, move: { anchorId: number; place: Place } | null, status: ItemStatus | null) {
-  const items = get().items;
-  const change = status ? statusChange(items, id, status, true) : null;
-  // Put where the user dropped it, the item stays there; started from the
-  // title of 进行中, its tree goes to the end of it.
-  const start = move || !change ? null : startMove(items, id, change.plan);
-  const moves = move ? [{ id, ...move }] : start ? [start] : [];
-  await applyChange(moves, change);
+  await applySteps([{ kind: "drop", id, move, status }]);
+}
+
+/** One of the drops of dropItems. */
+export interface Drop {
+  id: number;
+  move: { anchorId: number; place: Place } | null;
+  status: ItemStatus | null;
+}
+
+/** Drops several items, one after the other, each as dropItem does it: a group dragged in the queue. */
+export async function dropItems(drops: Drop[]) {
+  await applySteps(drops.map((d) => ({ kind: "drop", ...d })));
 }
 
 /** Puts id and targetId under a new parent in the target's place, and selects the parent. */
@@ -651,7 +822,7 @@ export async function mergeItems(id: number, targetId: number): Promise<Item | u
   const parent = await run(Atlas.mergeItems(id, targetId));
   if (!parent) return;
   await refresh();
-  set({ selectedId: parent.id });
+  set(only(parent.id));
   return parent;
 }
 
@@ -661,13 +832,13 @@ export async function moveItemToProject(id: number, projectId: number) {
   const project = get().projects.find((p) => p.id === projectId);
   // The items under it go along.
   const gone = subtreeIds(buildForest(get().items), id);
-  set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), selectedId: gone.has(s.selectedId) ? 0 : s.selectedId }));
+  set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
   toast.success(`已移到「${project?.name ?? "另一个项目"}」`);
 }
 
 export async function deleteItem(id: number) {
   if (await runOk(Atlas.deleteItem(id))) {
-    set((s) => ({ items: s.items.filter((i) => i.id !== id), selectedId: s.selectedId === id ? 0 : s.selectedId }));
+    set((s) => ({ items: s.items.filter((i) => i.id !== id), ...keepSelected(s, (v) => v !== id) }));
     // Its children moved up into its place.
     void refresh();
   }
@@ -675,6 +846,97 @@ export async function deleteItem(id: number) {
 
 export async function copyItem(id: number) {
   if (await runOk(Atlas.copyItem(id))) toast.success("已复制，可以粘贴给 AI 了");
+}
+
+// ---- Several items at once ----
+
+/**
+ * Gives the items ids a status, as setItemStatus does each, top to bottom.
+ * Done, those under another of them are left to it, which carries them.
+ */
+export async function setItemsStatus(ids: number[], status: ItemStatus) {
+  const { items } = get();
+  let list = inQueueOrder(items, ids);
+  if (status === "done") list = topMost(buildForest(items), list);
+  await applySteps(list.map((id) => ({ kind: "status", id, status })));
+}
+
+/** Takes the done items of ids back to the status they had before, as reopenItem does each. */
+export async function reopenItems(ids: number[]) {
+  await applySteps(inQueueOrder(get().items, ids).map((id) => ({ kind: "reopen", id })));
+}
+
+function itemsOf(ids: number[]): Item[] {
+  const wanted = new Set(ids);
+  return get().items.filter((i) => wanted.has(i.id));
+}
+
+/** Space on several: when all are done they reopen, else they are all done. */
+export function toggleItemsDone(ids: number[]) {
+  if (itemsOf(ids).every((i) => i.status === "done")) void reopenItems(ids);
+  else void setItemsStatus(ids, "done");
+}
+
+/** S on several: when all are doing they go back to do, else those not doing start. */
+export function toggleItemsDoing(ids: number[]) {
+  const items = itemsOf(ids);
+  if (items.every((i) => i.status === "doing")) void setItemsStatus(ids, "todo");
+  else void setItemsStatus(items.filter((i) => i.status !== "doing").map((i) => i.id), "doing");
+}
+
+/** Merges the items Go returned; those now in another project leave. */
+function mergeAll(list: Item[]) {
+  const byId = new Map(list.map((i) => [i.id, i]));
+  set((s) => ({
+    items: s.items.flatMap((i) => {
+      const it = byId.get(i.id);
+      if (!it) return [i];
+      return it.projectId === s.projectId ? [it] : [];
+    }),
+  }));
+}
+
+export async function setItemsType(ids: number[], type: ItemType) {
+  const items = await run(Atlas.setItemsType(ids, type));
+  if (items) mergeAll(items);
+}
+
+/** Puts the items ids, these only, in a module; false when it failed. */
+export async function setItemsModule(ids: number[], moduleId: number): Promise<boolean> {
+  const items = await run(Atlas.setItemsModule(ids, moduleId));
+  if (items) mergeAll(items);
+  return !!items;
+}
+
+/** Moves the items ids to another project, with those under them, in the queue's order. */
+export async function moveItemsToProject(ids: number[], projectId: number) {
+  const { items } = get();
+  const list = inQueueOrder(items, ids);
+  if (!(await run(Atlas.moveItemsToProject(list, projectId)))) return;
+  const forest = buildForest(items);
+  const top = topMost(forest, list);
+  const gone = new Set(top.flatMap((id) => [...subtreeIds(forest, id)]));
+  set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
+  const name = get().projects.find((p) => p.id === projectId)?.name ?? "另一个项目";
+  const under = gone.size - top.length;
+  toast.success(`已把 ${top.length} 条移到「${name}」${under > 0 ? `，子改进点 ${under} 条一起` : ""}`);
+}
+
+/** Deletes the items ids; their children not deleted move up. */
+export async function deleteItems(ids: number[]) {
+  if (await runOk(Atlas.deleteItems(ids))) {
+    const gone = new Set(ids);
+    set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
+    void refresh();
+  }
+}
+
+/** Copies the items ids, in the queue's order; those under another of them come with it. */
+export async function copyItems(ids: number[]) {
+  const { items } = get();
+  const list = inQueueOrder(items, ids);
+  const n = topMost(buildForest(items), list).length;
+  if (await runOk(Atlas.copyItems(list))) toast.success(n > 1 ? `已复制 ${n} 条，可以粘贴给 AI 了` : "已复制，可以粘贴给 AI 了");
 }
 
 export function openDeeplink(id: number) {
