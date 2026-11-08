@@ -57,13 +57,13 @@ SQLite 文件，表结构在 [`internal/store/store.go`](../internal/store/store
 |---|---|
 | `projects` | 项目名不区分英文大小写唯一 |
 | `modules` | 同一项目内模块名唯一；删除项目时一起删除 |
-| `items` | 删除项目时一起删除；删除模块时 `module_id` 置空（未分类）；`type`、`status` 有取值约束。`parent_id` 指向上级改进点（空是顶层），`sort_order` 是同一个上级下的顺序；`auto_title` 为 1 表示标题由程序按子改进点生成，用户改名后为 0 |
+| `items` | 删除项目时一起删除；删除模块时 `module_id` 置空（未分类）；`type`、`status` 有取值约束。`parent_id` 指向上级改进点（空是顶层），`sort_order` 是同一个上级下的顺序；`auto_title` 为 1 表示标题由程序按子改进点生成，用户改名后为 0；`done_with` 指向带着它一起完成的上级改进点（空表示不是跟着完成的），那条上级撤回完成时它跟着撤回，手动改状态或上级删除时清空 |
 | `settings` | 键值对：快捷键、主题、视觉效果、背景图片的文件名和显示方式、毛玻璃、窗口不透明度、当前项目、上次快速记录的项目 |
 
 连接参数：外键开启、WAL、`synchronous=FULL`，单连接。
 
 ## 变更规则
 
-- 结构版本记在 SQLite 的 `user_version`（当前为 2；版本 2 加了 `parent_id`、`auto_title`）。改表结构时在 `migrations` 末尾追加一段迁移，每段迁移和版本号在同一个事务里提交，失败时数据库保持原样。
+- 结构版本记在 SQLite 的 `user_version`（当前为 3；版本 2 加了 `parent_id`、`auto_title`，版本 3 加了 `done_with`）。改表结构时在 `migrations` 末尾追加一段迁移，每段迁移和版本号在同一个事务里提交，失败时数据库保持原样。
 - 数据文件的版本比程序新时拒绝打开，不覆盖。
 - 计划阶段的草案写入 `plans/`；确定后的长期合同同步到本文件。

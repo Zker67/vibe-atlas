@@ -457,15 +457,15 @@ async function applyStatus(id: number, status: ItemStatus) {
 }
 
 /**
- * Gives an item a status, with the items under it that statusPlan takes
- * along: done takes everything under it not done yet; reopened, a done
- * parent takes the done items under it back to do.
+ * Gives an item a status, with the items under it that statusChange takes
+ * along: done carries everything under it not done yet; taken out of done,
+ * it takes back what it carried.
  */
 export async function setItemStatus(id: number, status: ItemStatus) {
   const items = get().items;
-  const plan = statusPlan(items, id, status, false);
-  const start = startMove(items, id, plan);
-  await applyChange(start ? [start] : [], plan);
+  const change = statusChange(items, id, status, false);
+  const start = startMove(items, id, change.plan);
+  await applyChange(start ? [start] : [], change);
 }
 
 /** A move of an item, with those under it, as Store.MoveItem makes it. */
@@ -495,18 +495,24 @@ function startMove(items: Item[], id: number, plan: ReadonlyMap<number, ItemStat
 }
 
 /**
- * Shows a change at once, the moves then the statuses of the plan, and has
- * Go apply it in that order, the plan the top first. reopenId is the done
- * item the plan takes back to the status it had: it keeps when it started.
+ * Shows a change at once, the moves then the statuses, and has Go apply it
+ * in that order: the item with what Go carries along with it in one call,
+ * then, one by one, what else the change gives a status to.
  */
-async function applyChange(moves: Move[], plan: ReadonlyMap<number, ItemStatus>, reopenId = 0) {
+async function applyChange(moves: Move[], change: StatusChange | null) {
+  const plan = change?.plan ?? new Map<number, ItemStatus>();
   if (moves.length === 0 && plan.size === 0) return;
+  const byGo = (v: number, to: ItemStatus) => change?.carried.get(v) === to;
   let items = get().items;
   for (const m of moves) items = applyMove(items, m.id, m.anchorId, m.place) ?? items;
   items = items.map((i) => {
     const to = plan.get(i.id);
-    if (!to) return i;
-    return i.id === reopenId ? { ...i, status: to, doneAt: 0 } : withStatus(i, to);
+    if (!to || !change) return i;
+    if (byGo(i.id, to)) {
+      return to === "done" ? { ...withStatus(i, to), doneWith: change.id } : { ...i, status: to, doneAt: 0, doneWith: 0 };
+    }
+    if (i.id === change.id && change.reopen) return { ...i, status: to, doneAt: 0, doneWith: 0 };
+    return { ...withStatus(i, to), doneWith: 0 };
   });
   set({ items });
   for (const m of moves) {
@@ -516,10 +522,11 @@ async function applyChange(moves: Move[], plan: ReadonlyMap<number, ItemStatus>,
       return;
     }
   }
-  for (const [v, to] of plan) {
-    if (v === reopenId) await editItem(Atlas.reopenItem(v));
-    else await applyStatus(v, to);
+  if (!change) return;
+  if (plan.has(change.id) || [...plan].some(([v, to]) => byGo(v, to))) {
+    await editItem(change.reopen ? Atlas.reopenItem(change.id) : Atlas.setItemStatus(change.id, change.status));
   }
+  for (const [v, to] of plan) if (v !== change.id && !byGo(v, to)) await applyStatus(v, to);
 }
 
 /**
@@ -530,16 +537,16 @@ export const reopenStatus = (item: Item): ItemStatus => (item.startedAt ? "doing
 
 /**
  * Takes a done item back to the status it had before, as reopenStatus
- * says, with the done items under it back to do, as statusPlan has it.
- * Back to doing, its tree goes to the end of 进行中, as when it starts.
+ * says, with what its completion carried, as statusChange has it. Back to
+ * doing, its tree goes to the end of 进行中, as when it starts.
  */
 export async function reopenItem(id: number) {
   const items = get().items;
   const item = items.find((i) => i.id === id);
   if (item?.status !== "done") return;
-  const plan = statusPlan(items, id, reopenStatus(item), false);
-  const start = startMove(items, id, plan);
-  await applyChange(start ? [start] : [], plan, id);
+  const change = statusChange(items, id, reopenStatus(item), false, true);
+  const start = startMove(items, id, change.plan);
+  await applyChange(start ? [start] : [], change);
 }
 
 /** The status a click on an item's circle gives it: done, or back to the status before. */
@@ -575,52 +582,68 @@ function withStatus(item: Item, status: ItemStatus): Item {
   }
 }
 
+/** What giving an item a status changes; see statusChange. */
+interface StatusChange {
+  id: number;
+  status: ItemStatus;
+  /** Taken back to the status it had, by Store.ReopenItem: it keeps when it started. */
+  reopen: boolean;
+  /** The items whose status changes, and what each gets, the top first. */
+  plan: Map<number, ItemStatus>;
+  /** The items under id that Go changes by itself along with it, and what each gets. */
+  carried: Map<number, ItemStatus>;
+}
+
 /**
- * The items whose status changes when id gets status, and what each gets,
- * the top first: id itself; done, also everything under it not done yet;
- * id done and reopened (to do or doing), the done items under it, back to
- * do. Dropped (drop) in 待办, also those under it that are doing go back to
- * do, so that its tree lands there.
+ * What giving id status changes, as Store.SetItemStatus and ReopenItem do
+ * it: done, id carries every item under it not done yet, marked doneWith
+ * it; taken out of done, it takes those it carried, still done and under
+ * it, back to the status they had, as reopenStatus says. Items done on
+ * their own, or changed by hand since, stay as they are. Dropped (drop) in
+ * 待办, the items under it doing, or going back to doing, go back to do
+ * too, so that its tree lands there.
  */
-export function statusPlan(items: Item[], id: number, status: ItemStatus, drop: boolean): Map<number, ItemStatus> {
+function statusChange(items: Item[], id: number, status: ItemStatus, drop: boolean, reopen = false): StatusChange {
   const forest = buildForest(items);
-  const plan = new Map<number, ItemStatus>();
+  const change: StatusChange = { id, status, reopen, plan: new Map(), carried: new Map() };
   const root = forest.byId.get(id)?.item;
-  if (!root) return plan;
-  const reopen = root.status === "done" && status !== "done";
+  if (!root) return change;
+  const leaving = root.status === "done" && status !== "done";
   for (const v of subtreeIds(forest, id)) {
     const it = forest.byId.get(v)!.item;
     let to: ItemStatus | null = null;
-    if (v === id || status === "done") to = status;
-    else if (reopen && it.status === "done") to = "todo";
-    else if (drop && status === "todo" && it.status === "doing") to = "todo";
-    if (to && to !== it.status) plan.set(v, to);
+    if (v === id) to = status;
+    else if (status === "done" && it.status !== "done") to = "done";
+    else if (leaving && it.status === "done" && it.doneWith === id) to = reopenStatus(it);
+    if (v !== id && to) change.carried.set(v, to);
+    if (drop && status === "todo" && (to ?? it.status) === "doing") to = "todo";
+    if (to && to !== it.status) change.plan.set(v, to);
   }
-  return plan;
+  return change;
 }
 
 /**
  * The items that take status when id is dropped in its section, as the
- * drop marks count them: see statusPlan.
+ * drop marks count them: see statusChange.
  */
 export function statusChanges(items: Item[], id: number, status: ItemStatus): number[] {
-  return [...statusPlan(items, id, status, true)].filter(([, to]) => to === status).map(([v]) => v);
+  return [...statusChange(items, id, status, true).plan].filter(([, to]) => to === status).map(([v]) => v);
 }
 
 /**
  * What a drop in the queue does: moves the item, then gives it the status
- * of the section it was dropped in, with what statusPlan takes along under
- * it; either step is optional. The queue shows both at once; Go applies
- * them in that order.
+ * of the section it was dropped in, with what statusChange takes along
+ * under it; either step is optional. The queue shows both at once; Go
+ * applies them in that order.
  */
 export async function dropItem(id: number, move: { anchorId: number; place: Place } | null, status: ItemStatus | null) {
   const items = get().items;
-  const plan = status ? statusPlan(items, id, status, true) : new Map<number, ItemStatus>();
+  const change = status ? statusChange(items, id, status, true) : null;
   // Put where the user dropped it, the item stays there; started from the
   // title of 进行中, its tree goes to the end of it.
-  const start = move ? null : startMove(items, id, plan);
+  const start = move || !change ? null : startMove(items, id, change.plan);
   const moves = move ? [{ id, ...move }] : start ? [start] : [];
-  await applyChange(moves, plan);
+  await applyChange(moves, change);
 }
 
 /** Puts id and targetId under a new parent in the target's place, and selects the parent. */

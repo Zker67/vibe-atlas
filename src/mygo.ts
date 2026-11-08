@@ -81,6 +81,12 @@ export interface Item {
   startedAt: number;
   /** DoneAt is when the item was done, or 0. */
   doneAt: number;
+  /**
+   * DoneWith is the item above this one whose completion carried it to
+   * done, or 0: reopening that item takes it back. Changing its status by
+   * hand clears it.
+   */
+  doneWith: number;
   updatedAt: number;
 }
 

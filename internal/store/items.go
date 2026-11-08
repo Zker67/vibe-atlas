@@ -61,17 +61,21 @@ type Item struct {
 	// StartedAt is when the item became doing, or 0.
 	StartedAt int64 `json:"startedAt"`
 	// DoneAt is when the item was done, or 0.
-	DoneAt    int64 `json:"doneAt"`
+	DoneAt int64 `json:"doneAt"`
+	// DoneWith is the item above this one whose completion carried it to
+	// done, or 0: reopening that item takes it back. Changing its status by
+	// hand clears it.
+	DoneWith  int64 `json:"doneWith"`
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const itemColumns = `id, project_id, COALESCE(parent_id, 0), COALESCE(module_id, 0), type, status, title, note, deeplink,
-	sort_order, created_at, COALESCE(started_at, 0), COALESCE(done_at, 0), updated_at`
+	sort_order, created_at, COALESCE(started_at, 0), COALESCE(done_at, 0), COALESCE(done_with, 0), updated_at`
 
 func scanItem(row scanner) (Item, error) {
 	var it Item
 	err := row.Scan(&it.ID, &it.ProjectID, &it.ParentID, &it.ModuleID, &it.Type, &it.Status, &it.Title, &it.Note, &it.Deeplink,
-		&it.SortOrder, &it.CreatedAt, &it.StartedAt, &it.DoneAt, &it.UpdatedAt)
+		&it.SortOrder, &it.CreatedAt, &it.StartedAt, &it.DoneAt, &it.DoneWith, &it.UpdatedAt)
 	return it, err
 }
 
@@ -307,48 +311,87 @@ func (s *Store) SetItemDeeplink(id int64, link string) (Item, error) {
 	})
 }
 
-// SetItemStatus moves an item to status. Becoming doing stamps StartedAt;
-// becoming done stamps DoneAt; going back to do clears both, and so does
-// reopening a done item, which keeps its place among the items to do.
+// SetItemStatus moves an item to status, by hand. Becoming doing stamps
+// StartedAt; becoming done stamps DoneAt; going back to do clears both,
+// and so does reopening a done item, which keeps its place among the items
+// to do. Done, it carries the items under it not done yet along (see
+// carryDone); taken out of done, it takes those back (see uncarryDone).
 func (s *Store) SetItemStatus(id int64, status ItemStatus) (Item, error) {
 	if !status.valid() {
 		return Item{}, userErr("未知的状态：%s", status)
 	}
 	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
-		if it.Status == status {
-			return nil
-		}
 		now := s.millis()
-		var err error
-		switch status {
-		case StatusDoing:
-			_, err = tx.Exec(`UPDATE items SET status = 'doing', started_at = ?, done_at = NULL, updated_at = ? WHERE id = ?`, now, now, id)
-		case StatusDone:
-			_, err = tx.Exec(`UPDATE items SET status = 'done', done_at = ?, updated_at = ? WHERE id = ?`, now, now, id)
-		case StatusTodo:
-			_, err = tx.Exec(`UPDATE items SET status = 'todo', started_at = NULL, done_at = NULL, updated_at = ? WHERE id = ?`, now, id)
+		if it.Status != status {
+			var err error
+			switch status {
+			case StatusDoing:
+				_, err = tx.Exec(`UPDATE items SET status = 'doing', started_at = ?, done_at = NULL, done_with = NULL, updated_at = ? WHERE id = ?`, now, now, id)
+			case StatusDone:
+				_, err = tx.Exec(`UPDATE items SET status = 'done', done_at = ?, done_with = NULL, updated_at = ? WHERE id = ?`, now, now, id)
+			case StatusTodo:
+				_, err = tx.Exec(`UPDATE items SET status = 'todo', started_at = NULL, done_at = NULL, done_with = NULL, updated_at = ? WHERE id = ?`, now, id)
+			}
+			if err != nil {
+				return err
+			}
+			if it.Status == StatusDone {
+				return uncarryDone(tx, id, now)
+			}
 		}
-		return err
+		if status == StatusDone {
+			return carryDone(tx, id, now)
+		}
+		return nil
 	})
 }
 
 // ReopenItem takes a done item back to the status it had before: doing,
-// with the time it started, when it was done while doing; else to do. An
-// item that is not done stays as it is.
+// with the time it started, when it was done while doing; else to do. The
+// items its completion carried go back too (see uncarryDone). An item that
+// is not done stays as it is.
 func (s *Store) ReopenItem(id int64) (Item, error) {
 	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
 		if it.Status != StatusDone {
 			return nil
 		}
-		// Going back to do clears StartedAt, so only an item done while
-		// doing still has it.
-		status := StatusTodo
-		if it.StartedAt != 0 {
-			status = StatusDoing
+		now := s.millis()
+		_, err := tx.Exec(`UPDATE items SET status = `+reopenedStatus+`, done_at = NULL, done_with = NULL, updated_at = ? WHERE id = ?`, now, id)
+		if err != nil {
+			return err
 		}
-		_, err := tx.Exec(`UPDATE items SET status = ?, done_at = NULL, updated_at = ? WHERE id = ?`, status, s.millis(), id)
-		return err
+		return uncarryDone(tx, id, now)
 	})
+}
+
+// reopenedStatus is the status a done item had before. Going back to do
+// clears StartedAt, so only an item done while doing still has it.
+const reopenedStatus = `CASE WHEN started_at IS NULL THEN 'todo' ELSE 'doing' END`
+
+// below selects the items under the item of the query's first argument.
+const below = `(WITH RECURSIVE down(id) AS (
+		SELECT id FROM items WHERE parent_id = ? UNION SELECT i.id FROM items i JOIN down ON i.parent_id = down.id
+	) SELECT id FROM down)`
+
+// carryDone marks the items under id not done yet done, as carried by it.
+// Items done already keep their status, their time and what carried them.
+func carryDone(tx *sql.Tx, id, now int64) error {
+	_, err := tx.Exec(`UPDATE items SET status = 'done', done_at = ?, done_with = ?, updated_at = ?
+		WHERE status != 'done' AND id IN `+below, now, id, now, id)
+	return err
+}
+
+// uncarryDone takes the items id carried to done, still under it, back to
+// the status they had, with the time they started; items done on their
+// own, or changed by hand since, stay as they are. Those carried that left
+// it lose the mark: they are done on their own now.
+func uncarryDone(tx *sql.Tx, id, now int64) error {
+	if _, err := tx.Exec(`UPDATE items SET status = `+reopenedStatus+`, done_at = NULL, done_with = NULL, updated_at = ?
+		WHERE done_with = ? AND status = 'done' AND id IN `+below, now, id, id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE items SET done_with = NULL WHERE done_with = ?`, id)
+	return err
 }
 
 // Place is where MoveItem puts an item, against its anchor.
