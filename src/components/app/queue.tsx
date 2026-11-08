@@ -281,8 +281,31 @@ function selectForMenu(id: number) {
   else select(id);
 }
 
-/** The item a new one of its level is being named under, from Shift+Enter in a title. */
-const useDraftAfter = create<{ id: number }>(() => ({ id: 0 }));
+/**
+ * The item a new one of its level is being named under, from Shift+Enter in
+ * a title. text is what the new one starts with: the end of the title, cut
+ * off where the caret was; restore is the whole title, put back on the item
+ * when the new one is given up.
+ */
+const useDraftAfter = create<{ id: number; text: string; restore: string }>(() => ({ id: 0, text: "", restore: "" }));
+
+/** What the row naming a new item starts with. */
+function draftStart() {
+  return useDraftAfter.getState();
+}
+
+/**
+ * A title cut where the caret is, for Shift+Enter: what stays and what goes
+ * to the new item. Nothing goes while text is selected, or when the caret
+ * is not inside the words.
+ */
+function splitAtCaret(field: HTMLInputElement, text: string): { head: string; tail: string } {
+  const at = field.selectionStart ?? text.length;
+  const head = text.slice(0, at).trim();
+  const tail = text.slice(at).trim();
+  if (at !== field.selectionEnd || !head || !tail) return { head: text, tail: "" };
+  return { head, tail };
+}
 
 /** ←: hides the selected item's children, or moves to its parent. */
 export function collapseOrUp() {
@@ -1530,23 +1553,26 @@ function SelectionMenuItems() {
 /**
  * The title, renamed in its row after a double click or Enter: Enter or
  * leaving saves, Escape gives it up, Shift+Enter saves and names a new item
- * of its level under it.
+ * of its level under it; with the caret inside the title, the words after it
+ * go to the new item.
  */
 function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
   const [draft, setDraft] = useState(item.title);
   const field = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
-  const next = useRef(false);
+  // Set by Shift+Enter: the title cut where the caret was.
+  const next = useRef<{ head: string; tail: string } | null>(null);
   useEffect(() => {
     field.current?.focus();
     field.current?.select();
   }, []);
 
   const finish = () => {
-    const text = draft.trim();
+    const cut = next.current;
+    const text = (cut?.head ?? draft).trim();
     if (!cancelled.current && text && text !== item.title) void setItemTitle(item.id, text);
     onDone();
-    if (next.current) useDraftAfter.setState({ id: item.id });
+    if (cut) useDraftAfter.setState({ id: item.id, text: cut.tail, restore: cut.tail ? draft.trim() : "" });
   };
 
   return (
@@ -1565,7 +1591,7 @@ function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
         if (isComposing(e)) return;
         if (e.key === "Enter") {
           e.preventDefault();
-          next.current = e.shiftKey;
+          next.current = e.shiftKey ? splitAtCaret(e.currentTarget, draft) : null;
           e.currentTarget.blur();
         } else if (e.key === "Escape") {
           e.preventDefault();
@@ -1581,23 +1607,29 @@ function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
  * A new item of after's level, being named in the row under it: under the
  * same parent, of the same kind and module, to do. It is added once it has
  * a title, on Enter or when the field is left; Shift+Enter adds it and
- * names one more under it. Empty, Escape or leaving gives it up.
+ * names one more under it, taking the words after the caret along. Empty,
+ * Escape or leaving gives it up; Escape also puts back the words it started
+ * with on the item they were cut from.
  */
 function DraftRow({ after, depth, nested }: { after: Item; depth: number; nested: boolean }) {
-  const [draft, setDraft] = useState("");
+  // Read once: the row is made anew for each item it adds under.
+  const [draft, setDraft] = useState(() => draftStart().text);
+  const [restore] = useState(() => draftStart().restore);
   const field = useRef<HTMLInputElement>(null);
   // Once it is being added, leaving the field must not add it twice.
   const busy = useRef(false);
   const Todo = statusInfo("todo").icon;
   useEffect(() => {
     field.current?.focus();
+    field.current?.setSelectionRange(0, 0); // before the words cut off, as a new line in an editor
   }, []);
 
   const close = () => {
-    if (useDraftAfter.getState().id === after.id) useDraftAfter.setState({ id: 0 });
+    if (useDraftAfter.getState().id === after.id) useDraftAfter.setState({ id: 0, text: "", restore: "" });
   };
   const add = async (more: boolean) => {
-    const title = draft.trim();
+    const cut = more && field.current ? splitAtCaret(field.current, draft) : { head: draft, tail: "" };
+    const title = cut.head.trim();
     if (busy.current) return;
     if (!title) {
       if (!more) close();
@@ -1612,7 +1644,7 @@ function DraftRow({ after, depth, nested }: { after: Item; depth: number; nested
     }
     moveItem(item.id, after.id, "after");
     select(item.id);
-    if (more) useDraftAfter.setState({ id: item.id });
+    if (more) useDraftAfter.setState({ id: item.id, text: cut.tail, restore: cut.tail ? draft.trim() : "" });
     else close();
   };
 
@@ -1648,6 +1680,7 @@ function DraftRow({ after, depth, nested }: { after: Item; depth: number; nested
           } else if (e.key === "Escape") {
             e.preventDefault();
             busy.current = true;
+            if (restore) void setItemTitle(after.id, restore);
             close();
           }
         }}
