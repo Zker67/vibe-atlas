@@ -58,5 +58,6 @@ plans/
 | [2026-11-07-shared-links](./2026-11-07-shared-links/00-overview.md) | 子改进点没有自己的链接时沿用最近一层上级的链接，设置里可以关闭；复制不带链接 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-boss-key](./2026-11-07-boss-key/00-overview.md) | 老板键（全局快捷键，隐藏所有窗口 / 带回主窗口，默认不设置）；设置的快捷键页分全局和软件内 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-multi-select](./2026-11-08-multi-select/00-overview.md) | 队列多选：`Ctrl` / `Shift` 点选、`Shift+↑ ↓`、`Ctrl+A`、空白处框选；批量改状态 / 类型 / 模块、复制、移动、删除；整组一起拖动；详情面板显示「已选 N 条」 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-markdown-plus](./2026-11-08-markdown-plus/00-overview.md) | Markdown 编辑器：划词浮出格式工具栏；备注里贴 / 拖图片（存进数据目录 `images/`，同一行并排，大图预览可缩放拖动切换），复制给 AI 时换成本机路径，没人引用的图片自动清理 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

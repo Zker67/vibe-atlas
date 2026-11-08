@@ -34,6 +34,7 @@ bun run typecheck                 # TypeScript 类型检查
 bun run lint                      # oxlint
 CGO_ENABLED=0 go vet ./...
 CGO_ENABLED=0 go test ./...       # 数据层集成测试，使用真实的 SQLite 文件
+bun test tests                    # 编辑器格式命令，在真实的 CodeMirror 状态上运行
 ```
 
 数据层测试包括：重名、删除模块后改进点变未分类、状态来回切换的时间记录、排序、移动、deeplink 格式、600 条数据时的读取耗时，以及「强制结束写入进程后数据还在」（测试会启动一个子进程写入并强制结束它）。
@@ -61,7 +62,7 @@ bun run build
 VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录>\report.json' "build/windows-amd64/Vibe Atlas.exe"
 ```
 
-退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响），以及队列多选的检查（`select`：用真实的鼠标和键盘事件依次检查单击、`Ctrl` 加选、`Shift` / `Ctrl+Shift` 连选、详情显示「已选 N 条」、`Space` 一起完成再一起重新打开、`Esc`、`Ctrl+A`、空白处框选、整组拖到另一条上沿、`Tab` / `Shift+Tab`、`Shift+↓`）。
+退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响），以及队列多选的检查（`select`：用真实的鼠标和键盘事件依次检查单击、`Ctrl` 加选、`Shift` / `Ctrl+Shift` 连选、详情显示「已选 N 条」、`Space` 一起完成再一起重新打开、`Esc`、`Ctrl+A`、空白处框选、整组拖到另一条上沿、`Tab` / `Shift+Tab`、`Shift+↓`），以及备注图片的检查（`images`：页面存一张图后能通过 `image` 协议加载、不是图片的文件被拒绝、写进备注后详情里显示成图片卡片而不显示源码、复制出的文字带图片的本机路径、删除条目后清理会删掉图片）。划词工具栏要编辑器拿到焦点才出现，隐藏窗口里测不了，它用到的格式命令由 `bun test tests` 覆盖，工具栏本身在真实窗口里看。
 
 本机已经开着 Vibe Atlas 时，两个实例会争用同一个 WebView2 数据目录，测试程序报 `creating the WebView2 controller failed (HRESULT 0x8007139f)`。再加一个环境变量 `WEBVIEW2_USER_DATA_FOLDER='<临时目录>\webview'` 即可，不用关掉正在用的程序；这时快捷键会因为被占用而注册失败，属于正常。
 
@@ -91,7 +92,7 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 | Windows | `%AppData%\Vibe Atlas\vibe-atlas.db` |
 | 开发模式 | `%AppData%\Vibe Atlas\dev\vibe-atlas.db` |
 
-同一个文件夹里的 `vibe-atlas.db-wal`、`vibe-atlas.db-shm` 是数据库的一部分，`wallpapers/` 里是设置的背景图片（复制过来的，用随机文件名）。手动备份时先从托盘退出程序，再复制整个文件夹。设置里的「打开数据文件夹」直接打开这个位置。
+同一个文件夹里的 `vibe-atlas.db-wal`、`vibe-atlas.db-shm` 是数据库的一部分，`wallpapers/` 里是设置的背景图片（复制过来的，用随机文件名），`images/` 里是备注和项目说明里的图片（按内容命名，没人引用的在启动后由后台清理）。手动备份时先从托盘退出程序，再复制整个文件夹。设置里的「打开数据文件夹」直接打开这个位置。
 
 ## 故障排查
 

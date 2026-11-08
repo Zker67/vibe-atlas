@@ -185,6 +185,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	pictures, err := a.smokeImages(main)
+	report["images"] = pictures
+	if err != nil {
+		finish(err, "images")
+		return
+	}
+
 	selected, err := a.smokeSelect(main)
 	report["select"] = selected
 	if err != nil {

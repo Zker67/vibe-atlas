@@ -7,6 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
+import { onPictureLine } from "./images";
 
 const hidden = Decoration.replace({});
 const markClass = (cls: string) => Decoration.mark({ class: cls });
@@ -161,8 +162,16 @@ function build(view: EditorView): DecorationSet {
           }
           return false;
         }
-        case "Image":
-          return false; // shown as written
+        case "Image": {
+          // Pictures of the app show as cards (images.ts), which take a
+          // line of pictures whole; others show as written.
+          const url = node.getChild("URL");
+          if (url && state.sliceDoc(url.from, url.to).startsWith("image:")) {
+            if (!render) out.push(dim.range(ref.from, ref.to));
+            else if (!onPictureLine(state, ref.from)) out.push(hidden.range(ref.from, ref.to));
+          }
+          return false;
+        }
         case "Autolink": {
           // <https://…>
           const url = node.getChild("URL");

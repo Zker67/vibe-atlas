@@ -591,6 +591,342 @@ html.dragging-rows * {
   vertical-align: middle;
   border-top: 1px solid var(--border);
 }
+/* Where dropped pictures go. */
+.cm-editor .cm-dropCursor {
+  border-left: 2px solid var(--improve);
+}
+
+/*
+ * The toolbar over a selection (format-toolbar.tsx). CodeMirror places the
+ * outer box; the bar inside pops from the side it faces the selection on.
+ */
+.cm-tooltip.cm-format-toolbar {
+  border: none;
+  background: transparent;
+  z-index: 60;
+}
+.format-toolbar {
+  box-shadow: var(--glass-shadow), 0 12px 32px -14px oklch(0 0 0 / 30%);
+  backdrop-filter: blur(16px) saturate(1.4);
+  transform-origin: bottom center;
+  animation: format-pop var(--spring-pop-duration) var(--spring-pop);
+}
+.cm-tooltip-below .format-toolbar {
+  transform-origin: top center;
+  animation-name: format-pop-below;
+}
+@keyframes format-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+}
+@keyframes format-pop-below {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+}
+.format-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.875rem;
+  min-width: 1.875rem;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+.format-button:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.format-button:active {
+  transform: scale(0.94);
+}
+.format-button > svg {
+  transition: transform 240ms var(--spring-pop);
+}
+.format-button:hover > svg {
+  transform: scale(1.1);
+}
+.format-button-on,
+.format-button-on:hover {
+  background: color-mix(in oklch, var(--improve) 15%, transparent);
+  color: var(--improve);
+}
+/* The name of a button, away from the selection, after a short rest. */
+.format-hint {
+  bottom: calc(100% + 0.625rem);
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 120ms ease, transform 160ms ease;
+}
+.cm-tooltip-below .format-hint {
+  top: calc(100% + 0.625rem);
+  bottom: auto;
+  transform: translate(-50%, -4px);
+}
+.format-button:hover .format-hint {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 400ms;
+}
+.format-menu {
+  bottom: calc(100% + 0.5rem);
+  box-shadow: var(--glass-shadow), 0 12px 32px -14px oklch(0 0 0 / 30%);
+  backdrop-filter: blur(16px) saturate(1.4);
+  transform-origin: bottom left;
+  animation: format-pop 260ms var(--spring-pop);
+}
+.cm-tooltip-below .format-menu {
+  top: calc(100% + 0.5rem);
+  bottom: auto;
+  transform-origin: top left;
+  animation-name: format-pop-below;
+}
+
+/*
+ * Pictures in notes (images.ts): cards as the picture is shaped, never
+ * cropped. One alone shows large; several on a line share a height and
+ * wrap. They wait as a shimmer, then come in out of a blur.
+ */
+.cm-md-pictures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.375rem 0 0.5rem;
+}
+.cm-md-picture {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: var(--muted);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px oklch(0 0 0 / 5%), 0 12px 28px -20px oklch(0 0 0 / 40%);
+  cursor: zoom-in;
+  transition: transform 300ms var(--spring-pop), box-shadow 200ms ease;
+}
+.cm-md-picture:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 18%, transparent), 0 2px 4px oklch(0 0 0 / 6%),
+    0 18px 36px -18px oklch(0 0 0 / 45%);
+}
+.cm-md-picture img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  transition: transform 400ms ease;
+}
+.cm-md-picture:hover img {
+  transform: scale(1.015);
+}
+.cm-md-pictures[data-count="one"] .cm-md-picture img {
+  width: auto;
+  height: auto;
+  max-height: 20rem;
+}
+.cm-md-pictures[data-count="many"] .cm-md-picture img {
+  width: auto;
+  height: 9rem;
+}
+.cm-md-picture[data-loading] {
+  aspect-ratio: var(--ratio, 16 / 9);
+  background: linear-gradient(100deg, var(--muted) 30%, color-mix(in oklch, var(--foreground) 9%, transparent) 50%, var(--muted) 70%)
+    0 0 / 300% 100%;
+  animation: picture-shimmer 1.4s ease-in-out infinite;
+}
+.cm-md-pictures[data-count="one"] .cm-md-picture[data-loading] {
+  width: min(18rem, 100%);
+  max-height: 20rem;
+}
+.cm-md-pictures[data-count="many"] .cm-md-picture[data-loading] {
+  height: 9rem;
+}
+.cm-md-picture[data-loading] img {
+  position: absolute;
+  opacity: 0;
+}
+@keyframes picture-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+.cm-md-picture[data-appear] img {
+  animation: picture-in 420ms ease-out;
+}
+@keyframes picture-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+.cm-md-picture-remove {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 999px;
+  color: oklch(0.98 0 0);
+  background: oklch(0.16 0 0 / 58%);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 14%);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 160ms ease, transform 260ms var(--spring-pop), background-color 150ms ease;
+}
+.cm-md-picture-remove svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.cm-md-picture:hover .cm-md-picture-remove {
+  opacity: 1;
+  transform: scale(1);
+}
+.cm-md-picture-remove:hover {
+  background: var(--destructive);
+}
+.cm-md-picture[data-missing] {
+  width: 12rem;
+  height: 6.5rem;
+  background: transparent;
+  box-shadow: none;
+  border: 1.5px dashed var(--border);
+  cursor: default;
+  transform: none;
+}
+.cm-md-picture[data-missing] img {
+  display: none;
+}
+.cm-md-picture-missing {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.cm-md-picture-missing svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/*
+ * The large view of pictures (image-viewer.tsx): dark in both themes, as
+ * pictures are best seen; above the title bar, its controls at the bottom.
+ */
+.image-viewer {
+  animation: viewer-in 200ms ease-out;
+}
+.image-viewer[data-closing] {
+  animation: viewer-out 170ms ease-in forwards;
+}
+@keyframes viewer-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes viewer-out {
+  to {
+    opacity: 0;
+  }
+}
+.image-viewer-backdrop {
+  background: oklch(0.12 0.004 270 / 86%);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+.image-viewer-img {
+  opacity: 0;
+  border-radius: 0.375rem;
+  box-shadow: 0 32px 90px -24px oklch(0 0 0 / 70%);
+  will-change: transform;
+}
+.image-viewer-img[data-ready] {
+  opacity: 1;
+  animation: viewer-image-in 380ms ease-out;
+}
+@keyframes viewer-image-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+.image-viewer-bar {
+  transform: translateX(-50%);
+  border-radius: 1rem;
+  color: oklch(0.97 0 0);
+  background: oklch(0.21 0.004 270 / 74%);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 8%), 0 0 0 1px oklch(1 0 0 / 9%), 0 20px 44px -18px oklch(0 0 0 / 70%);
+  backdrop-filter: blur(20px) saturate(1.4);
+  animation: viewer-bar-in 460ms var(--spring-pop) 60ms both;
+}
+@keyframes viewer-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+.viewer-button {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  border-radius: 0.625rem;
+  color: oklch(1 0 0 / 76%);
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+.viewer-button:hover {
+  background: oklch(1 0 0 / 11%);
+  color: oklch(1 0 0);
+}
+.viewer-button:active {
+  transform: scale(0.95);
+}
+.viewer-button .viewer-icon {
+  transition: transform 240ms var(--spring-pop);
+}
+.viewer-button:hover .viewer-icon {
+  transform: scale(1.12);
+}
+.image-viewer-side {
+  transform: translateY(-50%);
+  color: oklch(0.97 0 0);
+  background: oklch(0.21 0.004 270 / 60%);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 10%), 0 12px 28px -14px oklch(0 0 0 / 60%);
+  backdrop-filter: blur(16px);
+  transition: background-color 150ms ease, transform 260ms var(--spring-pop);
+}
+.image-viewer-side:hover {
+  background: oklch(0.3 0.004 270 / 78%);
+  transform: translateY(-50%) scale(1.07);
+}
+.image-viewer-side:active {
+  transform: translateY(-50%) scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .format-toolbar,
+  .format-menu,
+  .cm-md-picture,
+  .cm-md-picture img,
+  .cm-md-picture[data-loading],
+  .image-viewer,
+  .image-viewer-img[data-ready],
+  .image-viewer-bar {
+    animation: none;
+    transition: none;
+  }
+}
 
 
 /* Quick capture: the panel takes its page's height (FitContent in app.go),
@@ -607,4 +943,13 @@ html[data-capture] #root {
 .capture-note .cm-content {
   min-height: 6.5rem;
   padding-bottom: 0.75rem;
+}
+/* The pictures smaller there, to keep the panel low. */
+.capture-note .cm-md-pictures[data-count="one"] .cm-md-picture img,
+.capture-note .cm-md-pictures[data-count="one"] .cm-md-picture[data-loading] {
+  max-height: 9rem;
+}
+.capture-note .cm-md-pictures[data-count="many"] .cm-md-picture img,
+.capture-note .cm-md-pictures[data-count="many"] .cm-md-picture[data-loading] {
+  height: 5.5rem;
 }

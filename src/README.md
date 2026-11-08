@@ -20,7 +20,7 @@ React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui，由 Vite 构建，跑在 My
 | `components/app/` | 业务组件：`title-bar`（自建顶栏）、`project-header`（队列列顶部的项目栏 `ProjectBar` 和筛选栏 `QueueFilters`）、`sidebar`、`queue`、`item-detail`、`selection-detail`（多选时的详情面板）、`overview`、`settings-dialog`（分页设置）、`help-dialog`（使用说明）、`side-nav`（这两个弹窗共用的左侧导航）、`dialogs`，以及几个小部件 |
 | `components/effects/` | 主窗口背后的背景图片和动态背景，只在主窗口打开其中之一后加载，见 [README](./components/effects/README.md) |
 | `components/react-bits/` | React Bits 组件源码，保持上游原样，见 [README](./components/react-bits/README.md) |
-| `components/editor/` | Markdown 即时预览编辑器：`live-preview.ts` 负责渲染，`markdown-editor.tsx` 是 React 组件 |
+| `components/editor/` | Markdown 即时预览编辑器：`live-preview.ts` 负责渲染，`markdown-editor.tsx` 是 React 组件；`format.ts` 是格式命令（快捷键和工具栏共用），`format-toolbar.tsx` 是划词后浮出的工具栏，`images.ts` 负责图片的粘贴、拖入和卡片，`image-viewer.tsx` 是大图预览（点图片时才加载） |
 | `components/ui/` | shadcn/ui 生成的基础组件，尽量不改 |
 | `lib/` | `api`（调用与报错提示）、`keys`（输入法、快捷键）、`time`、`theme`、`labels`（类型和状态的文案、图标、颜色）、`debounce`、`tree`（子改进点建树、队列分区和排版、本地应用移动） |
 

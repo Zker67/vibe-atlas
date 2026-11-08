@@ -12,6 +12,7 @@ Vibe Atlas 的全部数据读写：一个 SQLite 文件，纯 Go 驱动 `modernc
 | `items.go` | 改进点：新增、修改各字段、状态切换和时间记录（父改进点完成时带着子孙完成、撤回时只撤回带着完成的）；子改进点的移动（`MoveItem`）、合并（`MergeItems`）、自动标题、子孙查询；移到其他项目（带子孙）、删除（子改进点上移）；多条一起改类型、改模块、移到其他项目、删除（`SetItemsType`、`SetItemsModule`、`MoveItemsToProject`、`DeleteItems`，一个事务，失败时整组不改） |
 | `links.go` | deeplink 格式检查；本地路径和 `file:` 链接互转 |
 | `overview.go` | 项目总览的汇总 |
+| `texts.go` | `TextsWith`：找出包含某段文字的备注和项目说明（清理没人引用的图片时用） |
 | `*_test.go` | 集成测试，每个测试用一个新的真实数据库文件；`tree_test.go` 测子改进点和版本 1 → 2 的升级，`carry_test.go` 测带着完成、撤回和版本 2 → 3 的升级，`batch_test.go` 测多条一起修改 |
 
 ## 约定

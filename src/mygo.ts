@@ -371,6 +371,13 @@ export const Atlas = {
     return call("Atlas.HideCapture");
   },
   /**
+   * ImageBase is where the pages load the pictures of the notes from: the
+   * name of a picture follows it.
+   */
+  imageBase(): Promise<string> {
+    return call("Atlas.ImageBase");
+  },
+  /**
    * Items returns the items of a project: doing, to do in the user's order,
    * then done, the most recently done first.
    */
@@ -423,6 +430,10 @@ export const Atlas = {
    */
   openDeeplink(id: number): Promise<void> {
     return call("Atlas.OpenDeeplink", id);
+  },
+  /** OpenImage opens a picture of the notes in the system's viewer. */
+  openImage(name: string): Promise<void> {
+    return call("Atlas.OpenImage", name);
   },
   /** OpenLink opens a link of the notes with the app the system has for it. */
   openLink(link: string): Promise<void> {
@@ -480,6 +491,14 @@ export const Atlas = {
   /** ReorderProjects puts the projects in the order of ids. */
   reorderProjects(ids: number[]): Promise<void> {
     return call("Atlas.ReorderProjects", ids);
+  },
+  /**
+   * SaveImage keeps a picture pasted or dropped in a note and returns its
+   * name, which the note refers to it by: ![](image:<name>). The same
+   * picture saved twice is kept once.
+   */
+  saveImage(data: string): Promise<string> {
+    return call("Atlas.SaveImage", data);
   },
   /** SetBackground picks the moving background the effects show. */
   setBackground(bg: Background): Promise<Settings> {

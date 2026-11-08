@@ -105,6 +105,11 @@ func (a *app) start() {
 	if err := mygo.Protocol.HandleFunc(wallpaperScheme, a.serveWallpaper); err != nil {
 		log.Println("wallpaper scheme:", err)
 	}
+	// And the pictures of the notes.
+	if err := mygo.Protocol.HandleFunc(imageScheme, a.serveImage); err != nil {
+		log.Println("image scheme:", err)
+	}
+	a.cleanImagesLater(db)
 
 	throttling := mygo.ThrottlingOn
 	if a.smokeReport != "" {

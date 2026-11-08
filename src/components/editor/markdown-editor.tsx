@@ -3,10 +3,13 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { EditorSelection, EditorState } from "@codemirror/state";
-import { type Command, drawSelection, EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { drawSelection, EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { cn } from "@/lib/utils";
+import { toggleInline, toggleLink } from "./format";
+import { formatToolbar } from "./format-toolbar";
+import { images } from "./images";
 import { linkAt, livePreview } from "./live-preview";
 
 /** Colors of code in fenced blocks, from the theme tokens. */
@@ -20,57 +23,12 @@ const codeColors = HighlightStyle.define([
   { tag: [tags.attributeName, tags.propertyName], color: "var(--improve)" },
 ]);
 
-/** Wraps the selection in mark, or unwraps it when it is wrapped already. */
-function wrap(mark: string): Command {
-  return (view) => {
-    const { state } = view;
-    const tr = state.changeByRange((range) => {
-      const before = state.sliceDoc(range.from - mark.length, range.from);
-      const after = state.sliceDoc(range.to, range.to + mark.length);
-      if (before === mark && after === mark) {
-        return {
-          changes: [
-            { from: range.from - mark.length, to: range.from },
-            { from: range.to, to: range.to + mark.length },
-          ],
-          range: EditorSelection.range(range.from - mark.length, range.to - mark.length),
-        };
-      }
-      return {
-        changes: [
-          { from: range.from, insert: mark },
-          { from: range.to, insert: mark },
-        ],
-        range: EditorSelection.range(range.from + mark.length, range.to + mark.length),
-      };
-    });
-    view.dispatch(state.update(tr, { scrollIntoView: true, userEvent: "input" }));
-    return true;
-  };
-}
-
-/** Makes the selection a link and selects its address, to type or paste. */
-const insertLink: Command = (view) => {
-  const { state } = view;
-  const tr = state.changeByRange((range) => {
-    const text = state.sliceDoc(range.from, range.to) || "链接";
-    const insert = `[${text}](url)`;
-    const urlFrom = range.from + text.length + 3;
-    return {
-      changes: { from: range.from, to: range.to, insert },
-      range: EditorSelection.range(urlFrom, urlFrom + 3),
-    };
-  });
-  view.dispatch(state.update(tr, { scrollIntoView: true, userEvent: "input" }));
-  return true;
-};
-
 const formatting = keymap.of([
-  { key: "Mod-b", run: wrap("**") },
-  { key: "Mod-i", run: wrap("*") },
-  { key: "Mod-e", run: wrap("`") },
-  { key: "Mod-Shift-x", run: wrap("~~") },
-  { key: "Mod-k", run: insertLink },
+  { key: "Mod-b", run: toggleInline("strong") },
+  { key: "Mod-i", run: toggleInline("em") },
+  { key: "Mod-e", run: toggleInline("code") },
+  { key: "Mod-Shift-x", run: toggleInline("strike") },
+  { key: "Mod-k", run: toggleLink },
 ]);
 
 interface MarkdownEditorProps {
@@ -107,6 +65,8 @@ export function MarkdownEditor({ value, onChange, onBlur, onOpenLink, placeholde
           markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false }),
           syntaxHighlighting(codeColors),
           livePreview,
+          images,
+          formatToolbar,
           placeholderText(placeholder ?? ""),
           formatting,
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),

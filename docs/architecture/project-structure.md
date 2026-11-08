@@ -62,7 +62,9 @@
 | `main.go` | 入口：绑定服务、选数据目录、单实例锁、应用生命周期 |
 | `app.go` | 窗口（主窗口、快速记录面板）、托盘、全局快捷键（快速记录、老板键）、主题、页面导航保护 |
 | `atlas.go` | 绑定给前端的 `Atlas` 服务和事件，调用数据层并广播变化 |
+| `images.go` | 备注里的图片：存进数据目录的 `images/`、`image` 协议、复制时换成本机路径、清理没人引用的图片 |
 | `smoke.go` | 打包后冒烟测试（只在设置了 `VIBE_ATLAS_SMOKE_REPORT` 时运行） |
+| `smoke_images.go` | 冒烟测试里检查备注图片：经 `image` 协议加载、编辑器里显示成卡片、复制带路径、删除后被清理 |
 | `smoke_capture.go` | 冒烟测试里驱动快速记录小窗：高度随内容伸缩、`Shift+Enter` 展开详情、带链接保存 |
 | `smoke_select.go` | 冒烟测试里驱动队列多选：点选、连选、批量完成、框选、整组拖动、`Tab` |
 | `internal/store/` | 数据层：SQLite 读写、迁移、规则校验、链接格式、总览汇总，以及集成测试。见 [README](../../internal/store/README.md) |
@@ -80,12 +82,16 @@
 | `src/components/app/` | 业务组件：顶栏、侧栏、项目头部、队列、详情、总览、设置、对话框 |
 | `src/components/effects/` | 主窗口背后的背景图片和动态背景，打开其中之一后才加载 |
 | `src/components/react-bits/` | React Bits 组件源码（上游原样，带许可证） |
-| `src/components/editor/` | Markdown 即时预览编辑器（CodeMirror 6） |
+| `src/components/editor/` | Markdown 即时预览编辑器（CodeMirror 6）：划词格式工具栏、图片卡片和大图预览 |
 | `src/components/ui/` | shadcn/ui 生成的基础组件 |
 | `src/lib/` | 工具：调用与报错、按键、时间、主题、类型和状态的文案与图标、子改进点的树 |
 | `src/index.css` | 主题色、类型色、框架与内容面板、视觉效果和毛玻璃的 CSS、编辑器样式 |
 
 各目录职责的细节见 [src/README.md](../../src/README.md)。
+
+### 测试（`tests/`）
+
+前端里不依赖窗口的逻辑测试，用 `bun test tests` 运行，见 [tests/README.md](../../tests/README.md)。
 
 ## 运行与产物层
 

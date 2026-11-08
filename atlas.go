@@ -564,7 +564,7 @@ func (a *Atlas) CopyItem(id int64) error {
 	if err != nil {
 		return err
 	}
-	mygo.Clipboard.WriteText(ItemText(it, descendants))
+	mygo.Clipboard.WriteText(withImagePaths(ItemText(it, descendants), a.app.dataDir))
 	return nil
 }
 
@@ -617,7 +617,7 @@ func (a *Atlas) CopyItems(ids []int64) error {
 	if err != nil {
 		return err
 	}
-	mygo.Clipboard.WriteText(text)
+	mygo.Clipboard.WriteText(withImagePaths(text, a.app.dataDir))
 	return nil
 }
 

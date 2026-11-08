@@ -8,6 +8,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  Images,
   Keyboard,
   LayoutDashboard,
   Lightbulb,
@@ -23,6 +24,7 @@ import {
   Settings,
   SquareCheck,
   TextCursorInput,
+  TextSelect,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -362,6 +364,13 @@ function MarkdownSection() {
         <li>支持标题、列表、任务框、链接、引用、代码块等常用格式。</li>
         <li>点击任务框可以直接勾选。</li>
       </Points>
+      <Feature icon={TextSelect} title="划词工具栏">
+        用鼠标选中文字，上方会浮出工具栏：标题、粗体、斜体、删除线、行内代码、链接、引用、列表、任务、代码块。已有的格式会高亮，再点一次取消；按 <K>Esc</K> 收起。
+      </Feature>
+      <Feature icon={Images} title="图片">
+        <K>Ctrl+V</K> 粘贴截图，或把图片文件拖进来；一次放几张会并排显示。点图片看大图：滚轮缩放、拖动平移、双击切换原始大小、<K>←</K>
+        <K>→</K> 换一张。图片存在数据文件夹里；复制给 AI 时，图片换成本机路径。
+      </Feature>
     </Section>
   );
 }
