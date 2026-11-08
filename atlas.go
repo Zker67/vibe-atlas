@@ -94,6 +94,9 @@ type Settings struct {
 	Glass Glass `json:"glass"`
 	// WindowOpacity is the opacity of the whole main window, 40 to 100 %.
 	WindowOpacity int `json:"windowOpacity"`
+	// ShareLinks lets a sub-item without a link of its own open the link of
+	// the nearest item above it that has one. On by default.
+	ShareLinks bool `json:"shareLinks"`
 	// LookDefaults are the looks the app has out of the box.
 	LookDefaults LookDefaults `json:"lookDefaults"`
 	// DataDir is the folder of the database.
@@ -108,6 +111,7 @@ const (
 	keyTheme          = "theme"
 	keyEffects        = "effects"
 	keyBackground     = "background"
+	keyShareLinks     = "shareLinks"
 	keyCurrentProject = "currentProject"
 	keyLastCapture    = "lastCaptureProject"
 )
@@ -327,6 +331,12 @@ func (a *Atlas) SetItemStatus(id int64, status store.ItemStatus) (store.Item, er
 	return a.editItem(func(db *store.Store) (store.Item, error) { return db.SetItemStatus(id, status) })
 }
 
+// ReopenItem takes a done item back to the status it had before: doing,
+// with the time it started, when it was done while doing; else to do.
+func (a *Atlas) ReopenItem(id int64) (store.Item, error) {
+	return a.editItem(func(db *store.Store) (store.Item, error) { return db.ReopenItem(id) })
+}
+
 func (a *Atlas) editItem(fn func(*store.Store) (store.Item, error)) (store.Item, error) {
 	db, err := a.store()
 	if err != nil {
@@ -400,8 +410,9 @@ func (a *Atlas) DeleteItem(id int64) error {
 }
 
 // ItemText is what copying an item puts on the clipboard: its title, its
-// notes, then the items under it as a task list, done ones ticked.
-// descendants are as Store.Descendants returns them.
+// notes, then the items under it as a task list, done ones ticked, the
+// notes of each indented under it. descendants are as Store.Descendants
+// returns them.
 func ItemText(it store.Item, descendants []store.Item) string {
 	text := it.Title
 	if note := strings.TrimSpace(it.Note); note != "" {
@@ -412,13 +423,31 @@ func ItemText(it store.Item, descendants []store.Item) string {
 	}
 	depth := map[int64]int{it.ID: -1}
 	var b strings.Builder
+	// Notes stand apart from the items around them by a blank line.
+	gap := false
 	for _, d := range descendants {
 		depth[d.ID] = depth[d.ParentID] + 1
+		indent := strings.Repeat("  ", depth[d.ID])
 		mark := " "
 		if d.Status == store.StatusDone {
 			mark = "x"
 		}
-		fmt.Fprintf(&b, "\n%s- [%s] %s", strings.Repeat("  ", depth[d.ID]), mark, d.Title)
+		if gap {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "\n%s- [%s] %s", indent, mark, d.Title)
+		gap = false
+		if note := strings.TrimSpace(d.Note); note != "" {
+			b.WriteString("\n")
+			for _, line := range strings.Split(note, "\n") {
+				if line = strings.TrimRight(line, "\r"); line != "" {
+					b.WriteString("\n" + indent + "  " + line)
+				} else {
+					b.WriteString("\n")
+				}
+			}
+			gap = true
+		}
 	}
 	return text + "\n" + b.String()
 }
@@ -442,7 +471,8 @@ func (a *Atlas) CopyItem(id int64) error {
 	return nil
 }
 
-// OpenDeeplink opens the link an item is bound to.
+// OpenDeeplink opens the link an item is bound to; without one, while
+// sub-items share links, the link of the nearest item above it that has one.
 func (a *Atlas) OpenDeeplink(id int64) error {
 	db, err := a.store()
 	if err != nil {
@@ -452,10 +482,29 @@ func (a *Atlas) OpenDeeplink(id int64) error {
 	if err != nil {
 		return err
 	}
-	if it.Deeplink == "" {
+	link, err := itemLink(db, it, shareLinks(db))
+	if err != nil {
+		return err
+	}
+	if link == "" {
 		return errors.New("这条改进点没有绑定链接")
 	}
-	return openLink(it.Deeplink)
+	return openLink(link)
+}
+
+// itemLink is the link an item opens: its own; without one, when shared,
+// that of the nearest item above it that has one; else "".
+func itemLink(db *store.Store, it store.Item, shared bool) (string, error) {
+	seen := map[int64]bool{}
+	for it.Deeplink == "" && shared && it.ParentID != 0 && !seen[it.ID] {
+		seen[it.ID] = true
+		parent, err := db.Item(it.ParentID)
+		if err != nil {
+			return "", err
+		}
+		it = parent
+	}
+	return it.Deeplink, nil
 }
 
 // OpenLink opens a link of the notes with the app the system has for it.
@@ -518,6 +567,7 @@ func (a *Atlas) Settings() (Settings, error) {
 		Wallpaper:       wallpaper(db, a.app.dataDir),
 		Glass:           glass(db),
 		WindowOpacity:   windowOpacity(db),
+		ShareLinks:      shareLinks(db),
 		LookDefaults:    lookDefaults,
 		DataDir:         a.app.dataDir,
 	}
@@ -545,6 +595,11 @@ func background(db *store.Store) Background {
 		return BackgroundWaves
 	}
 	return BackgroundGrid
+}
+
+func shareLinks(db *store.Store) bool {
+	v, _, _ := db.Setting(keyShareLinks)
+	return v != "off"
 }
 
 func (a *Atlas) settingID(db *store.Store, key string) int64 {
@@ -645,6 +700,28 @@ func setBackground(db *store.Store, bg Background) error {
 		return fmt.Errorf("未知的背景：%s", bg)
 	}
 	return db.SetSetting(keyBackground, string(bg))
+}
+
+// SetShareLinks turns on or off sub-items opening the link of the item
+// above them when they have none of their own.
+func (a *Atlas) SetShareLinks(on bool) (Settings, error) {
+	db, err := a.store()
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := setShareLinks(db, on); err != nil {
+		return Settings{}, err
+	}
+	a.settingsChanged()
+	return a.Settings()
+}
+
+func setShareLinks(db *store.Store, on bool) error {
+	v := "off"
+	if on {
+		v = "on"
+	}
+	return db.SetSetting(keyShareLinks, v)
 }
 
 // SetCurrentProject records the project open in the main window, which

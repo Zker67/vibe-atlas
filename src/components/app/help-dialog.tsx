@@ -239,12 +239,14 @@ function QueueSection() {
         </span>
       </div>
       <Points>
-        <li>点击行首的圆圈，标记完成或重新打开。</li>
-        <li>单击改进点打开详情，双击直接在行内改名（Enter 保存，Esc 放弃）。</li>
+        <li>点击行首的圆圈，标记完成或重新打开；重新打开回到完成前的状态，之前在进行中就回到进行中。父改进点完成或重新打开时，子改进点跟着一起变。</li>
+        <li>单击改进点打开详情，双击或按 Enter 直接在行内改名（Enter 保存，Esc 放弃，Shift+Enter 保存并在下面新加一条同级的）。</li>
         <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
+        <li>侧栏的项目和模块可以拖动排序，双击直接改名。</li>
         <li>右键单击改进点，可以修改状态、添加子改进点、移动或删除。</li>
         <li>点击分区标题，收起或展开进行中、待办、已完成。</li>
         <li>把改进点拖到另一个分区的标题或空白处，就改成那个状态；分区收起时也可以拖到标题上。</li>
+        <li>把改进点拖到侧栏的模块上，就改成那个模块，子改进点一起改。</li>
       </Points>
       <DropGuide />
       <Points>
@@ -269,6 +271,11 @@ function DropGuide() {
           <span className="absolute -top-px right-2 left-2 h-0.5 rounded-full bg-primary" />
           <span className="min-w-0 flex-1 truncate">拖到上沿或下沿</span>
           <span className="text-xs text-muted-foreground">移到它前面或后面</span>
+        </div>
+        <div className={cn(row, "bg-muted/60")}>
+          <span className="absolute right-2 -bottom-px left-7 h-0.5 rounded-full bg-primary" />
+          <span className="min-w-0 flex-1 truncate">拖到下沿再往右移一点</span>
+          <span className="text-xs text-muted-foreground">成为它的子改进点</span>
         </div>
         <div className={cn(row, "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)]")}>
           <span className="min-w-0 flex-1 truncate">拖到中间</span>
@@ -301,10 +308,10 @@ function DetailSection() {
           直接点选待办、进行中或完成；下方的时间线记下创建、开始、完成的时间和各段用时。
         </Feature>
         <Feature icon={Link2} title="链接">
-          可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。
+          可以关联 AI 对话、网页或本地文件，按 <K>O</K> 打开。子改进点没有自己的链接时沿用上级的，可以在设置中关闭。
         </Feature>
         <Feature icon={Copy} title="复制给 AI">
-          按 <K>C</K> 复制标题和备注，有子改进点时附上它们的清单，粘贴给 AI 即可。
+          按 <K>C</K> 复制标题和备注，有子改进点时附上它们的清单和各自的备注，粘贴给 AI 即可。
         </Feature>
         <Feature icon={NotebookPen} title="备注">
           支持 Markdown 格式。
@@ -390,6 +397,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["复制给 AI", ["C", "Ctrl+C"]],
       ["打开链接", ["O"]],
       ["编辑标题", ["Enter", "E"]],
+      ["改成子改进点 / 移到上一级", ["Tab", "Shift+Tab"]],
       ["收起子改进点 / 回到上级", ["←"]],
       ["展开子改进点 / 进入第一条", ["→"]],
       ["删除", ["Delete"]],

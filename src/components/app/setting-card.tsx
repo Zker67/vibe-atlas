@@ -10,7 +10,7 @@ export function SettingCard({
   title: string;
   description?: ReactNode;
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-3 rounded-lg bg-card p-4 ring-1 ring-foreground/[0.07]">

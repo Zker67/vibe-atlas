@@ -1,6 +1,9 @@
-import { BookOpen, Boxes, FolderKanban, Inbox, LayoutList, Pencil, Plus, Settings, Trash2, type LucideIcon } from "lucide-react";
+import { BookOpen, Boxes, CornerDownRight, FolderKanban, Inbox, LayoutList, Pencil, Plus, Settings, Trash2, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
+import { run } from "@/lib/api";
+import { isComposing } from "@/lib/keys";
 import { UNSORTED } from "@/lib/labels";
 import {
   ContextMenu,
@@ -26,6 +29,7 @@ import {
 } from "@/state/atlas";
 import { askConfirm, askName, openHelp, openSettings } from "@/state/dialogs";
 import { IconButton } from "./icon-button";
+import { useModuleDropOver } from "./queue";
 import { SortableList, SortableRow } from "./sortable";
 
 export function newProject() {
@@ -97,23 +101,41 @@ interface RowProps {
   onClick(): void;
   /** Shown before the count: the project has something doing. */
   doing?: boolean;
+  onDoubleClick?(): void;
+  /** Takes the label's place: the field that renames the row. */
+  editor?: ReactNode;
+  /** The module a row of the queue dropped here goes to, 0 for 未分类. */
+  dropModule?: number;
 }
 
-function Row({ icon: Icon, label, count, active, onClick, doing }: RowProps) {
+function Row({ icon: Icon, label, count, active, onClick, doing, onDoubleClick, editor, dropModule }: RowProps) {
+  const Tag = editor ? "div" : "button";
+  const dropOver = useModuleDropOver(dropModule ?? -1);
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Tag
+      type={editor ? undefined : "button"}
+      onClick={editor ? undefined : onClick}
+      onDoubleClick={onDoubleClick}
+      data-module-drop={dropModule}
       className={cn(
         "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
         active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60",
+        dropOver > 0 && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
       )}
     >
       <Icon className={cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground")} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {editor ?? <span className="min-w-0 flex-1 truncate">{label}</span>}
       {doing && <span className="signal-dot size-1.5 shrink-0 rounded-full" aria-label="有进行中的改进点" />}
-      {count !== undefined && count > 0 && <span className="meta-mono text-muted-foreground">{count}</span>}
-    </button>
+      {dropOver > 0 ? (
+        <span className="flex h-5 shrink-0 items-center gap-1 rounded-full bg-primary px-2 text-xs font-medium text-primary-foreground shadow-md animate-in fade-in-0 zoom-in-90 duration-150">
+          <CornerDownRight className="size-3" />
+          移入
+          {dropOver > 1 && <span className="meta-mono opacity-80">· {dropOver} 条</span>}
+        </span>
+      ) : (
+        count !== undefined && count > 0 && <span className="meta-mono text-muted-foreground">{count}</span>
+      )}
+    </Tag>
   );
 }
 
@@ -126,37 +148,57 @@ function Projects() {
       <Scroller viewportClassName="flex-initial px-2 pb-2">
         <SortableList ids={projects.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
           {projects.map((p) => (
-            <SortableRow key={p.id} id={p.id}>
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div>
-                    <Row
-                      icon={FolderKanban}
-                      label={p.name}
-                      count={p.counts.todo + p.counts.doing}
-                      doing={p.counts.doing > 0}
-                      active={p.id === projectId}
-                      onClick={() => openProject(p.id)}
-                    />
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onSelect={() => promptRenameProject(p)}>
-                    <Pencil />
-                    重命名
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteProject(p)}>
-                    <Trash2 />
-                    删除项目
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            </SortableRow>
+            <ProjectRow key={p.id} project={p} active={p.id === projectId} />
           ))}
         </SortableList>
       </Scroller>
     </section>
+  );
+}
+
+/** A project in the sidebar: dragged into another order, double-clicked to rename. */
+function ProjectRow({ project: p, active }: { project: Project; active: boolean }) {
+  const [renaming, setRenaming] = useState(false);
+  return (
+    <SortableRow id={p.id}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div>
+            <Row
+              icon={FolderKanban}
+              label={p.name}
+              count={p.counts.todo + p.counts.doing}
+              doing={p.counts.doing > 0}
+              active={active}
+              onClick={() => openProject(p.id)}
+              onDoubleClick={renaming ? undefined : () => setRenaming(true)}
+              editor={
+                renaming ? (
+                  <NameInput
+                    name={p.name}
+                    label="项目名称"
+                    maxLength={60}
+                    onSave={(name) => renameProject(p.id, name)}
+                    onDone={() => setRenaming(false)}
+                  />
+                ) : undefined
+              }
+            />
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => promptRenameProject(p)}>
+            <Pencil />
+            重命名
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteProject(p)}>
+            <Trash2 />
+            删除项目
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </SortableRow>
   );
 }
 
@@ -190,41 +232,121 @@ function Modules() {
         <Row icon={LayoutList} label="全部" count={open.length} active={filter === "all"} onClick={() => setModuleFilter("all")} />
         <SortableList ids={modules.map((m) => m.id)} onMove={(id, overId) => moveModule(id, overId)}>
           {modules.map((m) => (
-            <SortableRow key={m.id} id={m.id}>
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div>
-                    <Row
-                      icon={Boxes}
-                      label={m.name}
-                      count={m.counts.todo + m.counts.doing}
-                      doing={m.counts.doing > 0}
-                      active={filter === m.id}
-                      onClick={() => pick(m.id)}
-                    />
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem
-                    onSelect={() => askName({ title: "重命名模块", initial: m.name, onSubmit: (name) => renameModule(m.id, name) })}
-                  >
-                    <Pencil />
-                    重命名
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteModule(m)}>
-                    <Trash2 />
-                    删除模块
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            </SortableRow>
+            <ModuleRow key={m.id} module={m} active={filter === m.id} onClick={() => pick(m.id)} />
           ))}
         </SortableList>
         {unsortedTotal > 0 && (
-          <Row icon={Inbox} label={UNSORTED} count={unsortedOpen} active={filter === 0} onClick={() => pick(0)} />
+          <Row icon={Inbox} label={UNSORTED} count={unsortedOpen} active={filter === 0} onClick={() => pick(0)} dropModule={0} />
         )}
       </Scroller>
     </section>
+  );
+}
+
+/** A module in the sidebar: dragged into another order, double-clicked to rename. */
+function ModuleRow({ module: m, active, onClick }: { module: Module; active: boolean; onClick(): void }) {
+  const [renaming, setRenaming] = useState(false);
+  return (
+    <SortableRow id={m.id}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div>
+            <Row
+              icon={Boxes}
+              label={m.name}
+              count={m.counts.todo + m.counts.doing}
+              doing={m.counts.doing > 0}
+              active={active}
+              onClick={onClick}
+              dropModule={m.id}
+              onDoubleClick={
+                renaming
+                  ? undefined
+                  : () => {
+                      // The two clicks before toggled the filter off again: keep the module shown.
+                      setModuleFilter(m.id);
+                      setRenaming(true);
+                    }
+              }
+              editor={
+                renaming ? (
+                  <NameInput
+                    name={m.name}
+                    label="模块名称"
+                    maxLength={40}
+                    onSave={(name) => renameModule(m.id, name)}
+                    onDone={() => setRenaming(false)}
+                  />
+                ) : undefined
+              }
+            />
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            onSelect={() => askName({ title: "重命名模块", initial: m.name, onSubmit: (name) => renameModule(m.id, name) })}
+          >
+            <Pencil />
+            重命名
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteModule(m)}>
+            <Trash2 />
+            删除模块
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </SortableRow>
+  );
+}
+
+interface NameInputProps {
+  name: string;
+  label: string;
+  maxLength: number;
+  onSave(name: string): Promise<unknown>;
+  onDone(): void;
+}
+
+/** The field a name is edited in, in its row: Enter or leaving it saves, Esc cancels. */
+function NameInput({ name: initial, label, maxLength, onSave, onDone }: NameInputProps) {
+  const [draft, setDraft] = useState(initial);
+  const field = useRef<HTMLInputElement>(null);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  const finish = () => {
+    const name = draft.trim();
+    if (!cancelled.current && name && name !== initial) void run(onSave(name));
+    onDone();
+  };
+
+  return (
+    <input
+      ref={field}
+      value={draft}
+      maxLength={maxLength}
+      aria-label={label}
+      spellCheck={false}
+      className="-mx-1 h-6 min-w-0 flex-1 rounded-sm bg-background px-1 font-normal ring-1 ring-ring/50 outline-none"
+      onChange={(e) => setDraft(e.target.value)}
+      // Selecting text in the field must not drag the row.
+      onPointerDown={(e) => e.stopPropagation()}
+      onBlur={finish}
+      onKeyDown={(e) => {
+        if (isComposing(e)) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelled.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+    />
   );
 }

@@ -332,6 +332,25 @@ func (s *Store) SetItemStatus(id int64, status ItemStatus) (Item, error) {
 	})
 }
 
+// ReopenItem takes a done item back to the status it had before: doing,
+// with the time it started, when it was done while doing; else to do. An
+// item that is not done stays as it is.
+func (s *Store) ReopenItem(id int64) (Item, error) {
+	return s.updateItem(id, func(tx *sql.Tx, it Item) error {
+		if it.Status != StatusDone {
+			return nil
+		}
+		// Going back to do clears StartedAt, so only an item done while
+		// doing still has it.
+		status := StatusTodo
+		if it.StartedAt != 0 {
+			status = StatusDoing
+		}
+		_, err := tx.Exec(`UPDATE items SET status = ?, done_at = NULL, updated_at = ? WHERE id = ?`, status, s.millis(), id)
+		return err
+	})
+}
+
 // Place is where MoveItem puts an item, against its anchor.
 type Place string
 

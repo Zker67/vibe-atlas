@@ -220,6 +220,11 @@ export interface Settings {
   glass: Glass;
   /** WindowOpacity is the opacity of the whole main window, 40 to 100 %. */
   windowOpacity: number;
+  /**
+   * ShareLinks lets a sub-item without a link of its own open the link of
+   * the nearest item above it that has one. On by default.
+   */
+  shareLinks: boolean;
   /** LookDefaults are the looks the app has out of the box. */
   lookDefaults: LookDefaults;
   /** DataDir is the folder of the database. */
@@ -375,7 +380,10 @@ export const Atlas = {
   openDataFolder(): Promise<void> {
     return call("Atlas.OpenDataFolder");
   },
-  /** OpenDeeplink opens the link an item is bound to. */
+  /**
+   * OpenDeeplink opens the link an item is bound to; without one, while
+   * sub-items share links, the link of the nearest item above it that has one.
+   */
   openDeeplink(id: number): Promise<void> {
     return call("Atlas.OpenDeeplink", id);
   },
@@ -420,6 +428,13 @@ export const Atlas = {
   /** RenameProject renames a project. */
   renameProject(id: number, name: string): Promise<Project> {
     return call("Atlas.RenameProject", id, name);
+  },
+  /**
+   * ReopenItem takes a done item back to the status it had before: doing,
+   * with the time it started, when it was done while doing; else to do.
+   */
+  reopenItem(id: number): Promise<Item> {
+    return call("Atlas.ReopenItem", id);
   },
   /** ReorderModules puts the modules of a project in the order of ids. */
   reorderModules(projectID: number, ids: number[]): Promise<void> {
@@ -484,6 +499,13 @@ export const Atlas = {
   /** SetProjectDescription replaces a project's notes, in Markdown. */
   setProjectDescription(id: number, description: string): Promise<Project> {
     return call("Atlas.SetProjectDescription", id, description);
+  },
+  /**
+   * SetShareLinks turns on or off sub-items opening the link of the item
+   * above them when they have none of their own.
+   */
+  setShareLinks(on: boolean): Promise<Settings> {
+    return call("Atlas.SetShareLinks", on);
   },
   /**
    * SetShortcut changes the global shortcut of quick capture. When the new

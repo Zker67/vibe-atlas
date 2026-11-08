@@ -7,6 +7,7 @@ import {
   Database,
   FolderOpen,
   Keyboard,
+  ListTree,
   Monitor,
   Moon,
   Palette,
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Scroller } from "@/components/ui/scroller";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
@@ -39,6 +41,7 @@ const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
 
 const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
   { value: "capture", label: "快速记录", icon: Zap },
+  { value: "items", label: "改进点", icon: ListTree },
   { value: "appearance", label: "外观", icon: Palette },
   { value: "data", label: "数据", icon: Database },
 ];
@@ -60,7 +63,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">快速记录的快捷键、外观（主题、背景、毛玻璃、透明度）和数据位置</DialogDescription>
+              <DialogDescription className="sr-only">快速记录的快捷键、子改进点的链接、外观（主题、背景、毛玻璃、透明度）和数据位置</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -87,6 +90,7 @@ export function SettingsDialog() {
                 <Scroller always className="flex-1" viewportClassName="px-6 pt-12 pb-6">
                   <div className="flex flex-col gap-3">
                     {t.value === "capture" && <CapturePanel />}
+                    {t.value === "items" && <ItemsPanel settings={settings} />}
                     {t.value === "appearance" && <AppearancePanel settings={settings} />}
                     {t.value === "data" && <DataPanel settings={settings} />}
                   </div>
@@ -112,6 +116,22 @@ function CapturePanel() {
         </div>
       </SettingCard>
     </>
+  );
+}
+
+function ItemsPanel({ settings }: { settings: Settings }) {
+  return (
+    <SettingCard
+      title="子改进点沿用上级的链接"
+      description="子改进点没有自己的链接时，打开最近一层有链接的上级的链接。关闭后每条只打开自己的链接。"
+      action={
+        <Switch
+          aria-label="子改进点沿用上级的链接"
+          checked={settings.shareLinks}
+          onCheckedChange={(on) => void run(Atlas.setShareLinks(on)).then((s) => s && useAtlas.setState({ settings: s }))}
+        />
+      }
+    />
   );
 }
 

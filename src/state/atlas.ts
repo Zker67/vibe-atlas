@@ -13,7 +13,7 @@ import {
   type Settings,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
-import { ancestors, applyMove, buildForest, queueTrees, subtreeIds, type QueueTrees } from "@/lib/tree";
+import { ancestors, applyMove, buildForest, linkSource, queueTrees, subtreeIds, type QueueTrees } from "@/lib/tree";
 
 export type View = "queue" | "overview";
 export type TypeFilter = ItemType | "all";
@@ -451,13 +451,42 @@ export async function setItemDeeplink(id: number, link: string): Promise<Item> {
   return item;
 }
 
-export async function setItemStatus(id: number, status: ItemStatus) {
+/** Gives the one item a status, as Go stamps it. */
+async function applyStatus(id: number, status: ItemStatus) {
   await editItem(Atlas.setItemStatus(id, status));
 }
 
-/** The status a click on an item's circle gives it: done, or back to do. */
+/**
+ * Gives an item a status, with the items under it that statusPlan takes
+ * along: done takes everything under it not done yet; reopened, a done
+ * parent takes the done items under it back to do.
+ */
+export async function setItemStatus(id: number, status: ItemStatus) {
+  await applyPlan(statusPlan(get().items, id, status, false));
+}
+
+/** Shows a statusPlan at once, then has Go apply it item by item, the top first. */
+async function applyPlan(plan: ReadonlyMap<number, ItemStatus>) {
+  if (plan.size === 0) return;
+  set((s) => ({ items: s.items.map((i) => withStatus(i, plan.get(i.id) ?? i.status)) }));
+  for (const [v, to] of plan) await applyStatus(v, to);
+}
+
+/**
+ * The status a done item goes back to: doing when it was done while doing,
+ * as StartedAt tells (going back to do clears it); else to do.
+ */
+export const reopenStatus = (item: Item): ItemStatus => (item.startedAt ? "doing" : "todo");
+
+/** Takes a done item back to the status it had before, as reopenStatus says. */
+export async function reopenItem(id: number) {
+  await editItem(Atlas.reopenItem(id));
+}
+
+/** The status a click on an item's circle gives it: done, or back to the status before. */
 export function toggleItemDone(item: Item) {
-  void setItemStatus(item.id, item.status === "done" ? "todo" : "done");
+  if (item.status === "done") void reopenItem(item.id);
+  else void setItemStatus(item.id, "done");
 }
 
 /** Starts an item, or puts a doing one back to do. */
@@ -488,40 +517,55 @@ function withStatus(item: Item, status: ItemStatus): Item {
 }
 
 /**
- * The items whose status changes when id is dropped in the section of
- * status, so that its tree lands there: id itself; for 待办 also those under
- * it that are doing; for 已完成 everything under it not done yet.
+ * The items whose status changes when id gets status, and what each gets,
+ * the top first: id itself; done, also everything under it not done yet;
+ * id done and reopened (to do or doing), the done items under it, back to
+ * do. Dropped (drop) in 待办, also those under it that are doing go back to
+ * do, so that its tree lands there.
  */
-export function statusChanges(items: Item[], id: number, status: ItemStatus): number[] {
+export function statusPlan(items: Item[], id: number, status: ItemStatus, drop: boolean): Map<number, ItemStatus> {
   const forest = buildForest(items);
-  const changes = (v: number) => {
-    const it = forest.byId.get(v)?.item;
-    if (!it || it.status === status) return false;
-    if (v === id || status === "done") return true;
-    return status === "todo" && it.status === "doing";
-  };
-  return [...subtreeIds(forest, id)].filter(changes);
+  const plan = new Map<number, ItemStatus>();
+  const root = forest.byId.get(id)?.item;
+  if (!root) return plan;
+  const reopen = root.status === "done" && status !== "done";
+  for (const v of subtreeIds(forest, id)) {
+    const it = forest.byId.get(v)!.item;
+    let to: ItemStatus | null = null;
+    if (v === id || status === "done") to = status;
+    else if (reopen && it.status === "done") to = "todo";
+    else if (drop && status === "todo" && it.status === "doing") to = "todo";
+    if (to && to !== it.status) plan.set(v, to);
+  }
+  return plan;
 }
 
 /**
- * What a drop in the queue does: moves the item, then gives it, and what
- * statusChanges picks under it, the status of the section it was dropped
- * in; either step is optional. The queue shows both at once; Go applies
+ * The items that take status when id is dropped in its section, as the
+ * drop marks count them: see statusPlan.
+ */
+export function statusChanges(items: Item[], id: number, status: ItemStatus): number[] {
+  return [...statusPlan(items, id, status, true)].filter(([, to]) => to === status).map(([v]) => v);
+}
+
+/**
+ * What a drop in the queue does: moves the item, then gives it the status
+ * of the section it was dropped in, with what statusPlan takes along under
+ * it; either step is optional. The queue shows both at once; Go applies
  * them in that order.
  */
 export async function dropItem(id: number, move: { anchorId: number; place: Place } | null, status: ItemStatus | null) {
   let items = get().items;
-  const changed = status ? new Set(statusChanges(items, id, status)) : new Set<number>();
+  const plan = status ? statusPlan(items, id, status, true) : new Map<number, ItemStatus>();
   if (move) items = applyMove(items, id, move.anchorId, move.place) ?? items;
-  if (status) items = items.map((i) => (changed.has(i.id) ? withStatus(i, status) : i));
+  items = items.map((i) => withStatus(i, plan.get(i.id) ?? i.status));
   set({ items });
   if (move?.place === "inside") expand([move.anchorId]);
   if (move && !(await runOk(Atlas.moveItem(id, move.anchorId, move.place)))) {
     void refresh();
     return;
   }
-  if (!status) return;
-  for (const v of changed) await setItemStatus(v, status);
+  for (const [v, to] of plan) await applyStatus(v, to);
 }
 
 /** Puts id and targetId under a new parent in the target's place, and selects the parent. */
@@ -558,6 +602,22 @@ export async function copyItem(id: number) {
 export function openDeeplink(id: number) {
   void runOk(Atlas.openDeeplink(id));
 }
+
+/** Whether sub-items without a link of their own open the link of an item above them. */
+export const sharesLinks = (s: Pick<AtlasState, "settings">) => s.settings?.shareLinks ?? true;
+
+/** The item whose link the item opens, as linkSource finds it with the settings now. */
+function linkSourceIn(s: Pick<AtlasState, "items" | "settings">, id: number): Item | null {
+  const item = s.items.find((i) => i.id === id);
+  if (!item || item.deeplink || !item.parentId || !sharesLinks(s)) return item?.deeplink ? item : null;
+  return linkSource(new Map(s.items.map((i) => [i.id, i])), id, true);
+}
+
+/** The item whose link id opens now: itself, an item above it, or null for none. */
+export const itemLinkSource = (id: number) => linkSourceIn(get(), id);
+
+/** itemLinkSource, kept up to date. */
+export const useLinkSource = (id: number) => useAtlas((s) => linkSourceIn(s, id));
 
 export function openLink(link: string) {
   void runOk(Atlas.openLink(link));

@@ -25,10 +25,10 @@ import {
 import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { isComposing } from "@/lib/keys";
-import { nextType, UNSORTED } from "@/lib/labels";
+import { nextType, statusInfo, UNSORTED } from "@/lib/labels";
 import { elapsed, formatTime, useNow } from "@/lib/time";
-import { errorMessage } from "@/lib/api";
-import { buildForest, subtreeIds, type Row, type TreeRows } from "@/lib/tree";
+import { errorMessage, run } from "@/lib/api";
+import { buildForest, linkSource, subtreeIds, type Row, type TreeRows } from "@/lib/tree";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Scroller } from "@/components/ui/scroller";
@@ -61,17 +61,21 @@ import {
   moveItemToProject,
   newChildTaken,
   openDeeplink,
+  reopenItem,
+  reopenStatus,
   select,
   setCollapsed,
   setItemModule,
   setItemStatus,
   setItemTitle,
   setSectionOpen,
+  sharesLinks,
   statusChanges,
   toggleCollapsed,
   toggleItemDoing,
   toggleItemDone,
   useAtlas,
+  useLinkSource,
 } from "@/state/atlas";
 import { askConfirm } from "@/state/dialogs";
 import { IconButton } from "./icon-button";
@@ -123,6 +127,48 @@ export function visibleItems(): Item[] {
   return visibleRows().map((r) => r.item);
 }
 
+/** The item whose row is asked to turn its title into a field. */
+const useRenameAsk = create<{ id: number }>(() => ({ id: 0 }));
+
+/**
+ * Enter: renames the item in its row, as a double click does. False when
+ * the queue does not show it, for the caller to edit it elsewhere.
+ */
+export function renameInQueue(id: number): boolean {
+  if (useAtlas.getState().view !== "queue" || !visibleRows().some((r) => r.item.id === id)) return false;
+  useRenameAsk.setState({ id });
+  return true;
+}
+
+/**
+ * Tab: puts the item under the item of its level shown right above it, as
+ * its last child. Nothing when none is: the first of its level stays.
+ */
+export function indentItem(id: number) {
+  for (const trees of shownTrees(useAtlas.getState(), useQueueUi.getState().doneLimit)) {
+    const rows = trees.flatMap((t) => t.rows);
+    const at = rows.findIndex((r) => r.item.id === id);
+    if (at < 0) continue;
+    const depth = rows[at]!.depth;
+    for (let j = at - 1; j >= 0 && rows[j]!.depth >= depth; j--) {
+      if (rows[j]!.depth === depth) {
+        moveItem(id, rows[j]!.item.id, "inside");
+        return;
+      }
+    }
+    return;
+  }
+}
+
+/** Shift+Tab: takes the item a level up, right after its parent, as 「移到上一级」 does. */
+export function outdentItem(id: number) {
+  const item = useAtlas.getState().items.find((i) => i.id === id);
+  if (item?.parentId) moveItem(id, item.parentId, "after");
+}
+
+/** The item a new one of its level is being named under, from Shift+Enter in a title. */
+const useDraftAfter = create<{ id: number }>(() => ({ id: 0 }));
+
 /** ←: hides the selected item's children, or moves to its parent. */
 export function collapseOrUp() {
   const { selectedId } = useAtlas.getState();
@@ -158,23 +204,27 @@ export function confirmDeleteItem(item: Item) {
 
 /**
  * Where a dragged item lands on a row: before or after it, as its sibling;
- * merged with it under a new parent; or inside it, when it already has
- * children.
+ * merged with it under a new parent; inside it, when it already has
+ * children; or under it as its last child, from its bottom edge with the
+ * pointer pushed to the right.
  */
-type Zone = "before" | "after" | "merge" | "inside";
+type Zone = "before" | "after" | "merge" | "inside" | "child";
 
 /**
  * Where a drag would land: on a row, with the status it takes there when
- * that changes; or on a section, whose status it takes.
+ * that changes; on a section, whose status it takes; or on a module of the
+ * sidebar, 0 for 未分类, which it goes to.
  */
 type Drop =
   | { kind: "row"; overId: number; zone: Zone; status: ItemStatus | null; count: number }
-  | { kind: "section"; section: ItemStatus; count: number };
+  | { kind: "section"; section: ItemStatus; count: number }
+  | { kind: "module"; moduleId: number; count: number };
 
 function sameDrop(a: Drop | null, b: Drop | null): boolean {
   if (!a || !b) return a === b;
+  if (a.kind === "module") return b.kind === "module" && a.moduleId === b.moduleId && a.count === b.count;
   if (a.kind === "section") return b.kind === "section" && a.section === b.section && a.count === b.count;
-  if (b.kind === "section") return false;
+  if (b.kind !== "row") return false;
   return a.overId === b.overId && a.zone === b.zone && a.status === b.status && a.count === b.count;
 }
 
@@ -184,6 +234,14 @@ const useDrag = create<{ active: Item | null; moving: ReadonlySet<number>; drop:
   moving: new Set(),
   drop: null,
 }));
+
+/**
+ * How many items a row of the queue dragged onto the module of the sidebar,
+ * 0 for 未分类, would move there; 0 while it is not.
+ */
+export function useModuleDropOver(moduleId: number): number {
+  return useDrag((s) => (s.drop?.kind === "module" && s.drop.moduleId === moduleId ? s.drop.count : 0));
+}
 
 /** What the drop needs to know of a row the queue shows. */
 interface RowInfo {
@@ -212,15 +270,24 @@ function sectionDrop(active: Item, section: ItemStatus): Drop | null {
 }
 
 /**
- * Finds where the item dragged would land with the pointer at (x, y).
- * On a row, its top or bottom 30 % puts the item before or after, its
- * middle merges or puts it inside. Top-level rows of 进行中 and 已完成 have
- * no order of their own: their edges stand for the section. The bottom of
- * an open parent is the top of its first child. Elsewhere in a section, its
- * title included, the item takes the section's status.
+ * Finds where the item dragged would land with the pointer at (x, y), dx
+ * to the right of where the drag started. On a row, its top or bottom 30 %
+ * puts the item before or after, its middle merges or puts it inside. The
+ * bottom with the pointer a level to the right puts the item under the row.
+ * Top-level rows of 进行中 and 已完成 have no order of their own: their
+ * edges stand for the section. The bottom of an open parent is the top of
+ * its first child. Elsewhere in a section, its title included, the item
+ * takes the section's status. On a module of the sidebar, other than its
+ * own and its children's, the item goes to that module with them.
  */
-function dropAt(x: number, y: number, map: DropMap, active: Item, moving: ReadonlySet<number>): Drop | null {
+function dropAt(x: number, y: number, dx: number, map: DropMap, active: Item, moving: ReadonlySet<number>): Drop | null {
   const hit = document.elementFromPoint(x, y);
+  const target = hit?.closest<HTMLElement>("[data-module-drop]");
+  if (target) {
+    const moduleId = Number(target.dataset.moduleDrop);
+    const count = moduleChanges(moving, moduleId).length;
+    return count ? { kind: "module", moduleId, count } : null;
+  }
   const el = hit?.closest<HTMLElement>("[data-queue-row]");
   if (!el) {
     const section = hit?.closest<HTMLElement>("[data-queue-section]")?.dataset.queueSection as ItemStatus | undefined;
@@ -235,14 +302,44 @@ function dropAt(x: number, y: number, map: DropMap, active: Item, moving: Readon
   const middle: Zone = row.hasChildren ? "inside" : "merge";
   const zone: Zone = at < 0.3 ? "before" : at > 0.7 ? "after" : middle;
   if (zone === "merge" || zone === "inside") return { kind: "row", overId, zone, status: null, count: 0 };
-  if (row.depth === 0 && info.section !== "todo") return sectionDrop(active, info.section);
-  if (zone === "after" && row.hasChildren && !row.collapsed && info.next && info.next.depth === row.depth + 1) {
-    if (moving.has(info.next.item.id)) return null;
-    return { kind: "row", overId: info.next.item.id, zone: "before", status: null, count: 0 };
+  const first = zone === "after" && row.hasChildren && !row.collapsed && info.next?.depth === row.depth + 1 ? info.next : undefined;
+  const under = zone === "after" && dx >= INDENT;
+  if (under && !first) return { kind: "row", overId, zone: "child", status: null, count: 0 };
+  if (row.depth === 0 && info.section !== "todo" && !under) return sectionDrop(active, info.section);
+  if (first) {
+    if (moving.has(first.item.id)) return null;
+    return { kind: "row", overId: first.item.id, zone: "before", status: null, count: 0 };
   }
   // Among the top-level items to do, the item becomes one of them.
   const count = row.depth === 0 ? statusChanges(useAtlas.getState().items, active.id, "todo").length : 0;
   return { kind: "row", overId, zone, status: count ? "todo" : null, count };
+}
+
+/** The ids of the items dragged, it and those under it, not in the module yet. */
+function moduleChanges(moving: ReadonlySet<number>, moduleId: number): number[] {
+  return useAtlas
+    .getState()
+    .items.filter((i) => moving.has(i.id) && i.moduleId !== moduleId)
+    .map((i) => i.id);
+}
+
+/**
+ * A row dropped on a module of the sidebar: the item and every item under
+ * it go to the module. When the queue shows another module only, the rows
+ * leave it: a toast says where they went.
+ */
+async function dropOnModule(item: Item, moving: ReadonlySet<number>, moduleId: number) {
+  for (const id of moduleChanges(moving, moduleId)) {
+    if (!(await setItemModule(id, moduleId))) return;
+  }
+  const { moduleFilter, modules } = useAtlas.getState();
+  if (moduleFilter !== "all" && moduleFilter !== moduleId) {
+    const name = moduleId ? (modules.find((m) => m.id === moduleId)?.name ?? "") : UNSORTED;
+    const under = moving.size - 1;
+    toast.success(under > 0 ? `已移到「${name}」，子改进点 ${under} 条一起` : `已移到「${name}」`);
+  } else {
+    flashRow(item.id);
+  }
 }
 
 /** The sections of the queue, top to bottom. */
@@ -286,8 +383,9 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
       pointer.x = activatorEvent.clientX;
       pointer.y = activatorEvent.clientY;
     }
+    const startX = pointer.x;
     const update = () => {
-      const next = dropAt(pointer.x, pointer.y, current.current, item, moving);
+      const next = dropAt(pointer.x, pointer.y, pointer.x - startX, current.current, item, moving);
       if (!sameDrop(useDrag.getState().drop, next)) useDrag.setState({ drop: next });
     };
     const onMove = (e: PointerEvent) => {
@@ -310,11 +408,13 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
 
   const finish = (apply: boolean) => {
     stop.current();
-    const { active: item, drop } = useDrag.getState();
+    const { active: item, moving, drop } = useDrag.getState();
     useDrag.setState({ active: null, moving: new Set(), drop: null });
     if (!apply || !drop || !item) return;
     const id = item.id;
-    if (drop.kind === "section") {
+    if (drop.kind === "module") {
+      void dropOnModule(item, moving, drop.moduleId);
+    } else if (drop.kind === "section") {
       const { firstTodo } = current.current;
       const toTop = drop.section === "todo" && item.parentId === 0 && firstTodo !== 0 && firstTodo !== id;
       void dropItem(id, toTop ? { anchorId: firstTodo, place: "before" } : null, drop.count ? drop.section : null);
@@ -322,7 +422,7 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
     } else if (drop.zone === "merge") {
       void mergeItems(id, drop.overId).then((parent) => parent && flashRow(parent.id));
     } else {
-      void dropItem(id, { anchorId: drop.overId, place: drop.zone }, drop.status);
+      void dropItem(id, { anchorId: drop.overId, place: drop.zone === "child" ? "inside" : drop.zone }, drop.status);
       flashRow(id);
     }
   };
@@ -339,13 +439,33 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
   );
 }
 
-/** The row that follows the pointer while dragging. */
+/**
+ * The row that follows the pointer while dragging. With items under it, the
+ * cards of a stack peek out below it. Where letting go changes nothing, it
+ * fades and loses its accent.
+ */
 function DragPreview({ item, under }: { item: Item; under: number }) {
+  const landing = useDrag((s) => s.drop !== null);
+  const layer = "absolute inset-x-0 h-full rounded-md bg-popover ring-1 ring-foreground/10 shadow-md";
   return (
-    <div className="flex h-9 items-center gap-2 rounded-md bg-popover px-2 shadow-xl ring-1 ring-primary/40 animate-in fade-in-0 zoom-in-[0.98] duration-150">
-      <TypeIcon type={item.type} />
-      <span className="min-w-0 flex-1 truncate">{item.title}</span>
-      {under > 0 && <span className="meta-mono shrink-0 rounded-sm bg-muted px-1.5 leading-5 text-muted-foreground">+{under}</span>}
+    <div
+      className={cn(
+        "relative animate-in fade-in-0 zoom-in-95 duration-200 ease-out transition-opacity",
+        !landing && "opacity-75",
+      )}
+    >
+      {under > 1 && <div aria-hidden className={cn(layer, "top-2 scale-x-[0.92] opacity-50")} />}
+      {under > 0 && <div aria-hidden className={cn(layer, "top-1 scale-x-[0.96] opacity-80")} />}
+      <div
+        className={cn(
+          "relative flex h-9 items-center gap-2 rounded-md bg-popover px-2 shadow-xl ring-1 transition-[box-shadow] duration-150",
+          landing ? "ring-primary/50" : "ring-foreground/10",
+        )}
+      >
+        <TypeIcon type={item.type} />
+        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+        {under > 0 && <span className="meta-mono shrink-0 rounded-sm bg-muted px-1.5 leading-5 text-muted-foreground">+{under}</span>}
+      </div>
     </div>
   );
 }
@@ -363,6 +483,8 @@ export function Queue() {
   const selectedId = useAtlas((s) => s.selectedId);
   const flashId = useQueueUi((s) => s.flashId);
   const doneLimit = useQueueUi((s) => s.doneLimit);
+  const draftAfter = useDraftAfter((s) => s.id);
+  const shared = useAtlas(sharesLinks);
 
   const { doing, todo, done } = useMemo(
     () => layoutQueue({ items, typeFilter, moduleFilter, statusFilter, collapsed }),
@@ -377,25 +499,40 @@ export function Queue() {
   const nested = useMemo(() => items.some((i) => i.parentId !== 0), [items]);
   // The module shows on each row unless the queue shows one module only.
   const moduleOf = (item: Item) => (moduleFilter === "all" ? (moduleNames.get(item.moduleId) ?? "") : "");
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const rows = (trees: TreeRows[]) =>
-    trees.flatMap((t) =>
-      t.rows.map((r) => (
-        <ItemRow
-          key={r.item.id}
-          item={r.item}
-          depth={r.depth}
-          hasChildren={r.hasChildren}
-          collapsed={r.collapsed}
-          done={r.done}
-          total={r.total}
-          context={r.context}
-          nested={nested}
-          moduleName={moduleOf(r.item)}
-          selected={r.item.id === selectedId}
-          flash={r.item.id === flashId}
-        />
-      )),
-    );
+    trees.flatMap((t) => {
+      const out = t.rows.map((r) => {
+        const source = linkSource(byId, r.item.id, shared);
+        return (
+          <ItemRow
+            key={r.item.id}
+            item={r.item}
+            depth={r.depth}
+            hasChildren={r.hasChildren}
+            collapsed={r.collapsed}
+            done={r.done}
+            total={r.total}
+            context={r.context}
+            nested={nested}
+            moduleName={moduleOf(r.item)}
+            link={source?.deeplink ?? ""}
+            linkFrom={source && source.id !== r.item.id ? source.title : ""}
+            selected={r.item.id === selectedId}
+            flash={r.item.id === flashId}
+          />
+        );
+      });
+      // The new item being named goes under the one it follows, after what shows under that.
+      const at = draftAfter ? t.rows.findIndex((r) => r.item.id === draftAfter) : -1;
+      if (at >= 0) {
+        const after = t.rows[at]!;
+        let end = at + 1;
+        while (end < t.rows.length && t.rows[end]!.depth > after.depth) end++;
+        out.splice(end, 0, <DraftRow key={`draft-${after.item.id}`} after={after.item} depth={after.depth} nested={nested} />);
+      }
+      return out;
+    });
 
   const filtered = typeFilter !== "all" || moduleFilter !== "all" || statusFilter !== "all";
   const nothing = doing.length + todo.length + done.length === 0;
@@ -559,6 +696,9 @@ interface ItemRowProps {
   nested: boolean;
   /** The module's name to show, or "" to show none. */
   moduleName: string;
+  /** The link it opens, or "" for none; linkFrom is the title of the item above it the link comes from, or "". */
+  link: string;
+  linkFrom: string;
   selected: boolean;
   flash: boolean;
 }
@@ -573,6 +713,8 @@ const ItemRow = memo(function ItemRow({
   context,
   nested,
   moduleName,
+  link,
+  linkFrom,
   selected,
   flash,
 }: ItemRowProps) {
@@ -585,8 +727,17 @@ const ItemRow = memo(function ItemRow({
   const becomes = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.status : null));
   const becomesCount = useDrag((s) => (s.drop?.kind === "row" && s.drop.overId === item.id ? s.drop.count : 0));
   const moving = useDrag((s) => s.moving.has(item.id));
+  // The row picked up, not those under it: where it was shows as an outline.
+  const picked = useDrag((s) => s.active?.id === item.id);
   const isDone = item.status === "done";
-  const [renaming, setRenaming] = useState(false);
+  // Renamed after a double click, or after Enter asked for it.
+  const [renamingHere, setRenaming] = useState(false);
+  const renameAsked = useRenameAsk((s) => s.id === item.id);
+  const renaming = renamingHere || renameAsked;
+  const stopRenaming = () => {
+    setRenaming(false);
+    if (useRenameAsk.getState().id === item.id) useRenameAsk.setState({ id: 0 });
+  };
   // Where the content starts: the arrow's column of this level.
   const left = PAD + depth * INDENT;
 
@@ -613,7 +764,8 @@ const ItemRow = memo(function ItemRow({
             "signal-row group relative flex h-9 items-center gap-2 rounded-md pr-2 transition-[background-color,opacity,box-shadow] duration-100",
             selected ? "bg-accent" : "hover:bg-accent/50",
             flash && "row-flash",
-            moving && "opacity-35",
+            moving && "opacity-40",
+            picked && "bg-muted/40 outline-1 -outline-offset-1 outline-primary/40 outline-dashed",
             (zone === "merge" || zone === "inside") && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
           )}
         >
@@ -647,7 +799,7 @@ const ItemRow = memo(function ItemRow({
             <StatusButton item={item} onToggle={() => toggleItemDone(item)} />
             <TypeIcon type={item.type} />
             {renaming ? (
-              <RowTitleInput item={item} onDone={() => setRenaming(false)} />
+              <RowTitleInput item={item} onDone={stopRenaming} />
             ) : (
               <span className={cn("min-w-0 flex-1 truncate", isDone && "text-muted-foreground")}>{item.title}</span>
             )}
@@ -658,7 +810,7 @@ const ItemRow = memo(function ItemRow({
               </span>
             )}
             {item.note.trim() && <FileText aria-label="有备注" className="size-3.5 shrink-0 text-muted-foreground" />}
-            {item.deeplink && <LinkMark item={item} />}
+            {link && <LinkMark item={item} link={link} from={linkFrom} />}
             <RowTime item={item} />
             {!isDone && <RowActions item={item} shown={selected} />}
           </div>
@@ -680,21 +832,27 @@ const ItemRow = memo(function ItemRow({
 
 /**
  * Where the row dragged would land: a line before or after this row, with
- * the status it takes there when that changes, or a badge on it.
+ * the status it takes there when that changes; a line a level in under it,
+ * for a child; or a badge on it.
  */
 function DropMark({ zone, status, count, left }: { zone: Zone; status: ItemStatus | null; count: number; left: number }) {
-  if (zone === "before" || zone === "after") {
+  if (zone === "before" || zone === "after" || zone === "child") {
+    const child = zone === "child";
     return (
       <span
         aria-hidden
-        className={cn("pointer-events-none absolute right-2 z-10 h-0.5 rounded-full bg-primary", zone === "before" ? "-top-px" : "-bottom-px")}
-        style={{ left }}
+        className={cn(
+          "drop-line pointer-events-none absolute right-2 z-10 h-0.5 rounded-full bg-primary transition-[left] duration-150 ease-out",
+          zone === "before" ? "-top-px" : "-bottom-px",
+        )}
+        style={{ left: child ? left + INDENT : left }}
       >
         <span className="absolute top-1/2 -left-1 size-2 -translate-y-1/2 rounded-full border-2 border-primary bg-background" />
-        {status && (
-          <span className="absolute top-1/2 right-0 flex h-4 -translate-y-1/2 items-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground shadow-md animate-in fade-in-0 zoom-in-90 duration-150">
-            {SECTION_INFO[status].drop}
-            {count > 1 && <span className="meta-mono ml-1 opacity-80">· {count} 条</span>}
+        {(status || child) && (
+          <span className="absolute top-1/2 right-0 flex h-4 -translate-y-1/2 items-center gap-1 rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground shadow-md animate-in fade-in-0 zoom-in-90 duration-150">
+            {child && <CornerDownRight className="size-3" />}
+            {child ? "成为子改进点" : status && SECTION_INFO[status].drop}
+            {!child && count > 1 && <span className="meta-mono ml-1 opacity-80">· {count} 条</span>}
           </span>
         )}
       </span>
@@ -741,7 +899,8 @@ function TreeProgress({ done, total }: { done: number; total: number }) {
   );
 }
 
-function LinkMark({ item }: { item: Item }) {
+/** The link the row opens; one that comes from an item above shows fainter, and says so. */
+function LinkMark({ item, link, from }: { item: Item; link: string; from: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -753,13 +912,17 @@ function LinkMark({ item }: { item: Item }) {
             openDeeplink(item.id);
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
+          className={cn(
+            "grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground",
+            from && "opacity-60",
+          )}
         >
           <Link2 className="size-3.5" />
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-80 break-all">
-        {item.deeplink}
+        {from && <span className="block opacity-70">沿用「{from}」的链接</span>}
+        {link}
         <span className="ml-1.5 shrink-0 opacity-60">O</span>
       </TooltipContent>
     </Tooltip>
@@ -779,8 +942,9 @@ function RowTime({ item }: { item: Item }) {
   return <span className="meta-mono shrink-0 text-muted-foreground">{text}</span>;
 }
 
+/** The row's buttons: to do starts or finishes, doing only finishes; both copy. */
 function RowActions({ item, shown }: { item: Item; shown: boolean }) {
-  const doing = item.status === "doing";
+  const todo = item.status === "todo";
   return (
     <div
       className={cn(
@@ -789,16 +953,29 @@ function RowActions({ item, shown }: { item: Item; shown: boolean }) {
       )}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      {todo && (
+        <IconButton
+          label="开始进行"
+          shortcut="S"
+          size="icon-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleItemDoing(item);
+          }}
+        >
+          <Play />
+        </IconButton>
+      )}
       <IconButton
-        label={doing ? "退回待办" : "开始进行"}
-        shortcut="S"
+        label="标为完成"
+        shortcut="Space"
         size="icon-xs"
         onClick={(e) => {
           e.stopPropagation();
-          toggleItemDoing(item);
+          toggleItemDone(item);
         }}
       >
-        {doing ? <Pause /> : <Play />}
+        <CircleCheck />
       </IconButton>
       <IconButton
         label="复制给 AI"
@@ -820,6 +997,8 @@ interface StatusAction {
   status: ItemStatus;
   icon: typeof Play;
   shortcut: string;
+  /** It takes a done item back to the status it had before. */
+  reopen?: boolean;
 }
 
 /** What an item's status can become, with the keys that do it. */
@@ -836,10 +1015,15 @@ export function statusActions(item: Item): StatusAction[] {
         { label: "退回待办", status: "todo", icon: Pause, shortcut: "S" },
       ];
     case "done":
-      return [
-        { label: "重新打开", status: "todo", icon: RotateCcw, shortcut: "Space" },
-        { label: "重新开始进行", status: "doing", icon: Play, shortcut: "" },
-      ];
+      return reopenStatus(item) === "doing"
+        ? [
+            { label: "重新打开，回到进行中", status: "doing", icon: RotateCcw, shortcut: "Space", reopen: true },
+            { label: "改为待办", status: "todo", icon: Pause, shortcut: "" },
+          ]
+        : [
+            { label: "重新打开", status: "todo", icon: RotateCcw, shortcut: "Space", reopen: true },
+            { label: "重新开始进行", status: "doing", icon: Play, shortcut: "" },
+          ];
   }
 }
 
@@ -848,10 +1032,11 @@ function ItemMenuItems({ item }: { item: Item }) {
   const projects = useAtlas((s) => s.projects);
   const modules = useAtlas((s) => s.modules);
   const others = projects.filter((p) => p.id !== item.projectId);
+  const linked = useLinkSource(item.id) !== null;
   return (
     <>
       {statusActions(item).map((a) => (
-        <ContextMenuItem key={a.status} onSelect={() => void setItemStatus(item.id, a.status)}>
+        <ContextMenuItem key={a.status} onSelect={() => void (a.reopen ? reopenItem(item.id) : setItemStatus(item.id, a.status))}>
           <a.icon />
           {a.label}
           {a.shortcut && <ContextMenuShortcut>{a.shortcut}</ContextMenuShortcut>}
@@ -863,7 +1048,7 @@ function ItemMenuItems({ item }: { item: Item }) {
         复制给 AI
         <ContextMenuShortcut>C</ContextMenuShortcut>
       </ContextMenuItem>
-      {item.deeplink && (
+      {linked && (
         <ContextMenuItem onSelect={() => openDeeplink(item.id)}>
           <ExternalLink />
           打开链接
@@ -920,11 +1105,16 @@ function ItemMenuItems({ item }: { item: Item }) {
   );
 }
 
-/** The title, renamed in its row after a double click: Enter or leaving saves, Escape gives it up. */
+/**
+ * The title, renamed in its row after a double click or Enter: Enter or
+ * leaving saves, Escape gives it up, Shift+Enter saves and names a new item
+ * of its level under it.
+ */
 function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
   const [draft, setDraft] = useState(item.title);
   const field = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
+  const next = useRef(false);
   useEffect(() => {
     field.current?.focus();
     field.current?.select();
@@ -934,6 +1124,7 @@ function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
     const text = draft.trim();
     if (!cancelled.current && text && text !== item.title) void setItemTitle(item.id, text);
     onDone();
+    if (next.current) useDraftAfter.setState({ id: item.id });
   };
 
   return (
@@ -952,6 +1143,7 @@ function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
         if (isComposing(e)) return;
         if (e.key === "Enter") {
           e.preventDefault();
+          next.current = e.shiftKey;
           e.currentTarget.blur();
         } else if (e.key === "Escape") {
           e.preventDefault();
@@ -960,6 +1152,85 @@ function RowTitleInput({ item, onDone }: { item: Item; onDone(): void }) {
         }
       }}
     />
+  );
+}
+
+/**
+ * A new item of after's level, being named in the row under it: under the
+ * same parent, of the same kind and module, to do. It is added once it has
+ * a title, on Enter or when the field is left; Shift+Enter adds it and
+ * names one more under it. Empty, Escape or leaving gives it up.
+ */
+function DraftRow({ after, depth, nested }: { after: Item; depth: number; nested: boolean }) {
+  const [draft, setDraft] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  // Once it is being added, leaving the field must not add it twice.
+  const busy = useRef(false);
+  const Todo = statusInfo("todo").icon;
+  useEffect(() => {
+    field.current?.focus();
+  }, []);
+
+  const close = () => {
+    if (useDraftAfter.getState().id === after.id) useDraftAfter.setState({ id: 0 });
+  };
+  const add = async (more: boolean) => {
+    const title = draft.trim();
+    if (busy.current) return;
+    if (!title) {
+      if (!more) close();
+      return;
+    }
+    busy.current = true;
+    const item = await run(createItem(title, after.type, after.moduleId, after.parentId));
+    if (!item) {
+      busy.current = false;
+      field.current?.focus();
+      return;
+    }
+    moveItem(item.id, after.id, "after");
+    select(item.id);
+    if (more) useDraftAfter.setState({ id: item.id });
+    else close();
+  };
+
+  return (
+    <div
+      data-queue-draft=""
+      style={{ paddingLeft: PAD + depth * INDENT }}
+      className="relative flex h-9 items-center gap-2 rounded-md bg-accent/50 pr-2"
+    >
+      {Array.from({ length: depth }, (_, i) => (
+        <span key={i} aria-hidden className="pointer-events-none absolute inset-y-0 w-px bg-border" style={{ left: PAD + i * INDENT + 7.5 }} />
+      ))}
+      {nested && <span aria-hidden className="w-4 shrink-0" />}
+      <span aria-hidden className={cn("grid size-5 shrink-0 place-items-center", statusInfo("todo").text)}>
+        <Todo className="size-4" />
+      </span>
+      <TypeIcon type={after.type} />
+      <input
+        ref={field}
+        value={draft}
+        maxLength={300}
+        aria-label="新改进点的标题"
+        placeholder="新改进点的标题，Enter 保存，Shift+Enter 再加一条"
+        spellCheck={false}
+        className="-mx-1 h-7 min-w-0 flex-1 rounded-sm bg-background px-1 ring-1 ring-ring/50 outline-none placeholder:text-muted-foreground"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void add(false)}
+        onKeyDown={(e) => {
+          if (isComposing(e)) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void add(e.shiftKey);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            busy.current = true;
+            close();
+          }
+        }}
+      />
+    </div>
   );
 }
 

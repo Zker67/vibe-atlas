@@ -218,3 +218,18 @@ export function applyMove(items: Item[], id: number, anchorId: number, place: Pl
     return { ...it, sortOrder, parentId: it.id === id ? parentId : it.parentId };
   });
 }
+
+// ---- Links ----
+
+/**
+ * The item whose link id opens: itself when it has one; else, when links
+ * are shared, the nearest item above it that has one; null for none.
+ */
+export function linkSource(byId: ReadonlyMap<number, Item>, id: number, shared: boolean): Item | null {
+  const seen = new Set<number>();
+  for (let it = byId.get(id); it && !seen.has(it.id); it = shared ? byId.get(it.parentId) : undefined) {
+    if (it.deeplink) return it;
+    seen.add(it.id);
+  }
+  return null;
+}

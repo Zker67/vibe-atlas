@@ -417,7 +417,31 @@ html[data-effects] .signal-dot {
   }
 }
 
-/* While a row of the queue is dragged, the pointer holds it everywhere. */
+/*
+ * Where a dragged row would land: the line draws out from its left end. It
+ * is uncovered rather than stretched, so the badge on it keeps its shape;
+ * the margins leave room for the dot and the badge around the thin line.
+ */
+.drop-line {
+  animation: drop-line-in 180ms ease-out;
+}
+@keyframes drop-line-in {
+  from {
+    opacity: 0;
+    clip-path: inset(-12px 100% -12px -12px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(-12px 0 -12px -12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drop-line {
+    animation: none;
+  }
+}
+
+/* While a row of the queue, a project or a module is dragged, the pointer holds it everywhere. */
 html.dragging-rows,
 html.dragging-rows * {
   cursor: grabbing !important;
@@ -567,6 +591,7 @@ html.dragging-rows * {
   vertical-align: middle;
   border-top: 1px solid var(--border);
 }
+
 
 /* Quick capture: the panel takes its page's height (FitContent in app.go),
    so the page is as tall as its content rather than the window. */

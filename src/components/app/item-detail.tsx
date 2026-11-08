@@ -54,6 +54,7 @@ import {
   setItemTitle,
   setItemType,
   useAtlas,
+  useLinkSource,
 } from "@/state/atlas";
 import { IconButton } from "./icon-button";
 import { TypeChip } from "./item-marks";
@@ -404,8 +405,10 @@ function linkLook(link: string): { icon: LucideIcon; text: string } {
 }
 
 /**
- * The link the item is bound to. Unbound, it is a faint 「添加链接」; bound,
- * a card that opens it, with edit and unbind under the pointer. The field
+ * The link the item is bound to. Unbound, it is a faint 「添加链接」, or the
+ * card of the link it takes from an item above, saying so, with an edit
+ * that gives this one its own; bound, a card that opens it, with edit and
+ * unbind under the pointer. The field
  * saves on Enter or when it loses the keyboard; a link the app refuses
  * stays in the field, with why.
  */
@@ -414,6 +417,7 @@ function LinkField({ item }: { item: Item }) {
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const editing = useRef(false);
+  const source = useLinkSource(item.id);
   useEffect(() => {
     if (!editing.current) setDraft(item.deeplink);
   }, [item.deeplink]);
@@ -436,7 +440,7 @@ function LinkField({ item }: { item: Item }) {
   };
 
   if (!open && !error) {
-    if (!item.deeplink) {
+    if (!source) {
       return (
         <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setOpen(true)}>
           <Plus />
@@ -444,7 +448,10 @@ function LinkField({ item }: { item: Item }) {
         </Button>
       );
     }
-    const look = linkLook(item.deeplink);
+    const link = source.deeplink;
+    // Taken from an item above: this one has no link of its own to unbind.
+    const from = source.id !== item.id ? source.title : "";
+    const look = linkLook(link);
     return (
       <div className="group/link relative flex min-w-0 items-center">
         <Tooltip>
@@ -456,27 +463,31 @@ function LinkField({ item }: { item: Item }) {
             >
               <look.icon className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{look.text}</span>
+              {from && <span className="max-w-32 shrink-0 truncate text-xs text-muted-foreground">沿用「{from}」</span>}
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-80 break-all">
-            打开 {item.deeplink}
+            {from && <span className="block opacity-70">沿用「{from}」的链接</span>}
+            打开 {link}
             <span className="ml-1.5 opacity-60">O</span>
           </TooltipContent>
         </Tooltip>
         <div className="absolute right-0.5 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-focus-within/link:opacity-100 group-hover/link:opacity-100">
-          <IconButton size="icon-xs" label="编辑链接" onClick={() => setOpen(true)}>
+          <IconButton size="icon-xs" label={from ? "为这一条单独设置链接" : "编辑链接"} onClick={() => setOpen(true)}>
             <Pencil />
           </IconButton>
-          <IconButton
-            size="icon-xs"
-            label="解除链接"
-            onClick={() => {
-              setDraft("");
-              void save("");
-            }}
-          >
-            <X />
-          </IconButton>
+          {!from && (
+            <IconButton
+              size="icon-xs"
+              label="解除链接"
+              onClick={() => {
+                setDraft("");
+                void save("");
+              }}
+            >
+              <X />
+            </IconButton>
+          )}
         </div>
       </div>
     );

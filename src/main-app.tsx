@@ -13,7 +13,16 @@ import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
 import { ProjectBar, QueueFilters } from "@/components/app/project-header";
-import { collapseOrUp, confirmDeleteItem, expandOrDown, Queue, visibleItems } from "@/components/app/queue";
+import {
+  collapseOrUp,
+  confirmDeleteItem,
+  expandOrDown,
+  indentItem,
+  outdentItem,
+  Queue,
+  renameInQueue,
+  visibleItems,
+} from "@/components/app/queue";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
@@ -21,6 +30,7 @@ import {
   copyItem,
   focusNewItem,
   init,
+  itemLinkSource,
   openDeeplink,
   refresh,
   select,
@@ -215,6 +225,13 @@ function useShortcuts() {
       const focus = document.activeElement;
       if (overlayOpen() || isTypingTarget(focus)) return;
       const s = useAtlas.getState();
+      // Tab, Shift+Tab: the selected item a level in or out. On a control, Tab moves the keyboard as ever.
+      if (key === "Tab" && !mod && s.view === "queue" && s.selectedId && !onControl(focus)) {
+        e.preventDefault();
+        if (e.shiftKey) outdentItem(s.selectedId);
+        else indentItem(s.selectedId);
+        return;
+      }
       if (!s.projectId || e.shiftKey) return;
 
       if (key === "n") {
@@ -279,7 +296,7 @@ function useShortcuts() {
           void copyItem(item.id);
           break;
         case "o":
-          if (item.deeplink) {
+          if (itemLinkSource(item.id)) {
             e.preventDefault();
             openDeeplink(item.id);
           }
@@ -288,7 +305,8 @@ function useShortcuts() {
         case "e":
           if (key === "Enter" && onControl(focus)) return;
           e.preventDefault();
-          editTitle();
+          // In the queue the row itself turns into the field; elsewhere the detail's title does.
+          if (!renameInQueue(item.id)) editTitle();
           break;
         case "Delete":
           e.preventDefault();

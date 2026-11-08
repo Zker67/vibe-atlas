@@ -11,6 +11,9 @@ interface SortableListProps {
   children: ReactNode;
 }
 
+/** The pointer holds the row everywhere while it is dragged, as in the queue. */
+const grab = (on: boolean) => document.documentElement.classList.toggle("dragging-rows", on);
+
 /**
  * A vertical list whose rows the mouse drags into another order. A drag
  * starts once the pointer moved a few pixels, so a click still selects.
@@ -18,6 +21,7 @@ interface SortableListProps {
 export function SortableList({ ids, onMove, children }: SortableListProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const onDragEnd = ({ active, over }: DragEndEvent) => {
+    grab(false);
     if (!over || active.id === over.id) return;
     const from = ids.indexOf(Number(active.id));
     const to = ids.indexOf(Number(over.id));
@@ -25,7 +29,13 @@ export function SortableList({ ids, onMove, children }: SortableListProps) {
     onMove(Number(active.id), Number(over.id), to > from);
   };
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={() => grab(true)}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => grab(false)}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>
@@ -45,11 +55,22 @@ export function useSortableRow(id: number) {
   return { ref: setNodeRef, style, listeners, isDragging };
 }
 
-/** A row of a SortableList: the mouse drags it by any part of it. */
+/**
+ * A row of a SortableList: the mouse drags it by any part of it. Picked up,
+ * it lifts off the list as the card a row of the queue becomes.
+ */
 export function SortableRow({ id, children }: { id: number; children: ReactNode }) {
   const { ref, style, listeners, isDragging } = useSortableRow(id);
   return (
-    <div ref={ref} style={style} {...listeners} className={cn("rounded-md", isDragging && "bg-background opacity-90 shadow-md")}>
+    <div
+      ref={ref}
+      style={style}
+      {...listeners}
+      className={cn(
+        "rounded-md transition-[box-shadow,background-color,scale] duration-150 ease-out",
+        isDragging && "scale-[1.02] bg-popover shadow-xl ring-1 ring-primary/40",
+      )}
+    >
       {children}
     </div>
   );

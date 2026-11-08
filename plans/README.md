@@ -54,5 +54,7 @@ plans/
 | [2026-11-07-look-settings](./2026-11-07-look-settings/00-overview.md) | 自定义背景图片（模糊、不透明度、大小、位置）、可调的毛玻璃（模糊、内容面板和框架的不透明度），以及和毛玻璃分开调的窗口整体透明度 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-quick-capture](./2026-11-07-quick-capture/00-overview.md) | 快速记录小窗改版：高度随内容伸缩；`Shift+Enter` 展开 Markdown 备注和 deeplink；底栏的项目、模块可以搜索和直接新建 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-detail-panel](./2026-11-07-detail-panel/00-overview.md) | 详情面板改版：两列属性区、带耗时的时间线、三段式状态、彩色类型、轻量的链接和无边框备注 | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-queue-keyboard](./2026-11-07-queue-keyboard/00-overview.md) | 队列键盘操作：`Tab` / `Shift+Tab` 改层级，`Enter` 行内改名，`Shift+Enter` 连续新建同级改进点；拖到侧栏模块改模块 | `[partial]`：已实现，等用户验收 |
+| [2026-11-07-shared-links](./2026-11-07-shared-links/00-overview.md) | 子改进点没有自己的链接时沿用最近一层上级的链接，设置里可以关闭；复制不带链接 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

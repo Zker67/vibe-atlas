@@ -128,6 +128,41 @@ func TestStatusChanges(t *testing.T) {
 	wantUserErr(t, err, "未知的状态")
 }
 
+func TestReopenGoesBackToTheStatusBefore(t *testing.T) {
+	s, _ := newStore(t)
+	p := must(s.CreateProject("规则恐怖"))
+
+	// Done while doing: back to doing, started when it was.
+	a := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "进行中完成"}))
+	started := must(s.SetItemStatus(a.ID, StatusDoing)).StartedAt
+	must(s.SetItemStatus(a.ID, StatusDone))
+	back := must(s.ReopenItem(a.ID))
+	if back.Status != StatusDoing || back.StartedAt != started || back.DoneAt != 0 {
+		t.Fatalf("reopened from doing = %+v, started %d", back, started)
+	}
+
+	// Done straight from to do: back to do.
+	b := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "待办完成"}))
+	must(s.SetItemStatus(b.ID, StatusDone))
+	if got := must(s.ReopenItem(b.ID)); got.Status != StatusTodo || got.StartedAt != 0 || got.DoneAt != 0 {
+		t.Fatalf("reopened from to do = %+v", got)
+	}
+
+	// Started, put back to do, then done: back to do.
+	c := must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "退回后完成"}))
+	must(s.SetItemStatus(c.ID, StatusDoing))
+	must(s.SetItemStatus(c.ID, StatusTodo))
+	must(s.SetItemStatus(c.ID, StatusDone))
+	if got := must(s.ReopenItem(c.ID)); got.Status != StatusTodo {
+		t.Fatalf("reopened after going back to do = %+v", got)
+	}
+
+	// Not done: nothing changes.
+	if got := must(s.ReopenItem(back.ID)); got.Status != StatusDoing || got.UpdatedAt != back.UpdatedAt {
+		t.Fatalf("reopening a doing item changed it: %+v then %+v", back, got)
+	}
+}
+
 func TestManyItemsDoingAtOnce(t *testing.T) {
 	s, _ := newStore(t)
 	p := must(s.CreateProject("规则恐怖"))
