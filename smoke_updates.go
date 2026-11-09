@@ -19,8 +19,8 @@ const smokeUpdateVersion = "99.0.0"
 // smokeUpdates checks updating in the webview. The page knows the version
 // running. In a build with updates, a newer version shows in the toast at
 // the bottom right with 去更新; its archive, signed with no key of the
-// app's, is refused, the toast tells, the app's folder stays as it was,
-// and 稍后 dismisses it. Builds without updates refuse to check.
+// app's, is refused, the toast tells with 重试 and 去 GitHub, the app's
+// folder stays as it was, and × dismisses it. Builds without updates refuse to check.
 func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 	state := a.updateState()
 	result := map[string]any{"version": state.Version, "enabled": state.Enabled}
@@ -77,7 +77,7 @@ func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 		before = append(before, es)
 	}
 	mygo.Updater.SetSource(dirSource(dir))
-	defer useUpdateDirOrFeed()
+	defer useUpdateSource()
 
 	page, err := mygo.EvalAs[map[string]any](main.Page(), `
 		const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -95,9 +95,9 @@ func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 		out.found = state.phase === "available" && state.available === "`+smokeUpdateVersion+`";
 		out.toastShows = await until(() => toast()?.textContent.includes("发现新版本 `+smokeUpdateVersion+`") && button("去更新") && button("稍后"));
 		button("去更新")?.click();
-		out.failureShows = await until(() => toast()?.textContent.includes("更新失败") && button("重试"));
+		out.failureShows = await until(() => toast()?.textContent.includes("更新失败") && button("重试") && button("去 GitHub") && toast()?.querySelector("[data-close-button]"));
 		out.failed = (await mygo.call("Atlas.UpdateState")).phase === "failed";
-		button("稍后")?.click();
+		toast()?.querySelector("[data-close-button]")?.click();
 		out.dismissed = await until(() => !toast());
 		return out;
 	`)
@@ -126,12 +126,6 @@ func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 		return true
 	})
 	return result, nil
-}
-
-// useUpdateDirOrFeed puts back the source the app started with.
-func useUpdateDirOrFeed() {
-	mygo.Updater.SetSource(nil)
-	useUpdateDir()
 }
 
 func sameEntries(a, b []os.DirEntry) bool {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -144,7 +146,7 @@ func TestUpdateErrors(t *testing.T) {
 	}
 
 	saved := updateRetryWaits
-	updateRetryWaits = []time.Duration{time.Millisecond, time.Millisecond}
+	updateRetryWaits = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond, time.Millisecond}
 	t.Cleanup(func() { updateRetryWaits = saved })
 	tries := 0
 	if err := retry(context.Background(), func() error {
@@ -157,11 +159,128 @@ func TestUpdateErrors(t *testing.T) {
 		t.Fatalf("retry after 504: err %v, %d tries", err, tries)
 	}
 	tries = 0
-	if err := retry(context.Background(), func() error { tries++; return busy }); err != busy || tries != 3 {
+	if err := retry(context.Background(), func() error { tries++; return busy }); err != busy || tries != 5 {
 		t.Fatalf("retry gave up with %v after %d tries", err, tries)
 	}
 	tries = 0
 	if err := retry(context.Background(), func() error { tries++; return unsigned }); err != unsigned || tries != 1 {
 		t.Fatalf("a refused signature was tried %d times", tries)
+	}
+}
+
+// Each check asks for the manifest with a query no cache has seen, as
+// mygo-updater. When github.com answers 504, as a proxy on the way does,
+// the manifest and the archive come through the API; a 504 of both reads
+// as one.
+func TestGithubFeed(t *testing.T) {
+	manifest := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
+	var queries []string
+	siteDown, siteSlow := false, false
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("User-Agent") != "mygo-updater" {
+			t.Errorf("User-Agent = %q", r.Header.Get("User-Agent"))
+		}
+		p := r.URL.Path
+		if strings.HasPrefix(p, "/site/") && siteSlow {
+			time.Sleep(300 * time.Millisecond)
+		}
+		switch {
+		case strings.HasPrefix(p, "/site/") && siteDown:
+			w.WriteHeader(http.StatusGatewayTimeout)
+		case p == "/site/releases/latest/download/"+manifest:
+			queries = append(queries, r.URL.Query().Get("t"))
+			io.WriteString(w, `{"version":"9.9.9"}`)
+		case p == "/site/releases/download/v9.9.9/archive.tar.gz":
+			io.WriteString(w, "archive")
+		case p == "/api/releases/latest" || p == "/api/releases/tags/v9.9.9":
+			if r.URL.Query().Get("t") == "" {
+				t.Errorf("%s without a fresh query", p)
+			}
+			fmt.Fprintf(w, `{"assets":[{"name":%q,"url":%q},{"name":"archive.tar.gz","url":%q}]}`,
+				manifest, srv.URL+"/api/assets/1", srv.URL+"/api/assets/2")
+		case p == "/api/assets/1" && r.Header.Get("Accept") == "application/octet-stream":
+			io.WriteString(w, `{"version":"9.9.9","via":"api"}`)
+		case p == "/api/assets/2" && r.Header.Get("Accept") == "application/octet-stream":
+			io.WriteString(w, "archive via api")
+		default:
+			w.WriteHeader(http.StatusGatewayTimeout)
+		}
+	}))
+	defer srv.Close()
+	saved := updateTransport
+	updateTransport = func() http.RoundTripper { return srv.Client().Transport }
+	t.Cleanup(func() { updateTransport = saved })
+
+	ctx := context.Background()
+	feed := githubFeed{site: srv.URL + "/site", api: srv.URL + "/api"}
+	read := func(rc io.ReadCloser, err error) string {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+		b, _ := io.ReadAll(rc)
+		return string(b)
+	}
+	for range 2 {
+		if got := read(feed.Manifest(ctx, false)); got != `{"version":"9.9.9"}` {
+			t.Fatalf("manifest = %q", got)
+		}
+	}
+	if len(queries) != 2 || queries[0] == "" || queries[0] == queries[1] {
+		t.Fatalf("queries = %q, want two different ones", queries)
+	}
+	archive := srv.URL + "/site/releases/download/v9.9.9/archive.tar.gz"
+	if got := read(feed.Open(ctx, archive)); got != "archive" {
+		t.Fatalf("archive = %q", got)
+	}
+
+	savedWait := siteWait
+	siteWait = 50 * time.Millisecond
+	t.Cleanup(func() { siteWait = savedWait })
+	siteSlow = true
+	if got := read(feed.Manifest(ctx, false)); !strings.Contains(got, `"via":"api"`) {
+		t.Fatalf("manifest with github.com slow = %q", got)
+	}
+	siteSlow, siteDown = false, true
+	if got := read(feed.Manifest(ctx, false)); !strings.Contains(got, `"via":"api"`) {
+		t.Fatalf("manifest with github.com down = %q", got)
+	}
+	if got := read(feed.Open(ctx, archive)); got != "archive via api" {
+		t.Fatalf("archive with github.com down = %q", got)
+	}
+	_, err := feed.Open(ctx, srv.URL+"/site/releases/download/v9.9.9/missing.tar.gz")
+	if err == nil || statusOf(err) != 504 || !transient(err) {
+		t.Fatalf("a 504 reads as %v", err)
+	}
+	if _, err := feed.Open(ctx, "http://example.com/archive.tar.gz"); err == nil {
+		t.Fatal("a download without HTTPS was made")
+	}
+}
+
+// The manifest of the latest release on GitHub, read as the app reads it.
+// Set VIBE_ATLAS_LIVE=1 to run it; it needs the network.
+func TestGithubFeedLive(t *testing.T) {
+	if os.Getenv("VIBE_ATLAS_LIVE") == "" {
+		t.Skip("set VIBE_ATLAS_LIVE=1 to read GitHub")
+	}
+	feed := githubFeed{site: "https://github.com/" + updateRepo, api: "https://api.github.com/repos/" + updateRepo}
+	var body []byte
+	err := retry(context.Background(), func() error {
+		rc, err := feed.Manifest(context.Background(), false)
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+		body, err = io.ReadAll(rc)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("latest manifest: %.60s", body)
+	if !strings.Contains(string(body), `"version"`) {
+		t.Fatalf("not a manifest: %.200s", body)
 	}
 }

@@ -46,6 +46,14 @@ export function installUpdate() {
   void runOk(Atlas.installUpdate());
 }
 
+/** The releases on GitHub: the installers of every version. */
+export const RELEASES_URL = "https://github.com/Zker67/vibe-atlas/releases";
+
+/** Opens the latest release on GitHub, to download its installer by hand. */
+export function openReleases() {
+  void runOk(Atlas.openLink(`${RELEASES_URL}/latest`));
+}
+
 /** Puts off the newer version until the app starts again. */
 export function updateLater() {
   useUpdates.setState((s) => ({ later: s.update?.available ?? "" }));

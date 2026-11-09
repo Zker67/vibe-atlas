@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,10 +16,12 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/netproxy"
 
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
@@ -88,20 +92,161 @@ const (
 	updateCheckTimeout = 30 * time.Second
 )
 
-// A check or a download is tried this many times, a while apart, before it
-// fails: a proxy on the way to GitHub answers 504 now and then.
-var updateRetryWaits = []time.Duration{time.Second, 3 * time.Second}
+// A check or a download is tried this many times, longer and longer
+// apart, before it fails: a proxy on the way to GitHub answers 504 now and
+// then, and goes out through addresses whose API quota others used up.
+var updateRetryWaits = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
 
 var errUpdatesDisabled = errors.New("这个版本不能自动更新：开发版本，或者程序所在的文件夹不能写入。可以到 GitHub 下载安装包")
 
-// useUpdateDir makes the updater read the updates from a local folder
-// when VIBE_ATLAS_UPDATE_DIR names one, for testing builds: the folder
-// that `mygo build` writes, with its manifest and archives. The archives
-// are checked against the app's public key as ever.
-func useUpdateDir() {
+// useUpdateSource sets where the updater reads the updates: the latest
+// GitHub release (githubFeed); or, when VIBE_ATLAS_UPDATE_DIR names one, a
+// local folder, for testing builds: the folder that `mygo build` writes,
+// with its manifest and archives. The archives are checked against the
+// app's public key either way.
+func useUpdateSource() {
 	if dir := os.Getenv("VIBE_ATLAS_UPDATE_DIR"); dir != "" {
 		mygo.Updater.SetSource(dirSource(dir))
+		return
 	}
+	mygo.Updater.SetSource(githubFeed{
+		site: "https://github.com/" + updateRepo,
+		api:  "https://api.github.com/repos/" + updateRepo,
+	})
+}
+
+// updateRepo is the repository whose releases hold the updates, which
+// updates.github in mygo.config.ts names too.
+const updateRepo = "Zker67/vibe-atlas"
+
+// githubFeed reads the updates of a repository's releases as MyGo does,
+// with two changes. The manifest of the latest release is asked for with a
+// query no cache has seen: GitHub answers with a redirect to the release,
+// which a cache on the way kept for a while, so that the release before
+// showed for a minute or two after a new one came out. And a file that
+// github.com does not give, as a proxy that times out on its downloads
+// (504) makes it, comes through GitHub's API instead, which leads to the
+// same store of files another way. The files of a release never change.
+type githubFeed struct {
+	site string // https://github.com/<repo>
+	api  string // https://api.github.com/repos/<repo>
+}
+
+func (f githubFeed) Manifest(ctx context.Context, prereleases bool) (io.ReadCloser, error) {
+	name := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
+	rc, err := updateGet(ctx, connections(siteWait), f.site+"/releases/latest/download/"+name+"?t="+fresh(), "")
+	if err == nil {
+		return rc, nil
+	}
+	rc, apiErr := f.fromAPI(ctx, "latest", name)
+	if apiErr == nil {
+		log.Println("the manifest came through GitHub's API:", err)
+		return rc, nil
+	}
+	return nil, errors.Join(err, apiErr)
+}
+
+func (f githubFeed) Open(ctx context.Context, url string) (io.ReadCloser, error) {
+	rc, err := updateGet(ctx, connections(siteWait), url, "")
+	if err == nil {
+		return rc, nil
+	}
+	// https://github.com/<repo>/releases/download/<tag>/<name>
+	tag, name, ok := strings.Cut(strings.TrimPrefix(url, f.site+"/releases/download/"), "/")
+	if !ok || !strings.HasPrefix(url, f.site+"/releases/download/") || strings.Contains(name, "/") {
+		return nil, err
+	}
+	rc, apiErr := f.fromAPI(ctx, "tags/"+tag, name)
+	if apiErr == nil {
+		log.Println("the update came through GitHub's API:", err)
+		return rc, nil
+	}
+	return nil, errors.Join(err, apiErr)
+}
+
+// fromAPI downloads the file name of a release, "latest" or "tags/<tag>",
+// through GitHub's API, on connections of its own: a proxy may send each
+// connection out through another address, and one whose quota is used up
+// stays so for the connection.
+func (f githubFeed) fromAPI(ctx context.Context, release, name string) (io.ReadCloser, error) {
+	rt := connections(0)
+	rc, err := updateGet(ctx, rt, f.api+"/releases/"+release+"?t="+fresh(), "application/vnd.github+json")
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		Assets []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"assets"`
+	}
+	err = json.NewDecoder(io.LimitReader(rc, 4<<20)).Decode(&r)
+	rc.Close()
+	if err != nil {
+		return nil, fmt.Errorf("the release %s: %w", release, err)
+	}
+	for _, a := range r.Assets {
+		if a.Name == name {
+			return updateGet(ctx, rt, a.URL, "application/octet-stream")
+		}
+	}
+	return nil, fmt.Errorf("the release %s has no %s", release, name)
+}
+
+// siteWait is how long github.com may take to start answering before the
+// API is asked instead: a proxy that times out on its downloads answers
+// 504 after 12 s or so.
+var siteWait = 6 * time.Second // tests shorten it
+
+// fresh returns a query value no cache has seen.
+func fresh() string {
+	return strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+// updateTransport carries the requests of the updates: through the proxy
+// of the system's settings, or of HTTPS_PROXY, as MyGo's own. Tests
+// replace it.
+var updateTransport = func() http.RoundTripper { return netproxy.Transport() }
+
+// connections returns a transport of updateTransport's with connections of
+// its own, which gives up when an answer does not start within wait, when
+// not 0; the body may take longer.
+func connections(wait time.Duration) http.RoundTripper {
+	rt := updateTransport()
+	if t, ok := rt.(*http.Transport); ok {
+		t = t.Clone()
+		t.ResponseHeaderTimeout = wait
+		rt = t
+	}
+	return rt
+}
+
+// updateGet fetches a file of the updates over HTTPS through rt, asking
+// for accept when not "". Its errors read as MyGo's, "GET <url>: 504
+// Gateway Time-out", which statusOf reads.
+func updateGet(ctx context.Context, rt http.RoundTripper, rawURL, accept string) (io.ReadCloser, error) {
+	if !strings.HasPrefix(rawURL, "https://") {
+		return nil, fmt.Errorf("refusing to download %s: updates need HTTPS", rawURL)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	// ASCII: GitHub's store of release files refuses other user agents.
+	req.Header.Set("User-Agent", "mygo-updater")
+	req.Header.Set("Cache-Control", "no-cache")
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	resp, err := (&http.Client{Transport: rt}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
+	}
+	return resp.Body, nil
 }
 
 // dirSource serves the updates in a folder: the manifest of the running
@@ -123,7 +268,7 @@ func (d dirSource) Open(ctx context.Context, url string) (io.ReadCloser, error) 
 
 // initUpdates fills in the state of updating as the app starts.
 func (a *app) initUpdates() {
-	useUpdateDir()
+	useUpdateSource()
 	s := UpdateState{Version: mygo.App.Version(), Enabled: mygo.Updater.Enabled(), Phase: UpdateIdle}
 	a.upd.mu.Lock()
 	a.upd.state = s
@@ -261,7 +406,9 @@ func updateProblem(err error) string {
 	switch n := statusOf(err); {
 	case n == 404:
 		return "GitHub 上找不到更新文件，稍后再试"
-	case n == 429 || n >= 500:
+	case n == 403 || n == 429:
+		return fmt.Sprintf("GitHub 限制了访问频率（%d），过一会儿再试", n)
+	case n >= 500:
 		return fmt.Sprintf("GitHub 暂时没有响应（%d），稍后再试；开着代理时，确认代理能访问 GitHub", n)
 	case n != 0:
 		return fmt.Sprintf("GitHub 拒绝了请求（%d），稍后再试", n)

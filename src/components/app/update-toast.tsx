@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { initUpdates, installUpdate, updateLater, useUpdates } from "@/state/updates";
+import { initUpdates, installUpdate, openReleases, updateLater, useUpdates } from "@/state/updates";
 
 const ID = "update";
 /** The smoke test finds the toast by it. */
@@ -43,6 +43,7 @@ export function UpdateToast() {
             },
           },
           cancel: { label: "稍后", onClick: updateLater },
+          closeButton: false,
           onDismiss: updateLater, // swiped away too
         });
         return;
@@ -54,6 +55,7 @@ export function UpdateToast() {
           duration: Infinity,
           action: undefined,
           cancel: undefined,
+          closeButton: false,
           onDismiss: undefined,
         });
         return;
@@ -65,6 +67,7 @@ export function UpdateToast() {
           duration: Infinity,
           action: undefined,
           cancel: undefined,
+          closeButton: false,
           onDismiss: undefined,
         });
         return;
@@ -85,8 +88,16 @@ export function UpdateToast() {
               installUpdate();
             },
           },
-          cancel: { label: "稍后", onClick: updateLater },
-          onDismiss: updateLater, // swiped away too
+          // To download the installer by hand; × puts it off, as 稍后 does.
+          cancel: {
+            label: "去 GitHub",
+            onClick: () => {
+              openReleases();
+              updateLater();
+            },
+          },
+          closeButton: true,
+          onDismiss: updateLater, // closed or swiped away
         });
         return;
       default:
