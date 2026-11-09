@@ -28,6 +28,7 @@
 | `src/state/updates.ts`、`src/components/app/update-toast.tsx` | 跟随事件的状态和右下角提示 |
 | `src/components/app/settings-dialog.tsx` | 「关于」页 |
 | `LICENSE`、`CHANGELOG.md` | MIT；更新说明（`mygo build` 读对应版本的小节） |
+| `installer.nsh`、`scripts/release.sh`（0.4.1） | 用户反馈安装界面是英文、发布页文件太多：安装包加简体中文（界面仍是 NSIS 原样，用户选定）；发布页只放安装版、便携版和自动更新必需的两个文件，关掉增量包；v0.4.0 的 Release 删除，标签保留 |
 
 ## 验收标准
 

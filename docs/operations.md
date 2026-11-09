@@ -61,19 +61,17 @@ bun run build
 更新包用 Ed25519 私钥签名，程序只接受内置公钥（`mygo.config.ts` 的 `updates.publicKey`）能验证的包。私钥在本机 `%AppData%\mygo\update-keys\vibe-atlas\mygo-update.key`，**不进仓库**，另外在密码管理器里留一份：丢了它，已安装的程序就再也收不到更新；别人拿到它就能给用户推代码。上一层文件夹里的 `mygo-update.key` 是别的项目的，不要用，也不要覆盖。
 
 1. 改 `mygo.config.ts` 的 `version`，在 `CHANGELOG.md` 加同名小节（如 `## 0.4.1`）。有 `CHANGELOG.md` 时必须有这一节，它就是更新说明。
-2. 提交并推送，打上 `v<版本>` 标签并推送（`-upload` 建 Release 时不指定提交，标签要先在远端）。
-3. 带私钥打包，并上传到这个版本的草稿 Release（用 `gh`）：
-
-   ```bash
-   MYGO_UPDATER_PRIVATE_KEY="$(cat "$APPDATA/mygo/update-keys/vibe-atlas/mygo-update.key")" bun run build -upload
-   ```
-
-   `build/windows-amd64/` 里多出 `vibe-atlas-<版本>-windows-amd64.tar.gz`（更新包）、`update-windows-amd64.json`（清单：版本、说明、下载地址、大小、签名）和 `install.ps1`；有已发布的版本时，还会生成只含变化部分的增量包（`.delta`）。
+2. 提交并推送，打上 `v<版本>` 标签并推送。
+3. 运行 `bash scripts/release.sh`：检查工作区干净、标签在远端且是当前提交、有更新说明，然后带私钥打包，在 GitHub 上建这个版本的草稿 Release，只上传四个文件：安装版 `Vibe-Atlas-<版本>-Setup.exe`、便携版 `Vibe-Atlas-<版本>-Portable.zip`，以及自动更新用的 `vibe-atlas-<版本>-windows-amd64.tar.gz`（更新包）和 `update-windows-amd64.json`（清单：版本、说明、下载地址、大小、签名）。详见 [scripts/README.md](../scripts/README.md)。不用 `mygo build -upload`，它还会上传 `install.ps1` 和 `SHA256SUMS`。
 4. 检查草稿里的文件，再正式发布：`gh release edit v<版本> --draft=false --latest`。发布后它成为 latest，已安装的程序读 `releases/latest/download/update-windows-amd64.json` 发现它。
 
 撤回某个版本：把它的 Release 删除或改回草稿，已安装的程序就不再看到它。
 
-程序侧：启动约 3 秒后检查一次，之后每天一次；点「去更新」下载更新包（有增量包时只下载增量），校验签名后替换程序所在文件夹里的文件（正在运行的 exe 先改名挪开，下次启动时删掉），再自动重启。安装包装在 `%LOCALAPPDATA%\Programs\Vibe Atlas`，用户自己能写，不需要管理员权限。开发模式、不带签名打包的版本、放在不能写入的文件夹里的程序不检查。
+增量包已关掉（`mygo.config.ts` 的 `updates.deltas: 0`），发布页不会多出 `.delta` 文件，每次更新下载完整的更新包（约 14 MB）。
+
+安装程序是 MyGo 生成的 NSIS 安装包；根目录的 `installer.nsh`（`windows.installerInclude`）给它加上简体中文，中文系统上显示中文，其他系统显示英文。
+
+程序侧：启动约 3 秒后检查一次，之后每天一次；点「去更新」下载更新包，校验签名后替换程序所在文件夹里的文件（正在运行的 exe 先改名挪开，下次启动时删掉），再自动重启。安装包装在 `%LOCALAPPDATA%\Programs\Vibe Atlas`，用户自己能写，不需要管理员权限。开发模式、不带签名打包的版本、放在不能写入的文件夹里的程序不检查。
 
 ## 打包后冒烟测试
 

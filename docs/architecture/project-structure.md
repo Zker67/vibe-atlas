@@ -106,8 +106,10 @@
 
 | 路径 | 职责 | 入库 |
 |---|---|---|
-| `mygo.config.ts` | 应用名、标识、版本，开发和构建命令，更新的公钥和发布仓库 | 是 |
+| `mygo.config.ts` | 应用名、标识、版本，开发和构建命令，更新的公钥和发布仓库，安装包的语言 | 是 |
 | `CHANGELOG.md` | 每个版本的更新说明，打包时写进更新清单 | 是 |
+| `installer.nsh` | 给 NSIS 安装包加上简体中文（`windows.installerInclude`）；不能放进 `resources/`，那里的文件会被打进程序 | 是 |
+| `scripts/` | 发布脚本 `release.sh`，见 [README](../../scripts/README.md) | 是 |
 | `LICENSE` | MIT | 是 |
 | `package.json`、`bun.lock` | 前端依赖和脚本 | 是 |
 | `go.mod`、`go.sum` | Go 依赖 | 是 |

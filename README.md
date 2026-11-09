@@ -52,7 +52,14 @@
 
 ### 下载安装
 
-到 [GitHub Releases](https://github.com/Zker67/vibe-atlas/releases) 下载 `vibe-atlas-setup-<版本>-amd64.exe`，装在当前用户目录，不需要管理员权限。之后有新版本时，主窗口右下角会提示「去更新」：点一下，下载完自动重新打开，数据不受影响；也可以在 设置 → 关于 手动检查。
+到 [GitHub Releases](https://github.com/Zker67/vibe-atlas/releases) 下载：
+
+| 文件 | 说明 |
+|---|---|
+| `Vibe-Atlas-<版本>-Setup.exe` | 安装版（推荐），中文安装界面，装在当前用户目录，不需要管理员权限 |
+| `Vibe-Atlas-<版本>-Portable.zip` | 便携版，解压后运行 `Vibe Atlas.exe`；数据同样存在 `%AppData%\Vibe Atlas` |
+
+发布页上另外两个文件是自动更新用的，不用下载。之后有新版本时，主窗口右下角会提示「去更新」：点一下，下载完自动重新打开，数据不受影响；也可以在 设置 → 关于 手动检查。
 
 程序没有代码签名，Windows SmartScreen 拦截时点「更多信息」→「仍要运行」。
 
