@@ -116,6 +116,13 @@ type Settings struct {
 	// deleted for good, or 0 to keep them until the user empties it. 30 out
 	// of the box.
 	TrashDays int `json:"trashDays"`
+	// UpdateCheck is when the app checks for a newer version by itself:
+	// off, at launch (out of the box), or at launch and then every
+	// UpdateInterval hours.
+	UpdateCheck UpdateCheck `json:"updateCheck"`
+	// UpdateInterval is the hours between checks with UpdateCheckInterval:
+	// 1, 6 or 24 (out of the box).
+	UpdateInterval int `json:"updateInterval"`
 	// LookDefaults are the looks the app has out of the box.
 	LookDefaults LookDefaults `json:"lookDefaults"`
 	// DataDir is the folder of the database.
@@ -136,6 +143,8 @@ const (
 	keySessionSource  = "sessionSource"
 	keyCurrentProject = "currentProject"
 	keyLastCapture    = "lastCaptureProject"
+	keyUpdateCheck    = "updateCheck"
+	keyUpdateInterval = "updateInterval"
 )
 
 var errStarting = errors.New("Vibe Atlas 还在启动，请稍候再试")
@@ -876,6 +885,8 @@ func (a *Atlas) Settings() (Settings, error) {
 		ShareLinks:      shareLinks(db),
 		SessionSource:   sessionSource(db),
 		TrashDays:       trashDays(db),
+		UpdateCheck:     updateCheck(db),
+		UpdateInterval:  updateInterval(db),
 		LookDefaults:    lookDefaults,
 		DataDir:         a.app.dataDir,
 	}

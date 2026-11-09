@@ -310,6 +310,17 @@ export interface Settings {
    * of the box.
    */
   trashDays: number;
+  /**
+   * UpdateCheck is when the app checks for a newer version by itself:
+   * off, at launch (out of the box), or at launch and then every
+   * UpdateInterval hours.
+   */
+  updateCheck: UpdateCheck;
+  /**
+   * UpdateInterval is the hours between checks with UpdateCheckInterval:
+   * 1, 6 or 24 (out of the box).
+   */
+  updateInterval: number;
   /** LookDefaults are the looks the app has out of the box. */
   lookDefaults: LookDefaults;
   /** DataDir is the folder of the database. */
@@ -348,6 +359,9 @@ export interface TypeStats {
   type: ItemType;
   counts: Counts;
 }
+
+/** UpdateCheck is when the app checks for a newer version by itself. */
+export type UpdateCheck = "off" | "launch" | "interval";
 
 /** UpdatePhase is where updating the app is. */
 export type UpdatePhase = "idle" | "checking" | "available" | "downloading" | "restarting" | "failed";
@@ -848,6 +862,14 @@ export const Atlas = {
    */
   setTrashDays(days: number): Promise<Settings> {
     return call("Atlas.SetTrashDays", days);
+  },
+  /**
+   * SetUpdateCheck changes when the app checks for a newer version by
+   * itself: never, at launch, or at launch and then every hours hours (1, 6
+   * or 24) with UpdateCheckInterval. hours is kept whatever the schedule.
+   */
+  setUpdateCheck(check: UpdateCheck, hours: number): Promise<Settings> {
+    return call("Atlas.SetUpdateCheck", check, hours);
   },
   /**
    * SetWallpaperLook changes how the picture behind the main window shows.

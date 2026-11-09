@@ -28,6 +28,7 @@
 | `src/state/updates.ts`、`src/components/app/update-toast.tsx` | 跟随事件的状态和右下角提示 |
 | `src/components/app/settings-dialog.tsx` | 「关于」页 |
 | `LICENSE`、`CHANGELOG.md` | MIT；更新说明（`mygo build` 读对应版本的小节） |
+| 设置 → 更新（0.4.1 之后） | 用户反馈「检查更新失败」：原因是本机代理转发 GitHub 下载时间歇性返回 504。检查和下载遇到网络问题或 5xx 自动重试共 3 次，失败时说明原因；「关于」改名「更新」，新增「自动检查更新」：不自动检查 / 启动时检查（默认）/ 定时检查（每小时 / 每 6 小时 / 每天） |
 | `installer.nsh`、`scripts/release.sh`（0.4.1） | 用户反馈安装界面是英文、发布页文件太多：安装包加简体中文（界面仍是 NSIS 原样，用户选定）；发布页只放安装版、便携版和自动更新必需的两个文件，关掉增量包；v0.4.0 的 Release 删除，标签保留 |
 
 ## 验收标准

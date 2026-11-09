@@ -17,7 +17,7 @@ React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui，由 Vite 构建，跑在 My
 | `mygo.ts` | `bun run generate` 生成的 Go 端客户端（方法、类型、事件），不要手改 |
 | `state/atlas.ts` | 主窗口的数据和操作：加载、跟随 `changed` 事件刷新、筛选、各种修改；回收站（删到回收站并提示撤销、`Ctrl+Z`、恢复、彻底删除） |
 | `state/sessions.ts` | 会话链接对应的会话：显示时几条一起向 Go 查名字，过一会儿、窗口回到前台、换了会话来源时重新查；刚选中的会话直接记住 |
-| `state/updates.ts` | 检查更新的状态：跟随 `updateChanged`，手动检查、去更新、「稍后」（本次运行不再提示这个版本） |
+| `state/updates.ts` | 检查更新的状态：跟随 `updateChanged`，手动检查、去更新、「稍后」（本次运行不再提示这个版本）；自动检查的方式存在设置里，见设置 → 更新 |
 | `state/dialogs.ts` | 改名、确认、设置（含当前分页）、使用说明（含打开时的章节）四种对话框的开关 |
 | `components/app/` | 业务组件：`title-bar`（自建顶栏）、`project-header`（队列列顶部的项目栏 `ProjectBar` 和筛选栏 `QueueFilters`）、`sidebar`、`queue`、`item-detail`、`selection-detail`（多选时的详情面板）、`overview`、`settings-dialog`（分页设置）、`help-dialog`（使用说明）、`side-nav`（这两个弹窗共用的左侧导航）、`dialogs`（确认弹窗）、`session-picker`（选择本机会话，详情面板和快速记录小窗共用）、`agent-icon`（Claude、Codex、Gemini、codeg 的标志）、`trash`（回收站视图）、`delete-button`（详情面板的删除按钮，按住 `Shift` 变成彻底删除）、`project-dialog`（新建 / 编辑项目弹窗 `ProjectDialog`：图标、名称、文件夹；新建 / 编辑模块弹窗 `ModuleDialog`：图标、名称）、`icon-picker`（选图标：自动 / 默认、内置图标、Emoji、图片；`IconPopover` 是贴着触发处、按可用高度伸缩的弹层，侧栏点图标和项目弹窗用）、`entity-icon`（按取值画项目和模块的图标，`ProjectIcon`、`ModuleIcon`），以及几个小部件 |
 | `components/effects/` | 主窗口背后的背景图片和动态背景，只在主窗口打开其中之一后加载，见 [README](./components/effects/README.md) |

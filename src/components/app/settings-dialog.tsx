@@ -5,12 +5,12 @@ import {
   BookOpen,
   Check,
   CircleAlert,
+  CircleArrowUp,
   Database,
   Download,
   ExternalLink,
   FolderOpen,
   Globe,
-  Info,
   Keyboard,
   ListTree,
   Monitor,
@@ -23,7 +23,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { Atlas, type Settings, type Source, type Theme } from "@/mygo";
+import { Atlas, type Settings, type Source, type Theme, type UpdateCheck } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
 import { SOURCE_NAMES } from "@/lib/session-link";
@@ -53,7 +53,7 @@ const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
   { value: "items", label: "改进点", icon: ListTree },
   { value: "appearance", label: "外观", icon: Palette },
   { value: "data", label: "数据", icon: Database },
-  { value: "about", label: "关于", icon: Info },
+  { value: "updates", label: "更新", icon: CircleArrowUp },
 ];
 
 export function SettingsDialog() {
@@ -73,7 +73,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数、版本和检查更新</DialogDescription>
+              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数、版本和自动检查更新</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -103,7 +103,7 @@ export function SettingsDialog() {
                     {t.value === "items" && <ItemsPanel settings={settings} />}
                     {t.value === "appearance" && <AppearancePanel settings={settings} />}
                     {t.value === "data" && <DataPanel settings={settings} />}
-                    {t.value === "about" && <AboutPanel />}
+                    {t.value === "updates" && <UpdatesPanel settings={settings} />}
                   </div>
                 </Scroller>
               </Tabs.Content>
@@ -277,7 +277,23 @@ function DataPanel({ settings }: { settings: Settings }) {
 
 const RELEASES = "https://github.com/Zker67/vibe-atlas/releases";
 
-function AboutPanel() {
+const UPDATE_CHECKS: { value: UpdateCheck; label: string }[] = [
+  { value: "off", label: "不自动检查" },
+  { value: "launch", label: "启动时检查" },
+  { value: "interval", label: "定时检查" },
+];
+
+const UPDATE_INTERVALS: { value: number; label: string }[] = [
+  { value: 1, label: "每小时" },
+  { value: 6, label: "每 6 小时" },
+  { value: 24, label: "每天" },
+];
+
+function saveUpdateCheck(check: UpdateCheck, hours: number) {
+  void run(Atlas.setUpdateCheck(check, hours)).then((s) => s && useAtlas.setState({ settings: s }));
+}
+
+function UpdatesPanel({ settings }: { settings: Settings }) {
   const update = useUpdates((s) => s.update);
   const checkError = useUpdates((s) => s.checkError);
   const upToDate = useUpdates((s) => s.upToDate);
@@ -296,43 +312,86 @@ function AboutPanel() {
   else if (upToDate) status = "已经是最新版本。";
 
   return (
-    <SettingCard
-      title="版本"
-      description="启动几秒后在后台检查一次新版本，之后每天一次；有新版本时右下角会提示。更新包从 GitHub 下载，校验签名后替换，完成后自动重新打开，数据不受影响。"
-    >
-      <p className="text-sm">
-        Vibe Atlas <span className="font-mono">{update?.version ?? ""}</span>
-      </p>
-      {status && (
-        <p className={cn("text-xs", phase === "failed" || (checkError && !found) ? "text-destructive" : "text-muted-foreground")}>
-          {status}
+    <>
+      <SettingCard
+        title="版本"
+        description="更新包从 GitHub 下载，校验签名后替换，完成后自动重新打开，数据不受影响。"
+      >
+        <p className="text-sm">
+          Vibe Atlas <span className="font-mono">{update?.version ?? ""}</span>
         </p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {found ? (
-          <Button size="sm" onClick={installUpdate}>
-            <Download />
-            {phase === "failed" ? "重试" : "去更新"}
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !update?.enabled}
-            onClick={() => void checkForUpdates()}
-          >
-            <RefreshCw className={cn(phase === "checking" && "animate-spin")} />
-            检查更新
-          </Button>
+        {status && (
+          <p className={cn("text-xs", phase === "failed" || (checkError && !found) ? "text-destructive" : "text-muted-foreground")}>
+            {status}
+          </p>
         )}
-        <Button variant="ghost" size="sm" asChild>
-          <a href={RELEASES} target="_blank" rel="noreferrer">
-            <ExternalLink />
-            所有版本
-          </a>
-        </Button>
-      </div>
-    </SettingCard>
+        <div className="flex flex-wrap gap-2">
+          {found ? (
+            <Button size="sm" onClick={installUpdate}>
+              <Download />
+              {phase === "failed" ? "重试" : "去更新"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || !update?.enabled}
+              onClick={() => void checkForUpdates()}
+            >
+              <RefreshCw className={cn(phase === "checking" && "animate-spin")} />
+              检查更新
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" asChild>
+            <a href={RELEASES} target="_blank" rel="noreferrer">
+              <ExternalLink />
+              所有版本
+            </a>
+          </Button>
+        </div>
+      </SettingCard>
+      <SettingCard
+        title="自动检查更新"
+        description="启动时检查：每次打开 Vibe Atlas 几秒后检查一次。定时检查：启动时检查一次，之后按间隔检查。不自动检查：只在这里手动检查。发现新版本时右下角提示，点「去更新」才下载。"
+      >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={settings.updateCheck}
+          onValueChange={(v) => {
+            if (v) saveUpdateCheck(v as UpdateCheck, settings.updateInterval);
+          }}
+        >
+          {UPDATE_CHECKS.map((o) => (
+            <ToggleGroupItem key={o.value} value={o.value}>
+              {o.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        {settings.updateCheck === "interval" && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">间隔</span>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={String(settings.updateInterval)}
+              onValueChange={(v) => {
+                if (v) saveUpdateCheck("interval", Number(v));
+              }}
+            >
+              {UPDATE_INTERVALS.map((o) => (
+                <ToggleGroupItem key={o.value} value={String(o.value)}>
+                  {o.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        )}
+      </SettingCard>
+    </>
   );
 }
 

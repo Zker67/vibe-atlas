@@ -20,7 +20,7 @@ export interface ModuleRequest {
 }
 
 /** The tabs of 设置. */
-export type SettingsTab = "keys" | "items" | "appearance" | "data" | "about";
+export type SettingsTab = "keys" | "items" | "appearance" | "data" | "updates";
 
 interface DialogsState {
   confirm: ConfirmRequest | null;

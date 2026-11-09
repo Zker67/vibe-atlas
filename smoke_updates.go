@@ -27,6 +27,20 @@ func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 	if state.Version == "" {
 		return result, errors.New("updates: the version running is unknown")
 	}
+	// The schedule of checks: at launch out of the box, kept as chosen.
+	prefs, err := a.atlas.Settings()
+	if err != nil {
+		return result, err
+	}
+	chosen, err := a.atlas.SetUpdateCheck(UpdateCheckInterval, 6)
+	_, refused := a.atlas.SetUpdateCheck(UpdateCheckInterval, 2)
+	result["schedule"] = map[string]any{"default": prefs.UpdateCheck, "chosen": chosen.UpdateCheck, "hours": chosen.UpdateInterval, "refused": refused != nil}
+	if err != nil || prefs.UpdateCheck != UpdateCheckLaunch || chosen.UpdateCheck != UpdateCheckInterval || chosen.UpdateInterval != 6 || refused == nil {
+		return result, errors.New("updates: the schedule of checks: " + jsonString(result["schedule"]))
+	}
+	if _, err := a.atlas.SetUpdateCheck(UpdateCheckLaunch, defaultUpdateInterval); err != nil {
+		return result, err
+	}
 	if !state.Enabled {
 		_, err := a.atlas.CheckForUpdates(context.Background())
 		result["refused"] = errors.Is(err, errUpdatesDisabled)
@@ -78,8 +92,8 @@ func (a *app) smokeUpdates(main *mygo.Window) (map[string]any, error) {
 		const button = (text) => [...(toast()?.querySelectorAll("button") ?? [])].find((b) => b.textContent.trim() === text);
 		const out = {};
 		const state = await mygo.call("Atlas.CheckForUpdates");
-		out.found = state.phase === "available" && state.available === "` + smokeUpdateVersion + `";
-		out.toastShows = await until(() => toast()?.textContent.includes("发现新版本 ` + smokeUpdateVersion + `") && button("去更新") && button("稍后"));
+		out.found = state.phase === "available" && state.available === "`+smokeUpdateVersion+`";
+		out.toastShows = await until(() => toast()?.textContent.includes("发现新版本 `+smokeUpdateVersion+`") && button("去更新") && button("稍后"));
 		button("去更新")?.click();
 		out.failureShows = await until(() => toast()?.textContent.includes("更新失败") && button("重试"));
 		out.failed = (await mygo.call("Atlas.UpdateState")).phase === "failed";

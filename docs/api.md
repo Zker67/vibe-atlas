@@ -26,7 +26,7 @@
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
 | 设置 | `settings`、`setShortcut`、`setBossKey`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setShareLinks`、`setTrashDays`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；快速记录和老板键不能相同；`setBossKey("")` 清除老板键；`pauseShortcut` 在录制新快捷键时临时释放两个全局快捷键；`setTrashDays` 只收 `0`（一直保留）、`7`、`30`、`90`，改短时立刻清理超期的条目 |
 | 背景与透明度 | `chooseWallpaper`、`clearWallpaper`、`setWallpaperLook`、`setGlass`、`setWindowOpacity`、`previewWindowOpacity` | `chooseWallpaper` 打开系统的选择文件窗口，取消时返回原设置；图片只收 PNG、JPG、WebP、GIF、BMP，最大 20 MB，并按内容校验类型。数值超出范围时由 Go 限制到范围内。`previewWindowOpacity` 只改窗口，不保存 |
-| 检查更新 | `updateState`、`checkForUpdates`、`installUpdate` | 在 [`updates.go`](../updates.go)。`checkForUpdates` 是用户手动检查：不能自动更新的版本报「不能自动更新」，检查失败报「检查更新失败」。`installUpdate` 立刻返回，在后台下载、校验签名、替换，经 `updateChanged` 报告进度，装好后自动重启；还没找到新版本时报错 |
+| 检查更新 | `updateState`、`checkForUpdates`、`installUpdate`、`setUpdateCheck` | 在 [`updates.go`](../updates.go)。`checkForUpdates` 是用户手动检查：不能自动更新的版本报「不能自动更新」，检查失败报「检查更新失败：<原因>」（网络问题和 5xx 先自动重试，共 3 次）。`setUpdateCheck(check, hours)`：`check` 为 `off` / `launch` / `interval`，`hours` 只收 `1`、`6`、`24`（不论哪种方式都保存），立刻生效。`installUpdate` 立刻返回，在后台下载、校验签名、替换，经 `updateChanged` 报告进度，装好后自动重启；还没找到新版本时报错 |
 | 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目；小窗会一起传可选的 `note`、`deeplink` |
 
 ## 事件
@@ -51,7 +51,7 @@
 | `Session` | `agent`（图标用：`claude`、`codex`、`gemini`，或 codeg 里其他 agent 的名字）、`id`、`title`、`cwd`、`updatedAt`、`link`（`codeg://session/<id>`、`codex://threads/<id>` 或 `claude-session:<id>`） |
 | `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done` |
 | `TrashEntry` | `id`（条目的 id）、`batch`（同一次删除的条目相同）、`deletedAt`、`item`（删除时的 `Item`，`parentId` 是当时的上级）、`lifted`（当时上移的子改进点条数） |
-| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`bossKey`（老板键，默认 `""` 即不设置）、`bossKeyError`、`theme`、`effects`（视觉效果，默认 `false`）、`background`（`grid` / `waves`，默认 `grid`）、`wallpaper`、`glass`、`windowOpacity`（40–100，默认 100）、`shareLinks`（子改进点沿用上级的链接，默认 `true`）、`sessionSource`（会话来源，`""` / `claude` / `codex` / `codeg`，默认 `""`）、`trashDays`（回收站保留天数，`0` 是一直保留，默认 `30`）、`lookDefaults`、`dataDir`、`currentProjectId` |
+| `Settings` | `shortcut`、`defaultShortcut`、`shortcutError`、`bossKey`（老板键，默认 `""` 即不设置）、`bossKeyError`、`theme`、`effects`（视觉效果，默认 `false`）、`background`（`grid` / `waves`，默认 `grid`）、`wallpaper`、`glass`、`windowOpacity`（40–100，默认 100）、`shareLinks`（子改进点沿用上级的链接，默认 `true`）、`sessionSource`（会话来源，`""` / `claude` / `codex` / `codeg`，默认 `""`）、`trashDays`（回收站保留天数，`0` 是一直保留，默认 `30`）、`updateCheck`（自动检查更新，`off` / `launch` / `interval`，默认 `launch`）、`updateInterval`（定时检查的间隔小时数，`1` / `6` / `24`，默认 `24`）、`lookDefaults`、`dataDir`、`currentProjectId` |
 | `Wallpaper` | `url`（页面加载图片的地址，没有图片时为空；Windows 上是 `http://wallpaper.localhost/<文件>`，其他平台是 `wallpaper://localhost/<文件>`）、`name`（原文件名）、`look` |
 | `WallpaperLook` | `enabled`（是否显示）、`blur`（0–40 px）、`opacity`（0–100）、`scale`（0 为铺满窗口，否则 20–300 %）、`x`、`y`（0–100 %）；默认显示、不模糊、不透明度 100、铺满、居中 |
 | `Glass` | `blur`（内容面板 0–60 px，框架取它的 60%）、`panel`、`frame`（内容面板和框架的不透明度，0–100）；默认 32 / 90 / 64 |
@@ -70,7 +70,7 @@ SQLite 文件，表结构在 [`internal/store/store.go`](../internal/store/store
 | `modules` | 同一项目内模块名唯一；删除项目时一起删除；`icon` 是用户选的图标 |
 | `items` | 删除项目时一起删除；删除模块时 `module_id` 置空（未分类）；`type`、`status` 有取值约束。`parent_id` 指向上级改进点（空是顶层），`sort_order` 是同一个上级下的顺序；`auto_title` 为 1 表示标题由程序按子改进点生成，用户改名后为 0；`done_with` 指向带着它一起完成的上级改进点（空表示不是跟着完成的），那条上级撤回完成时它跟着撤回，手动改状态或上级删除时清空 |
 | `trash` | 回收站：删除时的整行内容，加上 `batch`、`deleted_at`、`item_id`（恢复时用回这个 id；新改进点的 id 跳过回收站里的，所以不会被占用）、当时的上级 `parent_id` 和它的 `parent_created`（创建时间，分辨后来占用同一 id 的条目）、在同级里的位置 `place`、`lifted`（上移的子改进点）和 `carried`（它带着完成的条目），后两项是 `{"id","created"}` 的 JSON 列表。删除项目时一起删除；模块、上级不设外键，恢复时检查还在不在 |
-| `settings` | 键值对：快捷键、主题、视觉效果、背景图片的文件名和显示方式、毛玻璃、窗口不透明度、当前项目、上次快速记录的项目、回收站保留天数 |
+| `settings` | 键值对：快捷键、主题、视觉效果、背景图片的文件名和显示方式、毛玻璃、窗口不透明度、当前项目、上次快速记录的项目、回收站保留天数、自动检查更新的方式和间隔 |
 
 连接参数：外键开启、WAL、`synchronous=FULL`，单连接。
 
