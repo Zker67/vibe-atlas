@@ -250,7 +250,7 @@ function ImageTab({ value, fallback, onPick }: { value: string; fallback: Lucide
         {busy && <LoaderCircle className="size-3.5 animate-spin" />}
         {isImage ? "换一张图片" : "选择本机图片"}
       </span>
-      <span className="text-xs text-muted-foreground">PNG、JPG、WebP 或 GIF，会缩小到 128 像素保存</span>
+      <span className="text-xs text-muted-foreground">PNG、JPG、WebP、GIF 缩小到 128 像素保存，SVG 原样保存</span>
     </button>
   );
 }

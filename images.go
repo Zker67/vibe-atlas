@@ -48,11 +48,12 @@ var imageExts = map[string]string{
 	"image/bmp":  ".bmp",
 }
 
-// imageFile matches the names the app saves pictures under.
-var imageFile = regexp.MustCompile(`^[0-9a-f]{16}\.(png|jpg|webp|gif|bmp)$`)
+// imageFile matches the names the app saves pictures under; SVG only as
+// the icon of a project or module (icons.go).
+var imageFile = regexp.MustCompile(`^[0-9a-f]{16}\.(png|jpg|webp|gif|bmp|svg)$`)
 
 // imageName finds the pictures a text refers to, their names in group 1.
-var imageName = regexp.MustCompile(`image:([0-9a-f]{16}\.(?:png|jpg|webp|gif|bmp))`)
+var imageName = regexp.MustCompile(`image:([0-9a-f]{16}\.(?:png|jpg|webp|gif|bmp|svg))`)
 
 // imageLink finds the addresses of the pictures in Markdown links, after
 // their opening parenthesis.
@@ -84,6 +85,12 @@ func saveImage(dataDir string, data []byte) (string, error) {
 	if !ok {
 		return "", errors.New("不支持这种图片，请用 PNG、JPG、WebP、GIF 或 BMP")
 	}
+	return writeImage(dataDir, data, ext)
+}
+
+// writeImage keeps data, checked to be a picture of type ext, in the images
+// folder, named by its content, and returns its name.
+func writeImage(dataDir string, data []byte, ext string) (string, error) {
 	sum := sha256.Sum256(data)
 	name := hex.EncodeToString(sum[:8]) + ext
 	dir := imageDir(dataDir)
@@ -187,6 +194,9 @@ func (a *app) serveImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "max-age=31536000, immutable") // named by its content
+	// An SVG opened on its own runs no script and loads nothing.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeFile(w, r, filepath.Join(imageDir(a.dataDir), name))
 }
 

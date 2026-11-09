@@ -58,7 +58,13 @@
 - 模块名称在同一个项目内不能重名。
 - 绑定的文件夹只是记录路径，用来一键打开和找项目自己的图标。文件夹不存在时只做提示，不影响其他功能。
 - 选了文件夹而名称没填时，名称用文件夹名。
-- 项目图标「自动」时，只在文件夹里按约定位置找（`favicon`、`public/favicon`、`app/icon`、`src/app/icon`、`assets/icon`、`logo`、`public/logo`、`src-tauri/icons/icon`、`resources/icon`、`build/appicon`、`build/icon`、`icon` 等，`.png` 或 `.webp`），找不到再看 `index.html`、`app/root.tsx` 等入口文件里 `<link rel="icon">` 指向的图片；不递归扫描整个文件夹，不读文件夹以外的文件，**不联网**（不取网站图标和 GitHub 头像）。只认按内容判断是 PNG 或 WebP、不超过 4 MB 的图片；SVG 和 ICO 不认（脚手架模板里每个项目都一样）。
+- 项目图标「自动」时，按这个顺序找，找到就停：
+  1. 约定位置：`favicon`、`public/favicon`、`app/icon`、`src/app/icon`、`assets/icon`、`logo`、`public/logo`、`src-tauri/icons/icon`、`resources/icon`、`build/appicon`、`build/icon`、`icon` 等，每个依次试 `.png`、`.webp`、`.svg`；
+  2. `index.html`、`app/root.tsx` 等入口文件里 `<link rel="icon">` 指向的图片；
+  3. 入口文件里 `<link rel="apple-touch-icon">` 指向的图片；
+  4. `apple-touch-icon.png`（根目录、`public/`、`static/`）。
+- 项目根目录里找不到时，再在它直接下一层、有 `package.json` 或 `index.html` 的子文件夹里（按名字顺序）用同样的顺序找，比如前端放在 `mj_webui/` 里的项目；跳过 `node_modules`、`dist`、`build`、`out`、`target`、`vendor`、`coverage` 和以 `.` 开头的文件夹。不递归扫描，不读文件夹以外的文件，**不联网**（不取网站图标和 GitHub 头像）。
+- 只认按内容判断是 PNG、WebP（不超过 4 MB）或 SVG（扩展名是 `.svg`、内容是 SVG，不超过 1 MB）的图片；ICO 不认。`vite.svg`、`react.svg`、`vue.svg`、`next.svg`、`vercel.svg` 这类脚手架模板自带的图标不认，因为每个项目都一样。PNG 缩到 128 像素保存，WebP 和 SVG 原样保存。
 - 检测的时机：绑定或更换文件夹时、图标弹窗里点「重新检测」时、程序启动 3 秒后（把绑定了文件夹的项目都看一遍）。手动选的图标不会被检测覆盖。
 - 删除模块时，下面的改进点不删除，变成「未分类」。
 - 删除项目会同时删除它的模块和改进点（包括回收站里属于它的）；删除前要确认，并告诉用户会删掉多少条改进点。

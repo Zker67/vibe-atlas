@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"image"
@@ -27,8 +28,11 @@ import (
 // The icon of a project is, unless the user chose one, the project's own
 // icon found in its folder. As Orca does (references/external-repos/
 // stablyai__orca), only conventional paths are looked at, then the icon an
-// entry page declares; the folder is never walked. Unlike Orca, nothing is
-// fetched from the web: no favicon of a homepage, no GitHub avatar.
+// entry page declares; the folder is never walked. When its root has none,
+// the folders right in it that hold an app (a package.json or an
+// index.html) are looked at the same way, for a project whose web page
+// lives in a folder of its own. Unlike Orca, nothing is fetched from the
+// web: no favicon of a homepage, no GitHub avatar.
 
 // iconStems are where projects keep their icon, in the order looked at.
 var iconStems = []string{
@@ -52,9 +56,35 @@ var iconStems = []string{
 	"icon",
 }
 
-// iconExts are the extensions tried after each stem. SVG and ICO are left
-// out: the templates of Vite and Next put the same ones in every project.
-var iconExts = []string{".png", ".webp"}
+// iconExts are the extensions tried after each stem, the bitmaps first as
+// before SVG was taken. ICO is left out: Next and Vue CLI put the same one
+// in every project.
+var iconExts = []string{".png", ".webp", ".svg"}
+
+// appleIconStems are where the icon for the home screen of iPhones is kept:
+// the project's icon too, looked at last.
+var appleIconStems = []string{
+	"apple-touch-icon",
+	"public/apple-touch-icon",
+	"static/apple-touch-icon",
+}
+
+// templateIcons are the pictures the templates of frameworks put in every
+// project, by name: an entry page that declares one says nothing of the
+// project.
+var templateIcons = map[string]bool{
+	"vite.svg":       true,
+	"react.svg":      true,
+	"vue.svg":        true,
+	"svelte.svg":     true,
+	"next.svg":       true,
+	"vercel.svg":     true,
+	"nuxt.svg":       true,
+	"tauri.svg":      true,
+	"electron.svg":   true,
+	"typescript.svg": true,
+	"javascript.svg": true,
+}
 
 // iconSources are the entry pages whose declared icon is looked at next.
 var iconSources = []string{
@@ -67,11 +97,27 @@ var iconSources = []string{
 	"src/root.tsx",
 }
 
+// skippedIconDirs are the folders, right in a project's, never looked into
+// for its icon: what tools download or build.
+var skippedIconDirs = map[string]bool{
+	"node_modules": true,
+	"dist":         true,
+	"build":        true,
+	"out":          true,
+	"target":       true,
+	"vendor":       true,
+	"coverage":     true,
+}
+
 // maxIconSourceBytes is the largest entry page read for its icon.
 const maxIconSourceBytes = 256 << 10
 
 // maxIconFileBytes is the largest picture taken as an icon.
 const maxIconFileBytes = 4 << 20
+
+// maxIconSVGBytes is the largest SVG taken as an icon: drawn in every row
+// of the sidebar, a large one would slow it down.
+const maxIconSVGBytes = 1 << 20
 
 // iconSize is the most pixels an icon keeps on each side: the pages show
 // it at 20 at most, on screens of up to four times the density.
@@ -80,25 +126,39 @@ const iconSize = 128
 var (
 	linkTag  = regexp.MustCompile(`(?is)<link\b[^>]*>`)
 	iconRel  = regexp.MustCompile(`(?i)\brel\s*=\s*["'](?:shortcut\s+)?icon["']`)
+	appleRel = regexp.MustCompile(`(?i)\brel\s*=\s*["']apple-touch-icon(?:-precomposed)?["']`)
 	hrefAttr = regexp.MustCompile(`(?i)\bhref\s*=\s*["']([^"'?#]+)`)
 	// A link of a route's head in JSX: { rel: "icon", href: "/x.png" }.
-	braces   = regexp.MustCompile(`\{[^{}]*\}`)
-	iconProp = regexp.MustCompile(`(?i)\brel\s*:\s*["'](?:shortcut\s+)?icon["']`)
-	hrefProp = regexp.MustCompile(`(?i)\bhref\s*:\s*["']([^"'?#]+)`)
-	scheme   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
+	braces    = regexp.MustCompile(`\{[^{}]*\}`)
+	iconProp  = regexp.MustCompile(`(?i)\brel\s*:\s*["'](?:shortcut\s+)?icon["']`)
+	appleProp = regexp.MustCompile(`(?i)\brel\s*:\s*["']apple-touch-icon(?:-precomposed)?["']`)
+	hrefProp  = regexp.MustCompile(`(?i)\bhref\s*:\s*["']([^"'?#]+)`)
+	scheme    = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
 )
 
 // iconHref returns the address of the icon an entry page declares, or "".
 func iconHref(source string) string {
+	return declaredHref(source, iconRel, iconProp)
+}
+
+// appleIconHref returns the address of the icon for the home screen of
+// iPhones an entry page declares, or "".
+func appleIconHref(source string) string {
+	return declaredHref(source, appleRel, appleProp)
+}
+
+// declaredHref returns the address of the first link of an entry page
+// whose rel matches: an HTML link (rel), or an object of JSX (prop).
+func declaredHref(source string, rel, prop *regexp.Regexp) string {
 	for _, tag := range linkTag.FindAllString(source, -1) {
-		if iconRel.MatchString(tag) {
+		if rel.MatchString(tag) {
 			if m := hrefAttr.FindStringSubmatch(tag); m != nil {
 				return m[1]
 			}
 		}
 	}
 	for _, obj := range braces.FindAllString(source, -1) {
-		if iconProp.MatchString(obj) {
+		if prop.MatchString(obj) {
 			if m := hrefProp.FindStringSubmatch(obj); m != nil {
 				return m[1]
 			}
@@ -147,9 +207,29 @@ func iconHrefPaths(href, source string) []string {
 	return out
 }
 
+// isSVG tells whether data is an SVG picture: XML whose first element is
+// svg.
+func isSVG(data []byte) bool {
+	d := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
+	d.Strict = false
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return false
+		}
+		if el, ok := tok.(xml.StartElement); ok {
+			return el.Name.Local == "svg"
+		}
+	}
+}
+
 // readIconFile reads the picture at rel in folder: PNG or WebP by its
-// content, not too large. It returns nil for anything else.
+// content, or SVG by its content and name, not too large, not one templates put in every project. It
+// returns nil for anything else.
 func readIconFile(folder, rel string) []byte {
+	if templateIcons[strings.ToLower(path.Base(rel))] {
+		return nil
+	}
 	p := filepath.Join(folder, filepath.FromSlash(rel))
 	info, err := os.Stat(p)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > maxIconFileBytes {
@@ -163,22 +243,85 @@ func readIconFile(folder, rel string) []byte {
 	case "image/png", "image/webp":
 		return data
 	}
+	// SVG only by its name too: a .png that holds markup is no icon.
+	if strings.EqualFold(path.Ext(rel), ".svg") && len(data) <= maxIconSVGBytes && isSVG(data) {
+		return data
+	}
 	return nil
 }
 
 // findProjectIcon returns the project's own icon in folder and where it
-// is, relative to the folder; nil when there is none.
+// is, relative to the folder with forward slashes; nil when there is none.
+// The root comes first, then the folders of apps right in it.
 func findProjectIcon(folder string) ([]byte, string) {
 	if folder == "" {
 		return nil, ""
 	}
-	for _, stem := range iconStems {
-		for _, ext := range iconExts {
+	for _, dir := range append([]string{""}, appDirs(folder)...) {
+		if data, rel := findIconIn(filepath.Join(folder, dir)); data != nil {
+			if dir != "" {
+				rel = dir + "/" + rel
+			}
+			return data, rel
+		}
+	}
+	return nil, ""
+}
+
+// appDirs returns the folders right in folder that hold an app, a
+// package.json or an index.html, in the order of their names.
+func appDirs(folder string) []string {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || strings.HasPrefix(name, ".") || skippedIconDirs[strings.ToLower(name)] {
+			continue
+		}
+		for _, marker := range []string{"package.json", "index.html"} {
+			if info, err := os.Stat(filepath.Join(folder, name, marker)); err == nil && info.Mode().IsRegular() {
+				dirs = append(dirs, name)
+				break
+			}
+		}
+	}
+	return dirs
+}
+
+// findIconIn looks in folder for its icon: at the conventional paths, then
+// the icon its entry pages declare, then the icon for the home screen of
+// iPhones they declare, then the one at its conventional paths.
+func findIconIn(folder string) ([]byte, string) {
+	if data, rel := firstIconFile(folder, iconStems, iconExts); data != nil {
+		return data, rel
+	}
+	if data, rel := declaredIcon(folder, iconHref); data != nil {
+		return data, rel
+	}
+	if data, rel := declaredIcon(folder, appleIconHref); data != nil {
+		return data, rel
+	}
+	return firstIconFile(folder, appleIconStems, []string{".png"})
+}
+
+// firstIconFile returns the first icon at a stem with an extension.
+func firstIconFile(folder string, stems, exts []string) ([]byte, string) {
+	for _, stem := range stems {
+		for _, ext := range exts {
 			if data := readIconFile(folder, stem+ext); data != nil {
 				return data, stem + ext
 			}
 		}
 	}
+	return nil, ""
+}
+
+// declaredIcon returns the first icon an entry page in folder declares, as
+// href reads it.
+func declaredIcon(folder string, href func(string) string) ([]byte, string) {
 	for _, src := range iconSources {
 		p := filepath.Join(folder, filepath.FromSlash(src))
 		info, err := os.Stat(p)
@@ -189,8 +332,7 @@ func findProjectIcon(folder string) ([]byte, string) {
 		if err != nil {
 			continue
 		}
-		href := iconHref(string(text))
-		for _, rel := range iconHrefPaths(href, src) {
+		for _, rel := range iconHrefPaths(href(string(text)), src) {
 			if data := readIconFile(folder, rel); data != nil {
 				return data, rel
 			}
@@ -216,10 +358,21 @@ func detectProjectIcon(dataDir, folder string) string {
 
 // saveIcon keeps the picture data, shrunk to iconSize, in the images folder
 // and returns its icon: "image:<name>". WebP, which the standard library
-// cannot decode, is kept as it is.
+// cannot decode, and SVG, which draws sharp at any size, are kept as they
+// are.
 func saveIcon(dataDir string, data []byte) (string, error) {
 	if len(data) > maxIconFileBytes {
 		return "", fmt.Errorf("图标图片不能超过 %d MB", maxIconFileBytes>>20)
+	}
+	if http.DetectContentType(data) != "image/webp" && isSVG(data) {
+		if len(data) > maxIconSVGBytes {
+			return "", fmt.Errorf("SVG 图标不能超过 %d MB", maxIconSVGBytes>>20)
+		}
+		name, err := writeImage(dataDir, data, ".svg")
+		if err != nil {
+			return "", err
+		}
+		return "image:" + name, nil
 	}
 	if http.DetectContentType(data) != "image/webp" {
 		small, err := shrinkIcon(data)
@@ -240,7 +393,7 @@ func saveIcon(dataDir string, data []byte) (string, error) {
 func shrinkIcon(data []byte) ([]byte, error) {
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.New("不支持这种图片，请用 PNG、JPG、WebP 或 GIF")
+		return nil, errors.New("不支持这种图片，请用 PNG、JPG、WebP、GIF 或 SVG")
 	}
 	b := src.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -426,7 +579,7 @@ func (a *Atlas) ChooseIconImage(ctx context.Context) (string, error) {
 		Parent:      mygo.CallerWindow(ctx),
 		Title:       "选择图标图片",
 		ButtonLabel: "选择",
-		Filters:     []mygo.FileFilter{{Name: "图片", Extensions: []string{"png", "jpg", "jpeg", "webp", "gif"}}},
+		Filters:     []mygo.FileFilter{{Name: "图片", Extensions: []string{"png", "jpg", "jpeg", "webp", "gif", "svg"}}},
 	})
 	if err != nil {
 		return "", fmt.Errorf("打不开选择图片的窗口：%w", err)

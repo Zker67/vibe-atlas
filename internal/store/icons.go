@@ -14,7 +14,7 @@ import (
 //   - "image:<name>": a picture of the images folder, as notes refer to
 var (
 	lucideIcon = regexp.MustCompile(`^lucide:[A-Z][A-Za-z0-9]{0,39}$`)
-	imageIcon  = regexp.MustCompile(`^image:[0-9a-f]{16}\.(png|jpg|webp|gif|bmp)$`)
+	imageIcon  = regexp.MustCompile(`^image:[0-9a-f]{16}\.(png|jpg|webp|gif|bmp|svg)$`)
 )
 
 // maxEmojiRunes is the most code points an emoji icon may have: families

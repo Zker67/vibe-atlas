@@ -10,13 +10,13 @@ import (
 const someImage = "image:0123456789abcdef.png"
 
 func TestCheckIcon(t *testing.T) {
-	for _, ok := range []string{"", "lucide:Gamepad2", "emoji:🎮", "emoji:👨‍👩‍👧", "emoji:🇨🇳", someImage} {
+	for _, ok := range []string{"", "lucide:Gamepad2", "emoji:🎮", "emoji:👨‍👩‍👧", "emoji:🇨🇳", someImage, "image:0123456789abcdef.svg"} {
 		if err := checkIcon(ok); err != nil {
 			t.Errorf("checkIcon(%q) = %v", ok, err)
 		}
 	}
 	for _, bad := range []string{"Gamepad2", "lucide:", "lucide:gamepad", "lucide:A-b", "emoji:", "emoji: 🎮",
-		"emoji:" + strings.Repeat("🎮", 13), "image:../x.png", "image:0123456789abcdef.svg", "https://x/y.png"} {
+		"emoji:" + strings.Repeat("🎮", 13), "image:../x.png", "image:0123456789abcdef.ico", "https://x/y.png"} {
 		wantUserErr(t, checkIcon(bad), "图标不对")
 	}
 	wantUserErr(t, checkDetected("lucide:Gamepad2"), "图标不对")

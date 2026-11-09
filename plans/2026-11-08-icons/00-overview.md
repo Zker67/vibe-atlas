@@ -16,7 +16,7 @@
 
 - 按约定路径找，不递归扫描整个文件夹：`favicon`、`public/favicon`、`app/icon`、`src/app/icon`、`assets/icon`、`logo`、`public/logo`、`src-tauri/icons/icon`、`icon` 等，加上桌面框架常见的 `resources/icon`（MyGo、electron-vite）、`build/appicon`（Wails）、`build/icon`（electron-builder），每个配 `.png`、`.webp` 两种扩展名，按顺序取第一个合格的。
 - 没找到时读 `index.html`、`public/index.html`、`src/index.html`、`app/root.tsx` 等入口文件（不超过 256 KB），找 `<link rel="icon" href="…">` 或 `{ rel: "icon", href: "…" }`，把 href 解析成文件夹里的路径再试；href 带 `..`、协议或 `//` 的一律不认，不会读到文件夹外面。
-- 只认按内容判断是 PNG 或 WebP 的图片，最大 4 MB。SVG 和 ICO 不认：Vite 模板的 `vite.svg`、Next 模板的 `favicon.ico` 每个项目都一样，认了反而分不出项目。
+- 只认按内容判断是 PNG 或 WebP 的图片，最大 4 MB。~~SVG 和 ICO 不认~~（2026-11-09 改为认 SVG，见下面「补充：20005-aigc 查不到图标」）。ICO 仍不认：Next 模板的 `favicon.ico` 每个项目都一样。
 - **不做** Orca 的第二、三级兜底（`package.json` 的 `homepage` 网站图标、GitHub 头像）：两者都要联网，和「本地优先、不联网」冲突。
 - 检测到的图片缩到 128 像素以内（PNG；WebP 原样保存），存进数据目录的 `images/`，和备注图片同一套命名、提供方式和清理规则。
 
@@ -71,6 +71,16 @@
 ## 实施记录
 
 - 2026-11-08 实施。Go 测试、`bun test tests`、typecheck、lint、打包和冒烟测试通过；`TestDetectProjectIconThisRepository` 在本仓库里检测到 `resources/icon.png`。
+
+## 补充：20005-aigc 查不到图标（2026-11-09）
+
+用户反馈 `IndieArk/20005-aigc` 查不到图标。原因：前端在子文件夹 `mj_webui/` 里，检测只看根目录；声明的图标是 `app-icon.svg`，SVG 当时整类不认；`apple-touch-icon.png` 不在候选里。用户回复「都按你推荐的来」后实施：
+
+1. 根目录没找到时，在直接下一层、有 `package.json` 或 `index.html` 的子文件夹里按同样顺序找（跳过 `node_modules`、`dist`、`build` 等和隐藏文件夹），不递归。
+2. 认 SVG（扩展名和内容都要是 SVG，不超过 1 MB），原样保存；只跳过 `vite.svg`、`react.svg`、`next.svg` 等模板自带的文件名。`images/` 的文件名、`image` 协议和清理规则加上 `.svg`；提供图片时加 `Content-Security-Policy`，SVG 单独打开也不运行脚本。备注里仍不收 SVG。手动选图标的本机图片也可以选 SVG。
+3. 入口文件里的 `<link rel="apple-touch-icon">` 和 `apple-touch-icon.png` 作为最后的兜底。
+
+验证：Go 测试新增子文件夹、SVG、apple-touch-icon、模板图标、SVG 保存与提供的用例；在本机临时验证 20005-aigc 检测到 `mj_webui/public/app-icon.svg`，vibe-atlas 仍是 `resources/icon.png`。
 
 ## 回滚说明
 

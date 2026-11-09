@@ -145,6 +145,17 @@ func TestServeImage(t *testing.T) {
 	if rec := get(http.MethodPost, "/"+name); rec.Code != http.StatusNotFound {
 		t.Errorf("POST: %d, want 404", rec.Code)
 	}
+
+	// An SVG icon, which runs nothing even opened on its own.
+	svg, err := writeImage(a.dataDir, []byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`), ".svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = get(http.MethodGet, "/"+svg)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/svg+xml" ||
+		!strings.Contains(rec.Header().Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Fatalf("GET the SVG: %d %q %q", rec.Code, rec.Header().Get("Content-Type"), rec.Header().Get("Content-Security-Policy"))
+	}
 }
 
 func TestCopyPutsImagePaths(t *testing.T) {

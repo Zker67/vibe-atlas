@@ -15,7 +15,7 @@
 |---|---|---|
 | 项目 | `projects`、`createProject`、`renameProject`、`setProjectDescription`、`deleteProject`、`reorderProjects` | 列表按用户排序；重名报错 |
 | 项目文件夹 | `chooseProjectFolder`、`clearProjectFolder`、`openProjectFolder` | 选择时弹出系统对话框，取消时原样返回项目；绑定时检测项目自己的图标，解除时清空检测结果 |
-| 项目弹窗与图标 | `chooseFolder`、`addProject`、`editProject`、`setProjectIcon`、`detectProjectIcon`、`setModuleIcon`、`chooseIconImage` | `chooseFolder(current)` 只弹系统对话框并检测，不保存：返回 `FolderChoice`（`path`，取消时为空；`name` 文件夹名；`icon` 检测到的图标或空）。`addProject(draft)` / `editProject(id, draft)` 收 `ProjectDraft`（`name`、`folderPath`、`icon`），名称为空且有文件夹时用文件夹名，文件夹变了时 Go 重新检测图标。`detectProjectIcon(id)` 重新检测并返回项目。`chooseIconImage()` 选一张本机图片（PNG、JPG、WebP、GIF），PNG / JPG / GIF 缩到 128 像素以内存成 PNG，WebP 原样，返回 `image:<文件名>`，取消时返回空；不写进任何项目或模块 |
+| 项目弹窗与图标 | `chooseFolder`、`addProject`、`editProject`、`setProjectIcon`、`detectProjectIcon`、`setModuleIcon`、`chooseIconImage` | `chooseFolder(current)` 只弹系统对话框并检测，不保存：返回 `FolderChoice`（`path`，取消时为空；`name` 文件夹名；`icon` 检测到的图标或空）。`addProject(draft)` / `editProject(id, draft)` 收 `ProjectDraft`（`name`、`folderPath`、`icon`），名称为空且有文件夹时用文件夹名，文件夹变了时 Go 重新检测图标。`detectProjectIcon(id)` 重新检测并返回项目。`chooseIconImage()` 选一张本机图片（PNG、JPG、WebP、GIF、SVG），PNG / JPG / GIF 缩到 128 像素以内存成 PNG，WebP 和 SVG 原样，返回 `image:<文件名>`，取消时返回空；不写进任何项目或模块 |
 | 模块 | `modules`、`createModule`、`renameModule`、`deleteModule`、`reorderModules` | `deleteModule` 返回变成「未分类」的改进点条数 |
 | 改进点 | `items`、`createItem`、`setItemTitle`、`setItemType`、`setItemModule`、`setItemNote`、`setItemDeeplink`、`setItemStatus`、`reopenItem`、`moveItem`、`mergeItems`、`moveItemToProject`、`deleteItem` | `items` 是项目的全部改进点（含子改进点），前端按 `parentId` 和 `sortOrder` 建树。`moveItem(id, anchorId, place)`：`place` 为 `before` / `after`（放到 anchor 同一层的前后）或 `inside`（成为 anchor 的最后一个子改进点）。`mergeItems(id, targetId)` 在 target 的位置新建父改进点并返回它。`moveItemToProject` 带上子孙；`deleteItem` 让子改进点上移一层 |
 | 多条改进点 | `setItemsType`、`setItemsModule`、`moveItemsToProject`、`deleteItems` | 队列多选用：参数是 `ids`，每个方法在一个事务里完成，任何一条失败整组都不改，成功后每个涉及的项目只发一次 `changed`。`setItemsModule` 只改这些条目本身；`moveItemsToProject` 按 `ids` 的顺序排到目标项目最后，在另一条下面的跟着上级走、保持层级；`deleteItems` 让没删的子改进点上移到最近一层没删的上级的位置。批量改状态和拖动不新增接口，前端依次调用 `setItemStatus` / `reopenItem` / `moveItem` |
@@ -44,7 +44,7 @@
 |---|---|
 | `Project` | `id`、`name`、`description`（Markdown）、`folderPath`、`folderExists`、`icon`（用户选的，`""` 是自动）、`detectedIcon`（文件夹里检测到的，`image:<文件名>` 或空）、`sortOrder`、`counts` |
 | `Module` | `id`、`projectId`、`name`、`icon`（`""` 是默认图标）、`sortOrder`、`counts` |
-| 图标的取值 | `""`（默认）、`lucide:<名称>`（内置图标，名称同 lucide-react）、`emoji:<emoji>`（最多 12 个码位）、`image:<文件名>`（数据目录 `images/` 里的图片）。Go 端 `internal/store/icons.go` 校验，前端 `src/lib/icons.ts` 解析；不认识的内置图标名显示成默认图标 |
+| 图标的取值 | `""`（默认）、`lucide:<名称>`（内置图标，名称同 lucide-react）、`emoji:<emoji>`（最多 12 个码位）、`image:<文件名>`（数据目录 `images/` 里的图片，图标可以是 `.svg`，备注里的图片不收 SVG）。Go 端 `internal/store/icons.go` 校验，前端 `src/lib/icons.ts` 解析；不认识的内置图标名显示成默认图标 |
 | `Item` | `id`、`projectId`、`parentId`（`0` 是顶层）、`moduleId`（`0` 是未分类）、`type`（`improve` / `bug` / `feature`）、`status`（`todo` / `doing` / `done`）、`title`、`note`、`deeplink`、`sortOrder`、`createdAt`、`startedAt`、`doneAt`、`updatedAt` |
 | `Session` | `agent`（图标用：`claude`、`codex`、`gemini`，或 codeg 里其他 agent 的名字）、`id`、`title`、`cwd`、`updatedAt`、`link`（`codeg://session/<id>`、`codex://threads/<id>` 或 `claude-session:<id>`） |
 | `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done` |

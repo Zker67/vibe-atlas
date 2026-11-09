@@ -20,6 +20,6 @@
 ## Vibe Atlas 的取舍
 
 - **采纳**：约定路径优先、不递归扫描；按内容判断类型；入口文件里的图标声明和 href 解析规则（含拒绝 `..` 和外部地址）；图标分内置图标 / emoji / 图片三种。
-- **补充**：候选表加了 `resources/icon`（MyGo、electron-vite，Vibe Atlas 自己就在这里）、`build/appicon`（Wails）、`build/icon`（electron-builder）。
+- **补充**：候选表加了 `resources/icon`（MyGo、electron-vite，Vibe Atlas 自己就在这里）、`build/appicon`（Wails）、`build/icon`（electron-builder）；根目录没找到时看直接下一层的应用文件夹（有 `package.json` 或 `index.html`）；认 SVG，只排除 `vite.svg` 等模板文件名（Orca 只认 PNG / WebP）；`apple-touch-icon` 作为最后的兜底。
 - **不做**：第二、三级兜底（网站图标、GitHub 头像）都要联网，和项目「本地优先、不联网」的不变量冲突。
 - **存法不同**：Orca 把图片转成 Base64 存在配置里；Vibe Atlas 缩到 128 像素后存进数据目录的 `images/`，和备注图片共用命名、`image` 协议和清理规则，数据库里只存 `image:<文件名>`。

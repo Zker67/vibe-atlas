@@ -31,6 +31,9 @@ func pngOf(t *testing.T, w, h int, c color.Color) []byte {
 	return buf.Bytes()
 }
 
+// svgData is an SVG picture, as a project's icon may be.
+var svgData = []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512"><title>标志</title><circle cx="12" cy="12" r="10" fill="#F54EA2"/></svg>`)
+
 // webpData is the start of a WebP file, enough for its type to be told.
 var webpData = []byte("RIFF\x24\x00\x00\x00WEBPVP8 \x18\x00\x00\x00\x30\x01\x00\x9d\x01\x2a\x01\x00\x01\x00")
 
@@ -67,8 +70,78 @@ func TestFindProjectIconConventionalPaths(t *testing.T) {
 		{"wails", map[string][]byte{"build/appicon.png": red}, "build/appicon.png"},
 		// A .png that is not one, and pictures of other types, are not taken.
 		{"not a png", map[string][]byte{"favicon.png": []byte("<svg/>"), "logo.png": red}, "logo.png"},
-		{"svg and ico left out", map[string][]byte{"public/favicon.svg": []byte("<svg/>"), "favicon.ico": {0, 0, 1, 0}}, ""},
+		{"ico left out", map[string][]byte{"favicon.ico": {0, 0, 1, 0}}, ""},
+		{"svg", map[string][]byte{"public/favicon.svg": svgData}, "public/favicon.svg"},
+		{"png before svg of a stem", map[string][]byte{"favicon.svg": svgData, "favicon.png": red}, "favicon.png"},
+		{"svg with a mark, a declaration and comments", map[string][]byte{
+			"logo.svg": []byte("\xef\xbb\xbf<?xml version=\"1.0\"?>\n<!-- 标志 -->\n<svg xmlns=\"http://www.w3.org/2000/svg\"/>"),
+		}, "logo.svg"},
+		{"an svg that is not one", map[string][]byte{"favicon.svg": []byte("<html><svg/></html>"), "logo.png": red}, "logo.png"},
+		// Below the conventional paths and what entry pages declare.
+		{"apple touch icon last", map[string][]byte{"public/apple-touch-icon.png": blue}, "public/apple-touch-icon.png"},
+		{"apple touch icon after the others", map[string][]byte{"public/apple-touch-icon.png": blue, "icon.png": red}, "icon.png"},
 		{"a folder named like an icon", map[string][]byte{"icon.png/x.txt": []byte("x"), "logo.png": red}, "logo.png"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, rel := findProjectIcon(project(t, c.files))
+			if rel != c.want {
+				t.Fatalf("found %q, want %q", rel, c.want)
+			}
+			if c.want != "" && !bytes.Equal(data, c.files[c.want]) {
+				t.Fatal("found the wrong content")
+			}
+		})
+	}
+}
+
+// TestFindProjectIconInAppFolder looks in the folders of apps right in the
+// project's, as 20005-aigc keeps its web page in mj_webui.
+func TestFindProjectIconInAppFolder(t *testing.T) {
+	red := pngOf(t, 4, 4, color.NRGBA{255, 0, 0, 255})
+	page := []byte(`<link rel="icon" type="image/svg+xml" href="/app-icon.svg" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />`)
+	cases := []struct {
+		name  string
+		files map[string][]byte
+		want  string
+	}{
+		{"like 20005-aigc", map[string][]byte{
+			"README.md":                            []byte("# x"),
+			"archive/logo.png":                     red,
+			"mj_webui/package.json":                []byte("{}"),
+			"mj_webui/index.html":                  page,
+			"mj_webui/public/app-icon.svg":         svgData,
+			"mj_webui/public/apple-touch-icon.png": red,
+		}, "mj_webui/public/app-icon.svg"},
+		{"the root first", map[string][]byte{
+			"public/favicon.png":     red,
+			"web/package.json":       []byte("{}"),
+			"web/public/favicon.svg": svgData,
+		}, "public/favicon.png"},
+		{"an index.html marks an app", map[string][]byte{
+			"site/index.html": []byte(`<link rel="icon" href="/mark.png">`),
+			"site/mark.png":   red,
+		}, "site/mark.png"},
+		{"folders of apps in the order of their names", map[string][]byte{
+			"b/package.json": []byte("{}"),
+			"b/icon.png":     red,
+			"a/package.json": []byte("{}"),
+			"a/logo.png":     red,
+		}, "a/logo.png"},
+		{"a folder without an app left out", map[string][]byte{"docs/icon.png": red}, ""},
+		{"downloads and builds left out", map[string][]byte{
+			"node_modules/x/package.json": []byte("{}"),
+			"node_modules/package.json":   []byte("{}"),
+			"node_modules/icon.png":       red,
+			"dist/index.html":             []byte(`<link rel="icon" href="/favicon.png">`),
+			"dist/favicon.png":            red,
+			".cache/package.json":         []byte("{}"),
+			".cache/icon.png":             red,
+		}, ""},
+		{"only one level down", map[string][]byte{
+			"apps/web/package.json": []byte("{}"),
+			"apps/web/icon.png":     red,
+		}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -118,10 +191,20 @@ func TestFindProjectIconDeclared(t *testing.T) {
 			"mark.png":             red,
 			"example.com/mark.png": red,
 		}, ""},
-		{"declared svg left out", map[string][]byte{
+		{"template svg left out", map[string][]byte{
 			"index.html":      []byte(`<link rel="icon" type="image/svg+xml" href="/vite.svg">`),
-			"public/vite.svg": []byte("<svg/>"),
+			"public/vite.svg": svgData,
 		}, ""},
+		{"declared svg", map[string][]byte{
+			"index.html":                  []byte(`<link rel="icon" type="image/svg+xml" href="/app-icon.svg" />`),
+			"public/app-icon.svg":         svgData,
+			"public/apple-touch-icon.png": red,
+		}, "public/app-icon.svg"},
+		{"declared apple touch icon when the icon is not taken", map[string][]byte{
+			"index.html":             []byte(`<link rel="icon" href="/vite.svg"><link rel="apple-touch-icon" href="/brand/touch.png">`),
+			"public/vite.svg":        svgData,
+			"public/brand/touch.png": red,
+		}, "public/brand/touch.png"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -186,6 +269,22 @@ func TestSaveIconShrinks(t *testing.T) {
 	if _, err := saveIcon(dataDir, webpData); err != nil {
 		t.Fatalf("webp: %v", err)
 	}
+
+	// SVG is kept as it is, under .svg; notes still take no SVG.
+	svg, err := saveIcon(dataDir, svgData)
+	if err != nil || !strings.HasSuffix(svg, ".svg") {
+		t.Fatalf("svg = %q, %v", svg, err)
+	}
+	if kept, err := os.ReadFile(filepath.Join(imageDir(dataDir), strings.TrimPrefix(svg, "image:"))); err != nil || !bytes.Equal(kept, svgData) {
+		t.Fatalf("svg kept as %q, %v", kept, err)
+	}
+	if _, err := saveImage(dataDir, svgData); err == nil {
+		t.Fatal("a note took an SVG")
+	}
+	huge := append([]byte(`<svg xmlns="http://www.w3.org/2000/svg">`), bytes.Repeat([]byte(" "), maxIconSVGBytes)...)
+	if _, err := saveIcon(dataDir, append(huge, "</svg>"...)); err == nil {
+		t.Fatal("took an SVG too large")
+	}
 	if _, err := saveIcon(dataDir, []byte("not a picture")); err == nil {
 		t.Fatal("took what is not a picture")
 	}
@@ -211,11 +310,15 @@ func TestCleanImagesKeepsIcons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ofModule, err := saveIcon(dataDir, pngOf(t, 9, 9, color.Black))
+	ofModule, err := saveIcon(dataDir, svgData)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unused, err := saveIcon(dataDir, pngOf(t, 10, 10, color.Black))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unusedSVG, err := saveIcon(dataDir, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,12 +335,12 @@ func TestCleanImagesKeepsIcons(t *testing.T) {
 	}
 
 	old := time.Now().Add(-48 * time.Hour)
-	for _, icon := range []string{detected, chosen, ofModule, unused} {
+	for _, icon := range []string{detected, chosen, ofModule, unused, unusedSVG} {
 		os.Chtimes(filepath.Join(imageDir(dataDir), strings.TrimPrefix(icon, "image:")), old, old)
 	}
 	n, err := cleanImages(db, dataDir, imageGrace)
-	if err != nil || n != 1 {
-		t.Fatalf("cleanImages = %d, %v; want only the unused one", n, err)
+	if err != nil || n != 2 {
+		t.Fatalf("cleanImages = %d, %v; want only the two unused", n, err)
 	}
 	for _, icon := range []string{detected, chosen, ofModule} {
 		if _, err := os.Stat(filepath.Join(imageDir(dataDir), strings.TrimPrefix(icon, "image:"))); err != nil {
