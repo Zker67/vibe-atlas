@@ -735,6 +735,9 @@ function useMarquee(viewport: RefObject<HTMLDivElement | null>, box: RefObject<H
     const v = viewport.current;
     const b = box.current;
     if (!v || !b || e.button !== 0) return;
+    // A press in a menu of a row bubbles here through React from its portal:
+    // taking it would capture the pointer, and the menu would never get the click.
+    if (!v.contains(e.target as Node)) return;
     if ((e.target as HTMLElement).closest("[data-queue-row], [data-queue-draft], button, a, input, textarea")) return;
     stop.current();
     e.preventDefault();
@@ -1217,6 +1220,12 @@ const ItemRow = memo(function ItemRow({
       </ContextMenuTrigger>
       <ContextMenuContent
         className="w-52"
+        // Out in a portal, but its events bubble through React to the row: a
+        // press would start dragging it, a click select it alone (and drop
+        // the selection the menu acts on), a double click rename it.
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
         // 「添加子改进点」 moves the keyboard to the field under the queue: keep it there.
         onCloseAutoFocus={(e) => {
           if (useAtlas.getState().newChildFor) e.preventDefault();

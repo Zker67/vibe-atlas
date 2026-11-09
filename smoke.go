@@ -233,6 +233,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	menus, err := a.smokeMenu(main)
+	report["menu"] = menus
+	if err != nil {
+		finish(err, "right-click menus")
+		return
+	}
+
 	selected, err := a.smokeSelect(main)
 	report["select"] = selected
 	if err != nil {
