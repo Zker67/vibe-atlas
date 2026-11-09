@@ -139,7 +139,7 @@ function HelpBody() {
             ))}
           </div>
         </nav>
-        <button type="button" className={cn(NAV_ITEM, "mt-auto")} onClick={() => showSettingsTab("keys")}>
+        <button type="button" className={cn(NAV_ITEM, "mt-auto")} onClick={() => showSettingsTab("general")}>
           <Settings />
           <span className="flex-1">设置</span>
           <span className="meta-mono opacity-70">Ctrl+,</span>
@@ -196,7 +196,7 @@ function CaptureSection() {
       <div className="flex items-center gap-3 rounded-lg bg-card p-3.5 ring-1 ring-foreground/[0.07]">
         <span className="text-muted-foreground">快捷键</span>
         <Accel of="shortcut" />
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => showSettingsTab("keys")}>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => showSettingsTab("general")}>
           <Settings />
           修改
         </Button>

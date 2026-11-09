@@ -81,9 +81,11 @@ bun run build
 VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录>\report.json' "build/windows-amd64/Vibe Atlas.exe"
 ```
 
-退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响），以及队列多选的检查（`select`：用真实的鼠标和键盘事件依次检查单击、`Ctrl` 加选、`Shift` / `Ctrl+Shift` 连选、详情显示「已选 N 条」、`Space` 一起完成再一起重新打开、`Esc`、`Ctrl+A`、空白处框选、整组拖到另一条上沿、`Tab` / `Shift+Tab`、`Shift+↓`），以及备注图片的检查（`images`：页面存一张图后能通过 `image` 协议加载、不是图片的文件被拒绝、写进备注后详情里显示成图片卡片而不显示源码、复制出的文字带图片的本机路径、删除条目后清理会删掉图片），以及粘贴的检查（`paste`：在备注里模拟粘贴单独一张图片、一段带图片的 HTML 和一段不带图片的 HTML，分别成为图片、带本地图片的 Markdown、纯文本），以及选择会话的检查（`sessions`：会话来源默认不使用、没有「选择会话」；设成 Claude Code 后，详情里出现「选择会话」，列出测试自己造在数据目录里的会话（不读本机真实的会话），选中后链接存成 `claude-session:<ID>`、链接卡片显示会话名；改回不使用后按钮消失），以及沉浸式编辑的检查（`immersive`：从详情打开弹窗，显示标题、大纲、字数和行数、折叠箭头，`Esc` 关闭），以及图标的检查（`icons`：只给文件夹新建项目时名称取文件夹名、检测出文件夹里的图标并缩到 128 像素、侧栏经 `image` 协议加载出来、换成 emoji 后跟着变；前端放在子文件夹里的项目检测出它声明的 SVG 并显示），以及回收站的检查（`trash`：用真实的键盘和鼠标事件检查 `Delete` 进回收站、子改进点上移、提示带撤销、`Ctrl+Z` 放回原处、按住 `Shift` 时删除按钮变成彻底删除、`Shift+Delete` 先确认且取消后保留、侧栏打开回收站能看到这条、`Enter` 恢复、`Esc` 回到队列），以及检查更新的检查（`updates`：报告当前版本；自动检查默认是启动时检查，改成每 6 小时定时检查后保存下来，2 小时这种不支持的间隔被拒绝；带签名的版本从测试自己造的更新源发现 99.0.0，右下角提示带「去更新」「稍后」，点「去更新」后因为签名不对被拒绝，提示「更新失败」带「重试」「去 GitHub」和 ×，程序文件夹没有任何改动，× 关掉提示；不带签名的版本检查时被拒绝）。划词工具栏要编辑器拿到焦点才出现，隐藏窗口里测不了，它用到的格式命令由 `bun test tests` 覆盖，工具栏本身在真实窗口里看。
+退出码为 0 且报告里 `"ok": true` 表示通过。报告还记录两个页面就绪耗时（`mainReadyMs`、`captureReadyMs`）、快捷键是否注册成功、快速记录小窗的检查（`capturePanel`：平时的高度、展开详情后变高、带链接保存后清空并缩回），老板键的检查（`bossKey`：默认不设置、和快速记录相同或缺少 Ctrl/Alt/Win 时被拒绝、设置后注册、录制时释放并拿回、清除后注销），以及视觉效果的检查（`effects`、`captureEffects`：默认关闭、打开后两种背景都能加载、快速记录小窗不加载效果）和外观的检查（`look`：背景图片能通过 `wallpaper` 协议加载、毛玻璃跟随设置、窗口不透明度生效、快速记录小窗不受影响），以及队列多选的检查（`select`：用真实的鼠标和键盘事件依次检查单击、`Ctrl` 加选、`Shift` / `Ctrl+Shift` 连选、详情显示「已选 N 条」、`Space` 一起完成再一起重新打开、`Esc`、`Ctrl+A`、空白处框选、整组拖到另一条上沿、`Tab` / `Shift+Tab`、`Shift+↓`），以及动效的检查（`motion`：「队列 / 总览」、详情的状态和类型、侧栏的项目，滑块都落在选中的那一项上，切到总览再切回来后跟着过去；点圆圈标为完成时，队列的行带位移动画换到新位置；系统要求减少动态效果时不播放，报告里 `reduced` 为 `true`），以及备注图片的检查（`images`：页面存一张图后能通过 `image` 协议加载、不是图片的文件被拒绝、写进备注后详情里显示成图片卡片而不显示源码、复制出的文字带图片的本机路径、删除条目后清理会删掉图片），以及粘贴的检查（`paste`：在备注里模拟粘贴单独一张图片、一段带图片的 HTML 和一段不带图片的 HTML，分别成为图片、带本地图片的 Markdown、纯文本），以及选择会话的检查（`sessions`：会话来源默认不使用、没有「选择会话」；设成 Claude Code 后，详情里出现「选择会话」，列出测试自己造在数据目录里的会话（不读本机真实的会话），选中后链接存成 `claude-session:<ID>`、链接卡片显示会话名；改回不使用后按钮消失），以及沉浸式编辑的检查（`immersive`：从详情打开弹窗，显示标题、大纲、字数和行数、折叠箭头，`Esc` 关闭），以及图标的检查（`icons`：只给文件夹新建项目时名称取文件夹名、检测出文件夹里的图标并缩到 128 像素、侧栏经 `image` 协议加载出来、换成 emoji 后跟着变；前端放在子文件夹里的项目检测出它声明的 SVG 并显示），以及回收站的检查（`trash`：用真实的键盘和鼠标事件检查 `Delete` 进回收站、子改进点上移、提示带撤销、`Ctrl+Z` 放回原处、按住 `Shift` 时删除按钮变成彻底删除、`Shift+Delete` 先确认且取消后保留、侧栏打开回收站能看到这条、`Enter` 恢复、`Esc` 回到队列），以及检查更新的检查（`updates`：报告当前版本；自动检查默认是启动时检查，改成每 6 小时定时检查后保存下来，2 小时这种不支持的间隔被拒绝；带签名的版本从测试自己造的更新源发现 99.0.0，右下角提示带「去更新」「稍后」，点「去更新」后因为签名不对被拒绝，提示「更新失败」带「重试」「去 GitHub」和 ×，程序文件夹没有任何改动，× 关掉提示；不带签名的版本检查时被拒绝）。划词工具栏要编辑器拿到焦点才出现，隐藏窗口里测不了，它用到的格式命令由 `bun test tests` 覆盖，工具栏本身在真实窗口里看。
 
 报告里的 `version` 是程序的版本。端到端测试更新：把旧版本的程序文件夹复制到临时目录，用新版本打包出的 `build/windows-amd64/` 作为更新源，加上 `VIBE_ATLAS_SMOKE_UPDATE=install` 和 `VIBE_ATLAS_UPDATE_DIR='<新版本的文件夹>'` 运行临时目录里的旧程序。它找到新版本、装好就退出（不重启），报告里 `installUpdate.installed` 为 `true`；再用普通的冒烟测试运行一次，`version` 应该是新版本。
+
+测开机自动启动：加上 `VIBE_ATLAS_SMOKE_LOGIN=1`。页面依次打开、读回、关闭开机自动启动，报告里 `openAtLogin` 各项为 `on: true`、`read: true`、`off: false`、`systemAfter: false`。它会真实写当前用户的启动项，所以只在原本关着时运行，测完保持关闭；已经打开时直接报错，不动用户自己的设置。
 
 本机已经开着 Vibe Atlas 时，两个实例会争用同一个 WebView2 数据目录，测试程序报 `creating the WebView2 controller failed (HRESULT 0x8007139f)`。再加一个环境变量 `WEBVIEW2_USER_DATA_FOLDER='<临时目录>\webview'` 即可，不用关掉正在用的程序；这时快捷键会因为被占用而注册失败，属于正常。
 
@@ -91,8 +93,9 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 
 | 设置 | 默认值 | 修改位置 |
 |---|---|---|
-| 快速记录快捷键 | `Ctrl+Alt+Space` | 设置（`Ctrl+,`）→ 快捷键 |
-| 老板键 | 不设置 | 设置 → 快捷键 |
+| 开机自动启动 | 关闭 | 设置（`Ctrl+,`）→ 常规 |
+| 快速记录快捷键 | `Ctrl+Alt+Space` | 设置 → 常规 |
+| 老板键 | 不设置 | 设置 → 常规 |
 | 主题 | 跟随系统 | 设置，或顶栏的外观按钮 |
 | 视觉效果（动态背景） | 关闭（背景默认点阵网格） | 设置 → 外观 |
 | 背景图片 | 无 | 设置 → 外观 |
@@ -103,7 +106,7 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 | 会话来源 | 不使用（可选 Claude Code / Codex / codeg，一次一个） | 设置 → 改进点 |
 | 自动检查更新 | 启动时检查（可选不自动检查、定时检查：每小时 / 每 6 小时 / 每天）；下载要点「去更新」 | 设置 → 更新 |
 
-设置存在数据库的 `settings` 表里，没有单独的配置文件。环境变量只用于开发和测试：
+设置存在数据库的 `settings` 表里，没有单独的配置文件。开机自动启动例外：它记在系统里（Windows 是当前用户注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 的一项，命令带 `--mygo-opened-at-login`，带这个参数启动时不弹主窗口），每次都从系统读。环境变量只用于开发和测试：
 
 | 环境变量 | 作用 |
 |---|---|
@@ -111,6 +114,7 @@ VIBE_ATLAS_DATA_DIR='<临时目录>\data' VIBE_ATLAS_SMOKE_REPORT='<临时目录
 | `VIBE_ATLAS_SMOKE_REPORT` | 进入冒烟测试模式，并指定报告文件 |
 | `VIBE_ATLAS_SMOKE_UPDATE` | 设成 `install` 时，冒烟测试只做一次真实的更新安装（配合下一项） |
 | `VIBE_ATLAS_UPDATE_DIR` | 从本地文件夹读更新清单和更新包，代替 GitHub；签名照样校验 |
+| `VIBE_ATLAS_SMOKE_LOGIN` | 设成 `1` 时，冒烟测试只测开机自动启动（见上面） |
 | `MYGO_UPDATER_PRIVATE_KEY` | 打包时用的更新私钥（见「发布新版本」） |
 
 会话来源从各软件自己的位置只读，同样认这些软件的环境变量：Claude Code 是 `CLAUDE_CONFIG_DIR`（默认 `~/.claude`，读 `projects/`），Codex 是 `CODEX_HOME`（默认 `~/.codex`，读 `sessions/` 和 `session_index.jsonl`），codeg 是 `CODEG_DATA_DIR`（默认 Windows `%AppData%\app.codeg`、macOS `~/Library/Application Support/app.codeg`，读 `codeg.db`）。打开 Claude Code 会话要能找到 `claude` 命令：先找 PATH，再找 `~/.local/bin`、`~/.claude/local`。

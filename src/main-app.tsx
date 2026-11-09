@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import { useDefaultLayout } from "react-resizable-panels";
 import appIcon from "@/assets/app-icon.png";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
 import { applyGlass, decorated } from "@/lib/look";
+import { useEntrance } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
@@ -70,6 +71,10 @@ export function MainApp() {
   }, []);
   useShortcuts();
   const effects = useEffects();
+  // The panel fades in as another project or the trash opens in it; the
+  // queue and the overview fade in on their own as they switch.
+  const content = useRef<HTMLDivElement>(null);
+  useEntrance(content, view === "trash" ? "trash" : `project-${project?.id ?? 0}`);
 
   return (
     <TooltipProvider delayDuration={500}>
@@ -82,20 +87,22 @@ export function MainApp() {
           <div className="flex min-w-0 flex-1 pr-2 pb-2">
             <main className="app-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
               {loadError && <LoadError message={loadError} />}
-              {!ready ? null : view === "trash" ? (
-                <TrashView />
-              ) : project ? (
-                view === "queue" ? (
-                  <QueueLayout project={project} />
+              <div ref={content} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {!ready ? null : view === "trash" ? (
+                  <TrashView />
+                ) : project ? (
+                  view === "queue" ? (
+                    <QueueLayout project={project} />
+                  ) : (
+                    <>
+                      <ProjectBar project={project} />
+                      <Overview project={project} />
+                    </>
+                  )
                 ) : (
-                  <>
-                    <ProjectBar project={project} />
-                    <Overview project={project} />
-                  </>
-                )
-              ) : (
-                !loadError && <Welcome />
-              )}
+                  !loadError && <Welcome />
+                )}
+              </div>
             </main>
           </div>
         </div>

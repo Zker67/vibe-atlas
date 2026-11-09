@@ -331,6 +331,10 @@ textarea,
   background: color-mix(in oklch, var(--chip) 9%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--chip) 30%, transparent);
 }
+/* Only the text of one: the fill and line slide under it on a Glide. */
+.signal-text {
+  color: color-mix(in oklch, var(--chip) 82%, var(--foreground));
+}
 /* A dot that glows in its signal color. */
 .signal-dot {
   background: var(--chip, var(--doing));

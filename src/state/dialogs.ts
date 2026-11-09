@@ -20,7 +20,7 @@ export interface ModuleRequest {
 }
 
 /** The tabs of 设置. */
-export type SettingsTab = "keys" | "items" | "appearance" | "data" | "updates";
+export type SettingsTab = "general" | "appearance" | "items" | "data" | "updates";
 
 interface DialogsState {
   confirm: ConfirmRequest | null;
@@ -38,7 +38,7 @@ export const useDialogs = create<DialogsState>(() => ({
   project: null,
   module: null,
   settings: false,
-  settingsTab: "keys",
+  settingsTab: "general",
   help: false,
   helpAt: null,
 }));

@@ -123,6 +123,13 @@ type Settings struct {
 	// UpdateInterval is the hours between checks with UpdateCheckInterval:
 	// 1, 6 or 24 (out of the box).
 	UpdateInterval int `json:"updateInterval"`
+	// OpenAtLogin starts the app in the tray when the user logs in. It is
+	// read from the system each time, so that turning it off there (Task
+	// Manager on Windows) shows here too. Off out of the box.
+	OpenAtLogin bool `json:"openAtLogin"`
+	// CanOpenAtLogin is false in development builds: the system would start
+	// the temporary build.
+	CanOpenAtLogin bool `json:"canOpenAtLogin"`
 	// LookDefaults are the looks the app has out of the box.
 	LookDefaults LookDefaults `json:"lookDefaults"`
 	// DataDir is the folder of the database.
@@ -887,6 +894,8 @@ func (a *Atlas) Settings() (Settings, error) {
 		TrashDays:       trashDays(db),
 		UpdateCheck:     updateCheck(db),
 		UpdateInterval:  updateInterval(db),
+		OpenAtLogin:     canOpenAtLogin() && mygo.App.OpenAtLogin(),
+		CanOpenAtLogin:  canOpenAtLogin(),
 		LookDefaults:    lookDefaults,
 		DataDir:         a.app.dataDir,
 	}
@@ -1171,6 +1180,23 @@ func (a *Atlas) SetCurrentProject(id int64) error {
 		return err
 	}
 	return db.SetSetting(keyCurrentProject, strconv.FormatInt(id, 10))
+}
+
+// canOpenAtLogin is false in development builds, whose program is a
+// temporary build.
+func canOpenAtLogin() bool { return !mygo.IsDev() }
+
+// SetOpenAtLogin makes the app start in the tray when the user logs in, or
+// stops it from doing so. Development builds cannot.
+func (a *Atlas) SetOpenAtLogin(on bool) (Settings, error) {
+	if !canOpenAtLogin() {
+		return Settings{}, errors.New("开发版本不能设置开机自动启动")
+	}
+	if err := mygo.App.SetOpenAtLogin(on); err != nil {
+		return Settings{}, fmt.Errorf("设置开机自动启动失败：%w", err)
+	}
+	a.settingsChanged()
+	return a.Settings()
 }
 
 // OpenDataFolder opens the folder of the database in the file manager.

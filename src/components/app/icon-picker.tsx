@@ -4,6 +4,7 @@ import { Atlas } from "@/mygo";
 import { run } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { BUILTIN_ICONS, EMOJIS, isEmoji, parseIcon } from "@/lib/icons";
+import { Glide } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -48,7 +49,8 @@ export function IconPicker({ value, onPick, fallback, auto, className }: IconPic
     <div className={cn("flex min-h-0 w-[22rem] flex-col gap-2", className)}>
       <DefaultChoice selected={value === ""} fallback={fallback} auto={auto} onPick={() => onPick("")} />
 
-      <div role="tablist" aria-label="图标的种类" className="flex shrink-0 rounded-lg bg-muted p-0.5">
+      <div role="tablist" aria-label="图标的种类" className="relative flex shrink-0 rounded-lg bg-muted p-0.5">
+        <Glide className="bg-foreground/10 shadow-xs" />
         {TABS.map((t) => (
           <button
             key={t.value}
@@ -57,8 +59,8 @@ export function IconPicker({ value, onPick, fallback, auto, className }: IconPic
             aria-selected={tab === t.value}
             onClick={() => setTab(t.value)}
             className={cn(
-              "flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-xs transition-all duration-150",
-              tab === t.value ? "bg-foreground/10 text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+              "relative flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-xs transition-all duration-150",
+              tab === t.value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             <t.icon className="size-3.5" />

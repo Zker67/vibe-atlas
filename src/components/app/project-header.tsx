@@ -145,6 +145,9 @@ export function ProjectBar({ project }: { project: Project }) {
         onValueChange={(v) => v && setView(v as View)}
         aria-label="视图"
         className="shrink-0 rounded-lg bg-muted p-0.5"
+        glideClassName="bg-foreground/10 shadow-xs"
+        // The bar is another one in the queue and in the overview.
+        glideMemory="views"
       >
         {VIEWS.map((v) => (
           <ToggleGroupItem
@@ -152,7 +155,7 @@ export function ProjectBar({ project }: { project: Project }) {
             value={v.value}
             aria-label={v.label}
             title={v.label}
-            className="h-6 rounded-md! px-2 text-muted-foreground hover:bg-transparent data-[state=on]:bg-foreground/10 data-[state=on]:text-foreground data-[state=on]:shadow-xs"
+            className="h-6 rounded-md! px-2 text-muted-foreground hover:bg-transparent data-[state=on]:text-foreground"
           >
             <v.icon />
             <span className="hidden @min-[420px]:inline">{v.label}</span>

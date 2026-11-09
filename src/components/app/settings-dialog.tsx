@@ -17,8 +17,10 @@ import {
   Moon,
   Palette,
   Pencil,
+  Power,
   RefreshCw,
   RotateCcw,
+  SlidersHorizontal,
   Sun,
   X,
   type LucideIcon,
@@ -36,7 +38,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
-import { checkForUpdates, installUpdate, useUpdates } from "@/state/updates";
+import { checkForUpdates, installUpdate, RELEASES_URL, useUpdates } from "@/state/updates";
 import { AgentIcon } from "./agent-icon";
 import { LookSettings } from "./look-settings";
 import { SettingCard } from "./setting-card";
@@ -49,9 +51,9 @@ const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
 ];
 
 const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
-  { value: "keys", label: "快捷键", icon: Keyboard },
-  { value: "items", label: "改进点", icon: ListTree },
+  { value: "general", label: "常规", icon: SlidersHorizontal },
   { value: "appearance", label: "外观", icon: Palette },
+  { value: "items", label: "改进点", icon: ListTree },
   { value: "data", label: "数据", icon: Database },
   { value: "updates", label: "更新", icon: CircleArrowUp },
 ];
@@ -73,7 +75,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数、版本和自动检查更新</DialogDescription>
+              <DialogDescription className="sr-only">开机自动启动、全局快捷键（快速记录、老板键）、外观（主题、背景、毛玻璃、透明度）、子改进点的链接、会话来源、数据位置和回收站保留天数、版本和自动检查更新</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -99,9 +101,9 @@ export function SettingsDialog() {
               >
                 <Scroller always className="flex-1" viewportClassName="px-6 pt-12 pb-6">
                   <div className="flex flex-col gap-3">
-                    {t.value === "keys" && <KeysPanel settings={settings} />}
-                    {t.value === "items" && <ItemsPanel settings={settings} />}
+                    {t.value === "general" && <GeneralPanel settings={settings} />}
                     {t.value === "appearance" && <AppearancePanel settings={settings} />}
+                    {t.value === "items" && <ItemsPanel settings={settings} />}
                     {t.value === "data" && <DataPanel settings={settings} />}
                     {t.value === "updates" && <UpdatesPanel settings={settings} />}
                   </div>
@@ -117,10 +119,25 @@ export function SettingsDialog() {
 const saveCaptureKey = (accelerator: string) => Atlas.setShortcut(accelerator);
 const saveBossKey = (accelerator: string) => Atlas.setBossKey(accelerator);
 
-function KeysPanel({ settings }: { settings: Settings }) {
+function GeneralPanel({ settings }: { settings: Settings }) {
   return (
     <>
-      <GroupTitle icon={Globe} title="全局" hint="在任何软件中都能用" />
+      <GroupTitle icon={Power} title="启动" hint="登录系统后" />
+      <SettingCard
+        title="开机自动启动"
+        description="登录系统后自动启动，只在托盘里等着，不弹出主窗口；快速记录的全局快捷键一开机就能用。"
+        action={
+          <Switch
+            aria-label="开机自动启动"
+            checked={settings.openAtLogin}
+            disabled={!settings.canOpenAtLogin}
+            onCheckedChange={(on) => void run(Atlas.setOpenAtLogin(on)).then((s) => s && useAtlas.setState({ settings: s }))}
+          />
+        }
+      >
+        {!settings.canOpenAtLogin && <p className="text-xs text-muted-foreground">开发版本不能设置开机自动启动。</p>}
+      </SettingCard>
+      <GroupTitle icon={Globe} title="全局快捷键" hint="在任何软件中都能用" className="mt-3" />
       <ShortcutSetting
         title="快速记录"
         description="在任何软件中打开快速记录。"
@@ -136,7 +153,7 @@ function KeysPanel({ settings }: { settings: Settings }) {
         problem={settings.bossKeyError}
         save={saveBossKey}
       />
-      <GroupTitle icon={AppWindow} title="软件内" hint="在 Vibe Atlas 的窗口里" className="mt-3" />
+      <GroupTitle icon={AppWindow} title="软件内快捷键" hint="在 Vibe Atlas 的窗口里" className="mt-3" />
       <SettingCard title="软件内的快捷键" description="软件内的快捷键不能修改。">
         <div>
           <Button variant="outline" size="sm" onClick={() => openHelp("keys")}>
@@ -275,8 +292,6 @@ function DataPanel({ settings }: { settings: Settings }) {
   );
 }
 
-const RELEASES = "https://github.com/Zker67/vibe-atlas/releases";
-
 const UPDATE_CHECKS: { value: UpdateCheck; label: string }[] = [
   { value: "off", label: "不自动检查" },
   { value: "launch", label: "启动时检查" },
@@ -343,7 +358,7 @@ function UpdatesPanel({ settings }: { settings: Settings }) {
             </Button>
           )}
           <Button variant="ghost" size="sm" asChild>
-            <a href={RELEASES} target="_blank" rel="noreferrer">
+            <a href={RELEASES_URL} target="_blank" rel="noreferrer">
               <ExternalLink />
               所有版本
             </a>

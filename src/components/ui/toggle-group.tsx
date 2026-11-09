@@ -4,11 +4,13 @@ import { cn } from "cn"
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui"
 
 import { toggleVariants } from "@/components/ui/toggle"
+import { Glide } from "@/lib/motion"
 
 const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants> & {
     spacing?: number
     orientation?: "horizontal" | "vertical"
+    glide?: boolean
   }
 >({
   size: "default",
@@ -23,13 +25,21 @@ function ToggleGroup({
   size,
   spacing = 2,
   orientation = "horizontal",
+  glideClassName,
+  glideMemory,
   children,
   ...props
 }: React.ComponentProps<typeof ToggleGroupPrimitive.Root> &
   VariantProps<typeof toggleVariants> & {
     spacing?: number
     orientation?: "horizontal" | "vertical"
+    /** The highlight that slides to the item picked, in a single group. */
+    glideClassName?: string
+    /** Names the group shown anew as the views switch: its highlight slides on from where it was. */
+    glideMemory?: string
   }) {
+  // One item picked at a time: its highlight slides from one to another.
+  const glide = props.type === "single"
   return (
     <ToggleGroupPrimitive.Root
       data-slot="toggle-group"
@@ -39,14 +49,15 @@ function ToggleGroup({
       data-orientation={orientation}
       style={{ "--gap": spacing } as React.CSSProperties}
       className={cn(
-        "group/toggle-group flex w-fit flex-row items-center gap-[--spacing(var(--gap))] rounded-lg data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-vertical:flex-col data-vertical:items-stretch",
+        "group/toggle-group relative flex w-fit flex-row items-center gap-[--spacing(var(--gap))] rounded-lg data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-vertical:flex-col data-vertical:items-stretch",
         className
       )}
       {...props}
     >
       <ToggleGroupContext.Provider
-        value={{ variant, size, spacing, orientation }}
+        value={{ variant, size, spacing, orientation, glide }}
       >
+        {glide && <Glide className={cn("bg-muted", glideClassName)} memory={glideMemory} />}
         {children}
       </ToggleGroupContext.Provider>
     </ToggleGroupPrimitive.Root>
@@ -75,6 +86,7 @@ function ToggleGroupItem({
           variant: context.variant || variant,
           size: context.size || size,
         }),
+        context.glide && "relative data-[state=on]:bg-transparent data-[state=on]:hover:bg-transparent",
         className
       )}
       {...props}

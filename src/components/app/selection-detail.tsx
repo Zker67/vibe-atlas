@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ArrowRightLeft, CircleDashed, Copy, Folder, ListChecks, Shapes, X } from "lucide-react";
-import type { Item, ItemStatus, ItemType } from "@/mygo";
-import { STATUSES, statusInfo, TYPES, UNSORTED } from "@/lib/labels";
+import type { Item, ItemStatus } from "@/mygo";
+import { STATUSES, statusInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -25,8 +25,8 @@ import {
 } from "@/state/atlas";
 import { DeleteButton } from "./delete-button";
 import { IconButton } from "./icon-button";
-import { Prop, QUIET_TRIGGER, StatusPicker } from "./item-detail";
-import { TypeChip, TypeIcon } from "./item-marks";
+import { Prop, QUIET_TRIGGER, StatusPicker, TypePicker } from "./item-detail";
+import { TypeIcon } from "./item-marks";
 import { confirmDeleteItems } from "./queue";
 
 /** What all of items have in common, or null when they differ. */
@@ -82,7 +82,7 @@ export function SelectionDetail() {
             <StatusPicker value={shared(chosen, (i) => i.status)} onPick={(status) => void setItemsStatus(ids, status)} />
           </Prop>
           <Prop label="类型" icon={Shapes}>
-            <TypeSelect ids={ids} items={chosen} />
+            <TypePicker value={shared(chosen, (i) => i.type)} onPick={(type) => void setItemsType(ids, type)} />
           </Prop>
           <Prop label="模块" icon={Folder}>
             <ModuleSelect ids={ids} items={chosen} />
@@ -142,39 +142,6 @@ function StatusMix({ items }: { items: Item[] }) {
         ))}
       </div>
     </div>
-  );
-}
-
-function TypeSelect({ ids, items }: { ids: number[]; items: Item[] }) {
-  const type = shared(items, (i) => i.type);
-  const present = TYPES.filter((t) => items.some((i) => i.type === t.value));
-  return (
-    <Select value={type ?? ""} onValueChange={(v) => void setItemsType(ids, v as ItemType)}>
-      <SelectTrigger size="sm" aria-label="类型" className={QUIET_TRIGGER}>
-        <SelectValue>
-          {type ? (
-            <TypeChip type={type} />
-          ) : (
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="flex items-center gap-0.5">
-                {present.map((t) => (
-                  <TypeIcon key={t.value} type={t.value} />
-                ))}
-              </span>
-              多种类型
-            </span>
-          )}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {TYPES.map((t) => (
-          <SelectItem key={t.value} value={t.value}>
-            <t.icon className={t.text} />
-            {t.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

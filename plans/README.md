@@ -65,5 +65,7 @@ plans/
 | [2026-11-08-icons](./2026-11-08-icons/00-overview.md) | 项目和模块的图标：项目默认用文件夹里项目自己的图标（借鉴 Orca 的约定路径 + 入口文件声明，只做本地、不联网），可以自选内置图标 / emoji / 本机图片；新建和编辑项目合成一个弹窗，图标、名称、文件夹都能改，选了文件夹名称为空时用文件夹名 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-local-sessions](./2026-11-08-local-sessions/00-overview.md) | 设置里三选一会话来源（Claude Code / Codex / codeg），读本机会话快速选择填入链接；会话链接显示成 agent 图标 + 会话名 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-auto-update](./2026-11-08-auto-update/00-overview.md) | 仓库公开（MIT）；检查更新：启动后后台检查，右下角提示「去更新」，下载签名的更新包后自动重启；设置新增「关于」页 | `[partial]`：已实现，等用户验收 |
+| [2026-11-09-open-at-login](./2026-11-09-open-at-login/00-overview.md) | 开机自动启动（只进托盘、不弹主窗口，默认关）；设置分页改成「常规 / 外观 / 改进点 / 数据 / 更新」，开机自启和快捷键合进「常规」 | `[partial]`：已实现，等用户验收 |
+| [2026-11-09-motion](./2026-11-09-motion/00-overview.md) | 补齐主窗口动效：分段按钮和侧栏的滑块、主区域和详情的淡入、队列行改状态 / 折叠展开时滑到新位置 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

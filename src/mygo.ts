@@ -321,6 +321,17 @@ export interface Settings {
    * 1, 6 or 24 (out of the box).
    */
   updateInterval: number;
+  /**
+   * OpenAtLogin starts the app in the tray when the user logs in. It is
+   * read from the system each time, so that turning it off there (Task
+   * Manager on Windows) shows here too. Off out of the box.
+   */
+  openAtLogin: boolean;
+  /**
+   * CanOpenAtLogin is false in development builds: the system would start
+   * the temporary build.
+   */
+  canOpenAtLogin: boolean;
   /** LookDefaults are the looks the app has out of the box. */
   lookDefaults: LookDefaults;
   /** DataDir is the folder of the database. */
@@ -820,6 +831,13 @@ export const Atlas = {
    */
   setModuleIcon(id: number, icon: string): Promise<Module> {
     return call("Atlas.SetModuleIcon", id, icon);
+  },
+  /**
+   * SetOpenAtLogin makes the app start in the tray when the user logs in, or
+   * stops it from doing so. Development builds cannot.
+   */
+  setOpenAtLogin(on: boolean): Promise<Settings> {
+    return call("Atlas.SetOpenAtLogin", on);
   },
   /** SetProjectDescription replaces a project's notes, in Markdown. */
   setProjectDescription(id: number, description: string): Promise<Project> {

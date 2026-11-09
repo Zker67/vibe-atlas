@@ -24,6 +24,7 @@ import { errorMessage } from "@/lib/api";
 import { useDebouncedSave } from "@/lib/debounce";
 import { isComposing } from "@/lib/keys";
 import { statusInfo, STATUSES, TYPES, UNSORTED } from "@/lib/labels";
+import { Glide, useChangedOnce, useEntrance } from "@/lib/motion";
 import { duration, formatTime, fullTime, useNow } from "@/lib/time";
 import { ancestors, buildForest } from "@/lib/tree";
 import { cn } from "@/lib/utils";
@@ -72,10 +73,21 @@ import { SessionPicker } from "./session-picker";
 export function ItemDetail() {
   const many = useAtlas((s) => s.selectedIds.size > 1);
   const item = useAtlas((s) => s.items.find((i) => i.id === s.selectedId));
-  if (many) return <SelectionDetail />;
-  if (!item) return <DetailEmpty />;
-  // A new key per item: the fields and the editor start over with its text.
-  return <Detail key={item.id} item={item} />;
+  // Fades in between nothing, one item and several; from one item to another it changes at once.
+  const box = useRef<HTMLDivElement>(null);
+  useEntrance(box, many ? "many" : item ? "one" : "none");
+  return (
+    <div ref={box} className="h-full min-h-0 animate-in fade-in-0 duration-200">
+      {many ? (
+        <SelectionDetail />
+      ) : !item ? (
+        <DetailEmpty />
+      ) : (
+        // A new key per item: the fields and the editor start over with its text.
+        <Detail key={item.id} item={item} />
+      )}
+    </div>
+  );
 }
 
 const KEYS: [string, string][] = [
@@ -133,7 +145,7 @@ function Detail({ item }: { item: Item }) {
             <StatusSegments item={item} />
           </Prop>
           <Prop label="类型" icon={Shapes}>
-            <TypeSelect item={item} />
+            <TypePicker value={item.type} onPick={(type) => void setItemType(item.id, type)} />
           </Prop>
           <Prop label="模块" icon={Folder}>
             <ModuleSelect item={item} />
@@ -202,9 +214,31 @@ function StatusSegments({ item }: { item: Item }) {
 
 /** Three segments, 待办 | 进行中 | 完成, value lit, none for a mix: a click on another picks it. */
 export function StatusPicker({ value, onPick }: { value: ItemStatus | null; onPick(status: ItemStatus): void }) {
+  const options = STATUSES.map((s) => ({ ...s, chip: STATUS_CHIP[s.value] }));
+  return <Segments label="状态" options={options} value={value} onPick={onPick} />;
+}
+
+/** Three segments, 改进 | bug | 新需求, value lit, none for a mix: a click on another picks it. */
+export function TypePicker({ value, onPick }: { value: ItemType | null; onPick(type: ItemType): void }) {
+  return <Segments label="类型" options={TYPES} value={value} onPick={onPick} />;
+}
+
+/** A row of segments, the one of value lit in its signal color: a click on another picks it. */
+function Segments<T extends string>({
+  label,
+  options,
+  value,
+  onPick,
+}: {
+  label: string;
+  options: { value: T; label: string; icon: LucideIcon; chip: string }[];
+  value: T | null;
+  onPick(value: T): void;
+}) {
   return (
-    <div role="group" aria-label="状态" className="inline-flex h-7 max-w-full items-center gap-0.5 rounded-lg bg-muted p-0.5">
-      {STATUSES.map((s) => {
+    <div role="group" aria-label={label} className="relative inline-flex h-7 max-w-full items-center gap-0.5 rounded-lg bg-muted p-0.5">
+      <Glide className="signal-chip" />
+      {options.map((s) => {
         const on = s.value === value;
         return (
           <button
@@ -215,8 +249,8 @@ export function StatusPicker({ value, onPick }: { value: ItemStatus | null; onPi
               if (!on) onPick(s.value);
             }}
             className={cn(
-              "inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] duration-200 hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-              on && cn("signal-chip hover:bg-transparent", STATUS_CHIP[s.value]),
+              "relative inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] duration-200 hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+              on && cn("signal-text hover:bg-transparent", s.chip),
             )}
           >
             <s.icon className={cn("size-3.5 transition-opacity", !on && "opacity-60")} />
@@ -486,11 +520,14 @@ function LinkField({ item }: { item: Item }) {
     ) : (
       field
     );
+  // Once it changed from what it was as the item opened, what it shows now fades in.
+  const shows = open || error ? "field" : source ? "card" : "add";
+  const fade = useChangedOnce(shows) && "animate-in fade-in-0 duration-150";
 
   if (!open && !error) {
     if (!source) {
       return withPicker(
-        <div className="flex min-w-0 items-center gap-0.5">
+        <div className={cn("flex min-w-0 items-center gap-0.5", fade)}>
           <Button variant="ghost" size="sm" className="h-7 px-1.5 font-normal text-muted-foreground" onClick={() => setOpen(true)}>
             <Plus />
             添加链接
@@ -510,7 +547,7 @@ function LinkField({ item }: { item: Item }) {
     const look = linkLook(link);
     const label = session ? sessionLabel(session) : look.text;
     return withPicker(
-      <div className="group/link relative flex min-w-0 items-center">
+      <div className={cn("group/link relative flex min-w-0 items-center", fade)}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -560,7 +597,7 @@ function LinkField({ item }: { item: Item }) {
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", fade)}>
       <InputGroup className="h-7">
         <InputGroupInput
           autoFocus

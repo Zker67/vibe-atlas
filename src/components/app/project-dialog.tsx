@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Boxes, FolderKanban, FolderOpen, FolderPlus, LoaderCircle, Pencil, Wand, X } from "lucide-react";
+import { Boxes, FolderKanban, FolderOpen, FolderPlus, Info, LoaderCircle, Pencil, Wand, X } from "lucide-react";
 import { Atlas } from "@/mygo";
 import { errorMessage, run } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { addProject, createModule, detectProjectIcon, editProject, renameModule, setModuleIcon } from "@/state/atlas";
@@ -74,9 +74,20 @@ function ProjectForm({ request }: { request: ProjectRequest }) {
   const shown = icon || detected;
   return (
     <>
-      <DialogHeader>
+      <DialogHeader className="flex-row items-center gap-1.5">
         <DialogTitle>{editing ? "编辑项目" : "新建项目"}</DialogTitle>
-        <DialogDescription>选好文件夹后，没填的名称用文件夹名，图标自动用项目自己的。</DialogDescription>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="说明"
+              className="grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">选好文件夹后，没填的名称用文件夹名，图标自动用项目自己的。</TooltipContent>
+        </Tooltip>
       </DialogHeader>
 
       <div className="flex items-start gap-3">
@@ -129,7 +140,7 @@ function ProjectForm({ request }: { request: ProjectRequest }) {
             maxLength={60}
             aria-label="项目名称"
             aria-invalid={!!error}
-            placeholder={folder ? "留空就用文件夹名" : "项目名称，比如「规则恐怖」"}
+            placeholder={folder ? "留空就用文件夹名" : "项目名称，比如「鹈鹕骑自行车」"}
             onChange={(e) => {
               setName(e.target.value);
               setError("");

@@ -53,6 +53,12 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		finish(err, "install update")
 		return
 	}
+	if os.Getenv("VIBE_ATLAS_SMOKE_LOGIN") == "1" {
+		login, err := a.smokeOpenAtLogin(main)
+		report["openAtLogin"] = login
+		finish(err, "open at login")
+		return
+	}
 	if err := waitFor(capture, "[data-capture-ready]"); err != nil {
 		finish(err, "capture page loads")
 		return
@@ -231,6 +237,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 	report["select"] = selected
 	if err != nil {
 		finish(err, "select several")
+		return
+	}
+
+	moved, err := a.smokeMotion(main)
+	report["motion"] = moved
+	if err != nil {
+		finish(err, "motion")
 		return
 	}
 

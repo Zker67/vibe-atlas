@@ -197,7 +197,10 @@ func (a *app) start() {
 		go a.smokeTest(main, capture)
 		return
 	}
-	main.OnReadyToShow(main.Show)
+	// Started at login, the app waits in the tray, its windows loaded.
+	if !mygo.App.WasOpenedAtLogin() {
+		main.OnReadyToShow(main.Show)
+	}
 	a.makeTray()
 	go a.watchUpdates()
 }

@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import type { Item, ItemStatus, ItemType } from "@/mygo";
+import { useFlip } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { isComposing } from "@/lib/keys";
 import { nextType, statusInfo, UNSORTED } from "@/lib/labels";
@@ -841,6 +842,11 @@ export function Queue() {
   const viewport = useRef<HTMLDivElement>(null);
   const marquee = useRef<HTMLDivElement>(null);
   const startMarquee = useMarquee(viewport, marquee);
+  // Rows slide to where they go as their status changes, sections and
+  // children open and close, and rows come and go; another project or
+  // other filters show a new list at once.
+  const projectId = useAtlas((s) => s.projectId);
+  useFlip(viewport, `${projectId}|${typeFilter}|${moduleFilter}|${statusFilter}`);
 
   const { doing, todo, done } = useMemo(
     () => layoutQueue({ items, typeFilter, moduleFilter, statusFilter, collapsed }),
@@ -909,7 +915,7 @@ export function Queue() {
   const has = (section: ItemStatus) => statusFilter === "all" || statusFilter === section;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col animate-in fade-in-0 duration-200">
       <Scroller ref={viewport} className="flex-1" viewportClassName="relative px-3 pt-2 pb-4" onPointerDown={startMarquee}>
         <div
           ref={marquee}
@@ -928,7 +934,13 @@ export function Queue() {
             )}
             {has("todo") && (
               <QueueSection section="todo" count={countOf(todo)} collapsible={collapsible} empty={todo.length === 0}>
-                {todo.length === 0 ? <p className="px-2 py-1.5 text-xs text-muted-foreground">没有待办了。</p> : rows(todo)}
+                {todo.length === 0 ? (
+                  <p data-flip="todo-empty" className="px-2 py-1.5 text-xs text-muted-foreground">
+                    没有待办了。
+                  </p>
+                ) : (
+                  rows(todo)
+                )}
               </QueueSection>
             )}
             {has("done") && (
@@ -936,6 +948,7 @@ export function Queue() {
                 {rows(done.slice(0, doneLimit))}
                 {done.length > doneLimit && (
                   <Button
+                    data-flip="more"
                     variant="ghost"
                     size="sm"
                     className="mt-1 self-start text-muted-foreground"
@@ -1001,7 +1014,7 @@ function QueueSection({ section, count, collapsible, empty, children }: QueueSec
         target && "bg-primary/5 shadow-[inset_0_0_0_1.5px_var(--primary)]",
       )}
     >
-      <h2 className="flex items-center">
+      <h2 data-flip={`section-${section}`} className="flex items-center">
         {collapsible ? (
           <button
             type="button"
@@ -1021,7 +1034,7 @@ function QueueSection({ section, count, collapsible, empty, children }: QueueSec
           </span>
         )}
       </h2>
-      {open && !empty && <div className="flex flex-col">{children}</div>}
+      {open && !empty && <div className="flex flex-col animate-in fade-in-0 slide-in-from-top-1 duration-200">{children}</div>}
       {open && empty && section === "todo" && children}
     </section>
   );
@@ -1131,6 +1144,7 @@ const ItemRow = memo(function ItemRow({
           {...listeners}
           data-queue-row=""
           data-item-id={item.id}
+          data-flip={`item-${item.id}`}
           aria-current={focus || undefined}
           onClick={(e) => clickRow(item.id, e)}
           onDoubleClick={(e) => {
@@ -1684,6 +1698,7 @@ function DraftRow({ after, depth, nested }: { after: Item; depth: number; nested
   return (
     <div
       data-queue-draft=""
+      data-flip={`draft-${after.id}`}
       style={{ paddingLeft: PAD + depth * INDENT }}
       className="relative flex h-9 items-center gap-2 rounded-md bg-accent/50 pr-2"
     >

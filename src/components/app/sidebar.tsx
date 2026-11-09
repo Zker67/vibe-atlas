@@ -4,6 +4,7 @@ import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { run } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
+import { Glide } from "@/lib/motion";
 import { UNSORTED } from "@/lib/labels";
 import {
   ContextMenu,
@@ -132,6 +133,9 @@ interface RowProps {
   dropModule?: number;
 }
 
+/** The fill under a list's row picked, sliding to the one picked now; hidden while rows are dragged. */
+const SIDEBAR_GLIDE = { className: "bg-sidebar-accent in-[.dragging-rows]:invisible", selector: '[data-active="true"]' };
+
 /** The classes of a row's icon. */
 const rowIcon = (active: boolean) => cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground");
 
@@ -144,9 +148,11 @@ function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDou
       onClick={editor ? undefined : onClick}
       onDoubleClick={onDoubleClick}
       data-module-drop={dropModule}
+      data-active={active}
       className={cn(
-        "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
-        active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60",
+        "signal-row relative flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
+        // The list's Glide is its fill, but while rows are dragged, when the Glide hides.
+        active ? "font-medium text-sidebar-accent-foreground in-[.dragging-rows]:bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         dropOver > 0 && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
       )}
     >
@@ -172,7 +178,8 @@ function Projects() {
   return (
     <section className="flex max-h-[45%] min-h-0 flex-col">
       <SectionHeader title="项目" addLabel="新建项目" onAdd={newProject} />
-      <Scroller viewportClassName="flex-initial px-2 pb-2">
+      <Scroller viewportClassName="relative flex-initial px-2 pb-2">
+        <Glide {...SIDEBAR_GLIDE} />
         <SortableList ids={projects.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
           {projects.map((p) => (
             <ProjectRow key={p.id} project={p} active={p.id === projectId} />
@@ -323,7 +330,8 @@ function Modules() {
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t">
       <SectionHeader title="模块" addLabel="新建模块" onAdd={newModule} />
-      <Scroller className="flex-1" viewportClassName="px-2 pb-3">
+      <Scroller className="flex-1" viewportClassName="relative px-2 pb-3">
+        <Glide {...SIDEBAR_GLIDE} />
         <Row icon={LayoutList} label="全部" count={open.length} active={filter === "all"} onClick={() => setModuleFilter("all")} />
         <SortableList ids={modules.map((m) => m.id)} onMove={(id, overId) => moveModule(id, overId)}>
           {modules.map((m) => (
