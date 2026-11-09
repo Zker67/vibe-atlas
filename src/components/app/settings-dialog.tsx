@@ -6,14 +6,18 @@ import {
   Check,
   CircleAlert,
   Database,
+  Download,
+  ExternalLink,
   FolderOpen,
   Globe,
+  Info,
   Keyboard,
   ListTree,
   Monitor,
   Moon,
   Palette,
   Pencil,
+  RefreshCw,
   RotateCcw,
   Sun,
   X,
@@ -32,6 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAtlas } from "@/state/atlas";
 import { openHelp, openSettings, showSettingsTab, useDialogs, type SettingsTab } from "@/state/dialogs";
+import { checkForUpdates, installUpdate, useUpdates } from "@/state/updates";
 import { AgentIcon } from "./agent-icon";
 import { LookSettings } from "./look-settings";
 import { SettingCard } from "./setting-card";
@@ -48,6 +53,7 @@ const TABS: { value: SettingsTab; label: string; icon: LucideIcon }[] = [
   { value: "items", label: "改进点", icon: ListTree },
   { value: "appearance", label: "外观", icon: Palette },
   { value: "data", label: "数据", icon: Database },
+  { value: "about", label: "关于", icon: Info },
 ];
 
 export function SettingsDialog() {
@@ -67,7 +73,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数</DialogDescription>
+              <DialogDescription className="sr-only">全局快捷键（快速记录、老板键）、子改进点的链接、会话来源、外观（主题、背景、毛玻璃、透明度）、数据位置和回收站保留天数、版本和检查更新</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -97,6 +103,7 @@ export function SettingsDialog() {
                     {t.value === "items" && <ItemsPanel settings={settings} />}
                     {t.value === "appearance" && <AppearancePanel settings={settings} />}
                     {t.value === "data" && <DataPanel settings={settings} />}
+                    {t.value === "about" && <AboutPanel />}
                   </div>
                 </Scroller>
               </Tabs.Content>
@@ -265,6 +272,67 @@ function DataPanel({ settings }: { settings: Settings }) {
         </ToggleGroup>
       </SettingCard>
     </>
+  );
+}
+
+const RELEASES = "https://github.com/Zker67/vibe-atlas/releases";
+
+function AboutPanel() {
+  const update = useUpdates((s) => s.update);
+  const checkError = useUpdates((s) => s.checkError);
+  const upToDate = useUpdates((s) => s.upToDate);
+  const phase = update?.phase;
+  const busy = phase === "checking" || phase === "downloading" || phase === "restarting";
+  const found = phase === "available" || phase === "failed";
+
+  let status = "";
+  if (update && !update.enabled) status = "这个版本不能自动更新：开发版本，或者程序所在的文件夹不能写入。";
+  else if (phase === "checking") status = "正在检查…";
+  else if (phase === "downloading") status = `正在更新到 ${update?.available}，已下载 ${Math.floor((update?.progress ?? 0) * 100)}%`;
+  else if (phase === "restarting") status = "已更新，马上重新打开";
+  else if (phase === "failed") status = update?.error ?? "";
+  else if (found) status = `发现新版本 ${update?.available}，更新后自动重新打开。`;
+  else if (checkError) status = checkError;
+  else if (upToDate) status = "已经是最新版本。";
+
+  return (
+    <SettingCard
+      title="版本"
+      description="启动几秒后在后台检查一次新版本，之后每天一次；有新版本时右下角会提示。更新包从 GitHub 下载，校验签名后替换，完成后自动重新打开，数据不受影响。"
+    >
+      <p className="text-sm">
+        Vibe Atlas <span className="font-mono">{update?.version ?? ""}</span>
+      </p>
+      {status && (
+        <p className={cn("text-xs", phase === "failed" || (checkError && !found) ? "text-destructive" : "text-muted-foreground")}>
+          {status}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {found ? (
+          <Button size="sm" onClick={installUpdate}>
+            <Download />
+            {phase === "failed" ? "重试" : "去更新"}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || !update?.enabled}
+            onClick={() => void checkForUpdates()}
+          >
+            <RefreshCw className={cn(phase === "checking" && "animate-spin")} />
+            检查更新
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" asChild>
+          <a href={RELEASES} target="_blank" rel="noreferrer">
+            <ExternalLink />
+            所有版本
+          </a>
+        </Button>
+      </div>
+    </SettingCard>
   );
 }
 

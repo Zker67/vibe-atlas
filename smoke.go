@@ -28,6 +28,7 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		} else {
 			report["ok"] = true
 		}
+		report["version"] = mygo.App.Version()
 		shortcut, problem := a.keyState(&a.capKey)
 		report["shortcut"] = shortcut
 		report["shortcutRegistered"] = problem == ""
@@ -46,6 +47,12 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 	report["mainReadyMs"] = time.Since(start).Milliseconds()
+	if os.Getenv("VIBE_ATLAS_SMOKE_UPDATE") == "install" {
+		installed, err := a.smokeInstallUpdate()
+		report["installUpdate"] = installed
+		finish(err, "install update")
+		return
+	}
 	if err := waitFor(capture, "[data-capture-ready]"); err != nil {
 		finish(err, "capture page loads")
 		return
@@ -231,6 +238,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 	report["trash"] = trashed
 	if err != nil {
 		finish(err, "trash")
+		return
+	}
+
+	updated, err := a.smokeUpdates(main)
+	report["updates"] = updated
+	if err != nil {
+		finish(err, "updates")
 		return
 	}
 	finish(nil, "")

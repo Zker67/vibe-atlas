@@ -349,6 +349,28 @@ export interface TypeStats {
   counts: Counts;
 }
 
+/** UpdatePhase is where updating the app is. */
+export type UpdatePhase = "idle" | "checking" | "available" | "downloading" | "restarting" | "failed";
+
+/** UpdateState is what the pages show of updating the app. */
+export interface UpdateState {
+  /** Version is the version running. */
+  version: string;
+  /**
+   * Enabled reports whether this copy can update itself: a build with
+   * updates, where it can write its own folder. Development builds
+   * cannot.
+   */
+  enabled: boolean;
+  phase: UpdatePhase;
+  /** Available is the newer version found, or "". */
+  available: string;
+  /** Progress is how much of it downloaded, 0 to 1. */
+  progress: number;
+  /** Error says why installing it failed, in the phase failed. */
+  error: string;
+}
+
 /** Wallpaper is the picture behind the main window. */
 export interface Wallpaper {
   /** URL is where the page loads the picture from, or "" when there is none. */
@@ -396,6 +418,10 @@ export const Atlas = {
    */
   captureItem(item: NewItem): Promise<Item> {
     return call("Atlas.CaptureItem", item);
+  },
+  /** CheckForUpdates checks for a newer version now, as the user asked. */
+  checkForUpdates(): Promise<UpdateState> {
+    return call("Atlas.CheckForUpdates");
   },
   /**
    * ChooseFolder asks for a project's folder, opening at current when it
@@ -525,6 +551,13 @@ export const Atlas = {
    */
   imageBase(): Promise<string> {
     return call("Atlas.ImageBase");
+  },
+  /**
+   * InstallUpdate downloads the newer version found and starts the app again
+   * in it. It returns at once; updateChanged tells how it goes.
+   */
+  installUpdate(): Promise<void> {
+    return call("Atlas.InstallUpdate");
   },
   /**
    * Items returns the items of a project: doing, to do in the user's order,
@@ -861,6 +894,10 @@ export const Atlas = {
   trashItems(ids: number[]): Promise<number> {
     return call("Atlas.TrashItems", ids);
   },
+  /** UpdateState returns what there is to show of updating the app. */
+  updateState(): Promise<UpdateState> {
+    return call("Atlas.UpdateState");
+  },
 } as const;
 
 // ---- Events ----
@@ -876,4 +913,9 @@ export const events = {
   settingsChanged: event<Settings>("settingsChanged"),
   /** CaptureShown is sent to the quick capture panel each time it shows. */
   captureShown: event<CaptureState>("captureShown"),
+  /**
+   * UpdateChanged is broadcast to every window as a check for a newer version
+   * and its installation go on.
+   */
+  updateChanged: event<UpdateState>("updateChanged"),
 } as const;

@@ -32,6 +32,7 @@ import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
 import { TrashView } from "@/components/app/trash";
+import { UpdateToast } from "@/components/app/update-toast";
 import { purgeHeld } from "@/lib/purge-key";
 import {
   copyItem,
@@ -112,6 +113,7 @@ export function MainApp() {
       <HelpDialog />
       {/* Bottom right: clear of the field that adds items. */}
       <Toaster position="bottom-right" />
+      <UpdateToast />
     </TooltipProvider>
   );
 }

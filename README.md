@@ -6,12 +6,12 @@
 
 `快捷键随手记` · `项目 / 模块 / 改进点` · `复制给 AI` · `自动汇总总览` — 本地桌面软件，Windows 先行。
 
-[![License](https://img.shields.io/badge/license-Private-blue?style=flat-square)](#license)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](#license)
 [![Stack](https://img.shields.io/badge/stack-Go%20%2B%20MyGo%20%2B%20React-61dafb?style=flat-square)](#开发栈)
-[![Install](https://img.shields.io/badge/install-git%20clone%20%2B%20bun-orange?style=flat-square)](#启动)
+[![Install](https://img.shields.io/badge/install-GitHub%20Releases-orange?style=flat-square)](#启动)
 [![Structure](https://img.shields.io/badge/结构-项目%20%2F%20模块%20%2F%20改进点-brightgreen?style=flat-square)](#核心能力)
 [![Hotkey](https://img.shields.io/badge/快速记录-Ctrl%2BAlt%2BSpace-yellow?style=flat-square)](#使用流程)
-[![Local](https://img.shields.io/badge/本地优先-不联网%20%C2%B7%20不内置%20AI-ff69b4?style=flat-square)](#配置)
+[![Local](https://img.shields.io/badge/本地优先-数据不出本机%20%C2%B7%20不内置%20AI-ff69b4?style=flat-square)](#配置)
 
 [使用流程](#使用流程) · [核心能力](#核心能力) · [启动](#启动) · [配置](#配置) · [开发栈](#开发栈) · [协同关系](#协同关系)
 
@@ -50,7 +50,13 @@
 
 ## 启动
 
-这是一个桌面软件，没有发布到任何包仓库。从源码运行或自己打包，需要 Go 和 Bun。
+### 下载安装
+
+到 [GitHub Releases](https://github.com/Zker67/vibe-atlas/releases) 下载 `vibe-atlas-setup-<版本>-amd64.exe`，装在当前用户目录，不需要管理员权限。之后有新版本时，主窗口右下角会提示「去更新」：点一下，下载完自动重新打开，数据不受影响；也可以在 设置 → 关于 手动检查。
+
+程序没有代码签名，Windows SmartScreen 拦截时点「更多信息」→「仍要运行」。
+
+从源码运行或自己打包需要 Go 和 Bun。
 
 ### 本地运行
 
@@ -76,7 +82,7 @@ bun run build
 | `Vibe Atlas.exe` | 免安装版，可以直接运行；复制到别处时把同目录的 `icon.png`、`tray.png` 一起带上 |
 | `vibe-atlas-setup-<版本>-amd64.exe` | 安装包 |
 
-程序没有代码签名，Windows SmartScreen 拦截时点「更多信息」→「仍要运行」。
+自己打包的版本不带更新签名，不会自动更新；带签名打包和发布新版本的步骤见 [docs/operations.md](docs/operations.md#发布新版本)。
 
 ### 检查
 
@@ -118,6 +124,7 @@ bun test tests
 | 子改进点沿用上级的链接 | 打开 | 设置 → 改进点 |
 | 会话来源 | 不使用（可选 Claude Code / Codex / codeg） | 设置 → 改进点 |
 | 回收站保留天数 | 30 天 | 设置 → 数据 |
+| 检查更新 | 启动后和每天一次，自动检查 | 设置 → 关于 |
 
 环境变量只用于开发和测试：
 
@@ -125,6 +132,7 @@ bun test tests
 |---|---|---|
 | `VIBE_ATLAS_DATA_DIR` | `%AppData%\Vibe Atlas` | 换一个数据目录 |
 | `VIBE_ATLAS_SMOKE_REPORT` | 无 | 进入冒烟测试模式，并指定报告文件 |
+| `VIBE_ATLAS_UPDATE_DIR` | 无 | 从本地文件夹读更新包（测试用，签名照样校验） |
 
 **数据位置**：
 
@@ -201,4 +209,4 @@ vibe-atlas/
 
 ## License
 
-私有仓库，未开源，没有 LICENSE 文件。© Zker67
+[MIT](./LICENSE) © Zker67

@@ -2,7 +2,7 @@
 
 > 本文件维护项目的接口、数据结构和跨模块合同。
 
-本项目没有对外 API（不做 agent 集成，也不开本地服务）。唯一的内部接口是：前端通过 MyGo 生成的 TypeScript 客户端 [`src/mygo.ts`](../src/mygo.ts) 调用 Go 端绑定的 `Atlas` 服务（[`atlas.go`](../atlas.go)）。
+本项目没有对外 API（不做 agent 集成，也不开本地服务）。唯一的对外请求是检查和下载更新：读 `Zker67/vibe-atlas` 的 GitHub Releases 里公开的清单和更新包。唯一的内部接口是：前端通过 MyGo 生成的 TypeScript 客户端 [`src/mygo.ts`](../src/mygo.ts) 调用 Go 端绑定的 `Atlas` 服务（[`atlas.go`](../atlas.go)）。
 
 - `src/mygo.ts` 由 `bun run generate` 生成，不要手改；Go 端方法、类型、事件和注释改了以后重新生成。
 - Go 端报错时，错误信息是写给用户看的中文，前端原样显示。
@@ -26,6 +26,7 @@
 | 总览 | `overview` | 由改进点即时汇总，不单独存储 |
 | 设置 | `settings`、`setShortcut`、`setBossKey`、`pauseShortcut`、`setTheme`、`setEffects`、`setBackground`、`setShareLinks`、`setTrashDays`、`setCurrentProject`、`openDataFolder` | 新快捷键注册失败时保留原来的；快速记录和老板键不能相同；`setBossKey("")` 清除老板键；`pauseShortcut` 在录制新快捷键时临时释放两个全局快捷键；`setTrashDays` 只收 `0`（一直保留）、`7`、`30`、`90`，改短时立刻清理超期的条目 |
 | 背景与透明度 | `chooseWallpaper`、`clearWallpaper`、`setWallpaperLook`、`setGlass`、`setWindowOpacity`、`previewWindowOpacity` | `chooseWallpaper` 打开系统的选择文件窗口，取消时返回原设置；图片只收 PNG、JPG、WebP、GIF、BMP，最大 20 MB，并按内容校验类型。数值超出范围时由 Go 限制到范围内。`previewWindowOpacity` 只改窗口，不保存 |
+| 检查更新 | `updateState`、`checkForUpdates`、`installUpdate` | 在 [`updates.go`](../updates.go)。`checkForUpdates` 是用户手动检查：不能自动更新的版本报「不能自动更新」，检查失败报「检查更新失败」。`installUpdate` 立刻返回，在后台下载、校验签名、替换，经 `updateChanged` 报告进度，装好后自动重启；还没找到新版本时报错 |
 | 快速记录 | `captureItem`、`hideCapture`、`showMain` | `captureItem` 同 `createItem`，并记住这次的项目；小窗会一起传可选的 `note`、`deeplink` |
 
 ## 事件
@@ -34,6 +35,7 @@
 |---|---|---|
 | `changed` | 所有窗口 | `{ projectId }`：这个项目的模块或改进点变了；`0` 表示项目列表变了（重命名、删除模块也用 `0`）。窗口收到后重新读取 |
 | `settingsChanged` | 所有窗口 | 新的设置 |
+| `updateChanged` | 所有窗口 | 新的 `UpdateState`：检查、发现新版本、下载进度、失败、马上重启 |
 | `captureShown` | 快速记录小窗 | `{ projectId }`：每次呼出时建议记到的项目（主窗口当前项目 → 上次记录的项目 → 第一个项目） |
 
 ## 数据结构
@@ -53,6 +55,7 @@
 | `Wallpaper` | `url`（页面加载图片的地址，没有图片时为空；Windows 上是 `http://wallpaper.localhost/<文件>`，其他平台是 `wallpaper://localhost/<文件>`）、`name`（原文件名）、`look` |
 | `WallpaperLook` | `enabled`（是否显示）、`blur`（0–40 px）、`opacity`（0–100）、`scale`（0 为铺满窗口，否则 20–300 %）、`x`、`y`（0–100 %）；默认显示、不模糊、不透明度 100、铺满、居中 |
 | `Glass` | `blur`（内容面板 0–60 px，框架取它的 60%）、`panel`、`frame`（内容面板和框架的不透明度，0–100）；默认 32 / 90 / 64 |
+| `UpdateState` | `version`（当前版本）、`enabled`（能否自动更新）、`phase`（`idle` / `checking` / `available` / `downloading` / `restarting` / `failed`）、`available`（新版本号或空）、`progress`（0–1）、`error`（安装失败的原因） |
 | `LookDefaults` | `wallpaperLook`、`glass`、`windowOpacity`、`minWindowOpacity`：设置里「恢复默认」用的值 |
 
 状态切换时的时间规则：变成进行中记录 `startedAt` 并清空 `doneAt`；变成完成记录 `doneAt`；退回待办两者都清空。`reopenItem` 把完成的改进点送回完成前的状态：`startedAt` 不为 0（在进行中时完成）就回到进行中并保留 `startedAt`，否则回到待办；只清空 `doneAt`，不是完成的不变。

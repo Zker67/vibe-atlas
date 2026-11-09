@@ -67,6 +67,8 @@ type app struct {
 	capKey    hotkey    // opens quick capture
 	bossKey   hotkey    // hides every window at once
 	shortcutM sync.Mutex
+
+	upd updates // updating the app to newer versions (updates.go)
 }
 
 func (a *app) setQuitting() {
@@ -98,6 +100,7 @@ func (a *app) start() {
 		return
 	}
 	a.atlas.setStore(db)
+	a.initUpdates()
 	mygo.App.OnQuit(func() { db.Close() })
 	applyTheme(a.atlas.theme(db))
 
@@ -196,6 +199,7 @@ func (a *app) start() {
 	}
 	main.OnReadyToShow(main.Show)
 	a.makeTray()
+	go a.watchUpdates()
 }
 
 // guardPage keeps a window on the app's own pages: links open in the apps
