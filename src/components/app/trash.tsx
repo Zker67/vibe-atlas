@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Flame, FolderKanban, RotateCcw, Trash2, X } from "lucide-react";
-import type { TrashEntry } from "@/mygo";
+import { Flame, RotateCcw, Trash2, X } from "lucide-react";
+import type { Project, TrashEntry } from "@/mygo";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
 import { statusInfo } from "@/lib/labels";
 import { PURGE_KEY } from "@/lib/purge-key";
@@ -12,6 +12,7 @@ import { Scroller } from "@/components/ui/scroller";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { emptyTrash, purgeTrash, restoreTrash, setView, useAtlas } from "@/state/atlas";
 import { askConfirm, showSettingsTab } from "@/state/dialogs";
+import { ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { TypeIcon } from "./item-marks";
 
@@ -104,7 +105,7 @@ export function TrashView() {
   const chosen = trash.filter((e) => picked.has(e.id));
   const cursor = selection.cursor;
 
-  const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const projectOf = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const groups = useMemo(() => {
     const out: { key: string; label: string; entries: TrashEntry[] }[] = [];
     for (const e of trash) {
@@ -239,7 +240,7 @@ export function TrashView() {
                     <TrashRow
                       key={e.id}
                       entry={e}
-                      project={projectName.get(e.item.projectId) ?? ""}
+                      project={projectOf.get(e.item.projectId)}
                       expires={expiry(e.deletedAt, days, now)}
                       selected={picked.has(e.id)}
                       cursor={cursor === e.id}
@@ -275,7 +276,7 @@ export function TrashView() {
 
 interface TrashRowProps {
   entry: TrashEntry;
-  project: string;
+  project: Project | undefined;
   expires: string;
   selected: boolean;
   cursor: boolean;
@@ -310,8 +311,8 @@ function TrashRow({ entry, project, expires, selected, cursor, onPick, onRestore
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {project && (
             <span className="flex min-w-0 items-center gap-1">
-              <FolderKanban className="size-3 shrink-0" />
-              <span className="truncate">{project}</span>
+              <ProjectIcon project={project} className="size-3" />
+              <span className="truncate">{project.name}</span>
             </span>
           )}
           {entry.lifted > 0 && <span className="shrink-0">· {entry.lifted} 个子改进点已上移，恢复时放回</span>}

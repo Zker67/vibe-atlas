@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ChartPie, ChevronDown, FolderOpen, FolderPlus, FolderX, ListTodo, Pencil, Trash2, TriangleAlert, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChartPie, ChevronDown, Folder, FolderOpen, FolderPlus, FolderX, ListTodo, SquarePen, Trash2, TriangleAlert, X } from "lucide-react";
 import type { Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { statusInfo, TYPES } from "@/lib/labels";
@@ -27,15 +27,33 @@ import {
   type TypeFilter,
   type View,
 } from "@/state/atlas";
+import { askProject } from "@/state/dialogs";
+import { ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
-import { confirmDeleteProject, promptRenameProject } from "./sidebar";
+import { confirmDeleteProject } from "./sidebar";
 
 function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }
 
+/**
+ * The folder of the project bar: closed, opening under the pointer, and
+ * popping open once each click. A new key replays the pop.
+ */
+function FolderIcon({ popping, onPopped }: { popping: boolean; onPopped(): void }) {
+  return (
+    <span data-popping={popping || undefined} onAnimationEnd={onPopped} className="folder-icon grid shrink-0 place-items-center">
+      <Folder className="folder-closed col-start-1 row-start-1" />
+      <FolderOpen className="folder-open col-start-1 row-start-1" />
+    </span>
+  );
+}
+
 function FolderButton({ project }: { project: Project }) {
+  // Each click plays the pop again, under a new key; it closes once played.
+  const [opening, setOpening] = useState(0);
+  const [popping, setPopping] = useState(false);
   if (!project.folderPath) {
     return (
       <Tooltip>
@@ -56,10 +74,17 @@ function FolderButton({ project }: { project: Project }) {
           variant="ghost"
           size="sm"
           aria-label={folderName(project.folderPath)}
-          className={cn("max-w-40", !project.folderExists && "text-destructive")}
-          onClick={() => openProjectFolder(project.id)}
+          className={cn(
+            "group/folder max-w-40 transition-[color,background-color,scale] duration-150 active:scale-95",
+            project.folderExists ? "text-muted-foreground hover:text-foreground" : "text-destructive",
+          )}
+          onClick={() => {
+            setOpening((n) => n + 1);
+            setPopping(true);
+            openProjectFolder(project.id);
+          }}
         >
-          {project.folderExists ? <FolderOpen /> : <TriangleAlert />}
+          {project.folderExists ? <FolderIcon key={opening} popping={popping} onPopped={() => setPopping(false)} /> : <TriangleAlert />}
           <span className="hidden truncate @min-[520px]:inline">{folderName(project.folderPath)}</span>
         </Button>
       </TooltipTrigger>
@@ -78,15 +103,16 @@ export function ProjectBar({ project }: { project: Project }) {
     <div className="@container flex h-12 shrink-0 items-center gap-1 border-b px-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="max-w-48 min-w-0 px-2 text-sm font-semibold">
+          <Button variant="ghost" size="sm" className="max-w-52 min-w-0 px-2 text-sm font-semibold">
+            <ProjectIcon project={project} className="size-4" />
             <span className="truncate">{project.name}</span>
             <ChevronDown className="text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
-          <DropdownMenuItem onSelect={() => promptRenameProject(project)}>
-            <Pencil />
-            重命名
+          <DropdownMenuItem onSelect={() => askProject(project)}>
+            <SquarePen />
+            编辑项目
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void chooseProjectFolder(project.id)}>
             <FolderPlus />
@@ -105,7 +131,10 @@ export function ProjectBar({ project }: { project: Project }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <FolderButton project={project} />
+      {/* On the right, before the views. */}
+      <div className="ml-auto flex min-w-0 items-center">
+        <FolderButton project={project} />
+      </div>
 
       {/* A segmented control: a faint track, the chosen part raised. */}
       <ToggleGroup
@@ -115,7 +144,7 @@ export function ProjectBar({ project }: { project: Project }) {
         value={view}
         onValueChange={(v) => v && setView(v as View)}
         aria-label="视图"
-        className="ml-auto shrink-0 rounded-lg bg-muted p-0.5"
+        className="shrink-0 rounded-lg bg-muted p-0.5"
       >
         {VIEWS.map((v) => (
           <ToggleGroupItem

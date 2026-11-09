@@ -10,6 +10,7 @@ import {
   type Overview,
   type Place,
   type Project,
+  type ProjectDraft,
   type Settings,
   type TrashEntry,
 } from "@/mygo";
@@ -467,6 +468,35 @@ export async function createProject(name: string): Promise<Project> {
   return p;
 }
 
+/** Adds a project as the project dialog fills it in, and opens it. Throws its error, for the dialog to show. */
+export async function addProject(draft: ProjectDraft): Promise<Project> {
+  const p = await Atlas.addProject(draft);
+  set((s) => ({ projects: [...s.projects, p] }));
+  openProject(p.id);
+  return p;
+}
+
+/** Saves the name, folder and icon of a project. Throws its error, for the dialog to show. */
+export async function editProject(id: number, draft: ProjectDraft): Promise<Project> {
+  const p = await Atlas.editProject(id, draft);
+  mergeProject(p);
+  return p;
+}
+
+/** Sets the icon chosen for a project, "" for 自动. */
+export async function setProjectIcon(id: number, icon: string) {
+  const p = await run(Atlas.setProjectIcon(id, icon));
+  if (p) mergeProject(p);
+  return p;
+}
+
+/** Looks again for the project's own icon in its folder. */
+export async function detectProjectIcon(id: number) {
+  const p = await run(Atlas.detectProjectIcon(id));
+  if (p) mergeProject(p);
+  return p;
+}
+
 export async function renameProject(id: number, name: string): Promise<Project> {
   const p = await Atlas.renameProject(id, name);
   mergeProject(p);
@@ -519,6 +549,13 @@ export async function createModule(name: string): Promise<Module> {
 export async function renameModule(id: number, name: string): Promise<Module> {
   const m = await Atlas.renameModule(id, name);
   set((s) => ({ modules: s.modules.map((x) => (x.id === id ? m : x)) }));
+  return m;
+}
+
+/** Sets the icon chosen for a module, "" for the default. */
+export async function setModuleIcon(id: number, icon: string) {
+  const m = await run(Atlas.setModuleIcon(id, icon));
+  if (m) set((s) => ({ modules: s.modules.map((x) => (x.id === id ? m : x)) }));
   return m;
 }
 

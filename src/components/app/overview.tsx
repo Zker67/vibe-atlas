@@ -21,6 +21,7 @@ import {
   type ModuleFilter,
   type TypeFilter,
 } from "@/state/atlas";
+import { ModuleIcon } from "./entity-icon";
 import { TypeChip, TypeIcon } from "./item-marks";
 
 const HISTORY_PAGE = 100;
@@ -250,7 +251,7 @@ function Summary({ overview }: { overview: OverviewData }) {
                 label={
                   <span className="flex min-w-0 items-center gap-2">
                     {m.moduleId ? (
-                      <Layers className="size-3.5 shrink-0 text-muted-foreground" />
+                      <OverviewModuleIcon id={m.moduleId} />
                     ) : (
                       <Inbox className="size-3.5 shrink-0 text-muted-foreground" />
                     )}
@@ -358,6 +359,12 @@ function BarRow({
       </Tooltip>
     </button>
   );
+}
+
+/** A module's icon in 模块进度. */
+function OverviewModuleIcon({ id }: { id: number }) {
+  const module = useAtlas((s) => s.modules.find((m) => m.id === id));
+  return <ModuleIcon module={module ?? { icon: "" }} className="size-3.5 text-muted-foreground" />;
 }
 
 function useModuleNames() {

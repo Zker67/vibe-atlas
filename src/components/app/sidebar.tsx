@@ -1,5 +1,5 @@
-import { BookOpen, Boxes, CornerDownRight, FolderKanban, Inbox, LayoutList, Pencil, Plus, Settings, Trash2, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BookOpen, Boxes, CornerDownRight, FolderKanban, Inbox, LayoutList, Plus, Settings, SquarePen, Trash2, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { run } from "@/lib/api";
@@ -14,31 +14,34 @@ import {
 } from "@/components/ui/context-menu";
 import { Scroller } from "@/components/ui/scroller";
 import {
-  createModule,
-  createProject,
   deleteModule,
   deleteProject,
+  detectProjectIcon,
   moveModule,
   moveProject,
   openProject,
   renameModule,
   renameProject,
   setModuleFilter,
+  setModuleIcon,
+  setProjectIcon,
   setView,
   useAtlas,
   type ModuleFilter,
 } from "@/state/atlas";
-import { askConfirm, askName, openHelp, openSettings } from "@/state/dialogs";
+import { askConfirm, askModule, askProject, openHelp, openSettings } from "@/state/dialogs";
+import { ModuleIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
+import { IconPopover } from "./icon-picker";
 import { useModuleDropOver } from "./queue";
 import { SortableList, SortableRow } from "./sortable";
 
 export function newProject() {
-  askName({ title: "新建项目", placeholder: "项目名称，比如「规则恐怖」", confirmText: "创建", onSubmit: createProject });
+  askProject();
 }
 
 export function newModule() {
-  askName({ title: "新建模块", placeholder: "模块名称，比如「武器系统」", confirmText: "创建", onSubmit: createModule });
+  askModule();
 }
 
 export function confirmDeleteProject(project: Project) {
@@ -50,10 +53,6 @@ export function confirmDeleteProject(project: Project) {
     destructive: true,
     onConfirm: () => deleteProject(project.id),
   });
-}
-
-export function promptRenameProject(project: Project) {
-  askName({ title: "重命名项目", initial: project.name, onSubmit: (name) => renameProject(project.id, name) });
 }
 
 export function Sidebar() {
@@ -118,6 +117,8 @@ function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd(): voi
 
 interface RowProps {
   icon: LucideIcon;
+  /** The row's own icon, drawn in place of icon with rowIcon's classes. */
+  iconNode?: ReactNode;
   label: string;
   count?: number;
   active: boolean;
@@ -131,7 +132,10 @@ interface RowProps {
   dropModule?: number;
 }
 
-function Row({ icon: Icon, label, count, active, onClick, doing, onDoubleClick, editor, dropModule }: RowProps) {
+/** The classes of a row's icon. */
+const rowIcon = (active: boolean) => cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground");
+
+function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDoubleClick, editor, dropModule }: RowProps) {
   const Tag = editor ? "div" : "button";
   const dropOver = useModuleDropOver(dropModule ?? -1);
   return (
@@ -146,7 +150,7 @@ function Row({ icon: Icon, label, count, active, onClick, doing, onDoubleClick, 
         dropOver > 0 && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
       )}
     >
-      <Icon className={cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground")} />
+      {iconNode ?? <Icon className={rowIcon(active)} />}
       {editor ?? <span className="min-w-0 flex-1 truncate">{label}</span>}
       {doing && <span className="signal-dot size-1.5 shrink-0 rounded-full" aria-label="有进行中的改进点" />}
       {dropOver > 0 ? (
@@ -189,6 +193,7 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
           <div>
             <Row
               icon={FolderKanban}
+              iconNode={<ProjectIconSpot project={p} active={active} />}
               label={p.name}
               count={p.counts.todo + p.counts.doing}
               doing={p.counts.doing > 0}
@@ -210,9 +215,9 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onSelect={() => promptRenameProject(p)}>
-            <Pencil />
-            重命名
+          <ContextMenuItem onSelect={() => askProject(p)}>
+            <SquarePen />
+            编辑项目
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteProject(p)}>
@@ -222,6 +227,73 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
         </ContextMenuContent>
       </ContextMenu>
     </SortableRow>
+  );
+}
+
+/**
+ * The icon of a row, which a click changes in a picker by it, as a double
+ * click renames. The popover's trigger passes its props and ref through.
+ */
+function IconSpot({ open, className, onClick, ...props }: ComponentProps<"span"> & { open: boolean }) {
+  return (
+    <span
+      role="button"
+      tabIndex={-1}
+      aria-label="更换图标"
+      {...props}
+      // The click opens the picker, not the row; a double click does not rename.
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className={cn(
+        "-m-1 flex shrink-0 rounded-sm p-1 transition-[background-color,scale] duration-150 hover:scale-110 hover:bg-foreground/10",
+        open && "bg-foreground/10",
+        className,
+      )}
+    />
+  );
+}
+
+function ProjectIconSpot({ project: p, active }: { project: Project; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <IconPopover
+      open={open}
+      onOpenChange={setOpen}
+      side="right"
+      value={p.icon}
+      fallback={FolderKanban}
+      onPick={async (icon) => {
+        if (await setProjectIcon(p.id, icon)) setOpen(false);
+      }}
+      auto={{ detected: p.detectedIcon, hasFolder: !!p.folderPath, onDetect: async () => void (await detectProjectIcon(p.id)) }}
+    >
+      <IconSpot open={open}>
+        <ProjectIcon project={p} className={rowIcon(active)} />
+      </IconSpot>
+    </IconPopover>
+  );
+}
+
+function ModuleIconSpot({ module: m, active }: { module: Module; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <IconPopover
+      open={open}
+      onOpenChange={setOpen}
+      side="right"
+      value={m.icon}
+      fallback={Boxes}
+      onPick={async (icon) => {
+        if (await setModuleIcon(m.id, icon)) setOpen(false);
+      }}
+    >
+      <IconSpot open={open}>
+        <ModuleIcon module={m} className={rowIcon(active)} />
+      </IconSpot>
+    </IconPopover>
   );
 }
 
@@ -276,6 +348,7 @@ function ModuleRow({ module: m, active, onClick }: { module: Module; active: boo
           <div>
             <Row
               icon={Boxes}
+              iconNode={<ModuleIconSpot module={m} active={active} />}
               label={m.name}
               count={m.counts.todo + m.counts.doing}
               doing={m.counts.doing > 0}
@@ -306,11 +379,9 @@ function ModuleRow({ module: m, active, onClick }: { module: Module; active: boo
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem
-            onSelect={() => askName({ title: "重命名模块", initial: m.name, onSubmit: (name) => renameModule(m.id, name) })}
-          >
-            <Pencil />
-            重命名
+          <ContextMenuItem onSelect={() => askModule(m)}>
+            <SquarePen />
+            编辑模块
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteModule(m)}>

@@ -202,8 +202,9 @@ func (a *Atlas) SetProjectDescription(id int64, description string) (store.Proje
 	return do(a, id, func(db *store.Store) (store.Project, error) { return db.SetProjectDescription(id, description) })
 }
 
-// ChooseProjectFolder asks for a folder and binds the project to it. It
-// returns the project unchanged when the user cancels.
+// ChooseProjectFolder asks for a folder and binds the project to it, with
+// the project's own icon found there. It returns the project unchanged
+// when the user cancels.
 func (a *Atlas) ChooseProjectFolder(ctx context.Context, id int64) (store.Project, error) {
 	db, err := a.store()
 	if err != nil {
@@ -229,7 +230,13 @@ func (a *Atlas) ChooseProjectFolder(ctx context.Context, id int64) (store.Projec
 	if len(paths) == 0 {
 		return p, nil
 	}
-	return do(a, 0, func(db *store.Store) (store.Project, error) { return db.SetProjectFolder(id, paths[0]) })
+	icon := detectProjectIcon(a.app.dataDir, paths[0])
+	return do(a, 0, func(db *store.Store) (store.Project, error) {
+		if _, err := db.SetProjectFolder(id, paths[0]); err != nil {
+			return store.Project{}, err
+		}
+		return db.SetProjectDetectedIcon(id, icon)
+	})
 }
 
 // ClearProjectFolder unbinds a project from its folder.

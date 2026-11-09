@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ConfirmDialog, NameDialog } from "@/components/app/dialogs";
+import { ConfirmDialog } from "@/components/app/dialogs";
+import { ModuleDialog, ProjectDialog } from "@/components/app/project-dialog";
 import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
 import { Overview } from "@/components/app/overview";
@@ -103,7 +104,8 @@ export function MainApp() {
           <EffectsLayer />
         </Suspense>
       )}
-      <NameDialog />
+      <ProjectDialog />
+      <ModuleDialog />
       <ConfirmDialog />
       <ImmersiveNote />
       <SettingsDialog />

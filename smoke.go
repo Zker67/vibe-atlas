@@ -192,6 +192,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	icons, err := a.smokeIcons(main)
+	report["icons"] = icons
+	if err != nil {
+		finish(err, "icons")
+		return
+	}
+
 	pasted, err := a.smokePaste(main)
 	report["paste"] = pasted
 	if err != nil {

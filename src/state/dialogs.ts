@@ -1,13 +1,5 @@
 import { create } from "zustand";
-
-export interface NameRequest {
-  title: string;
-  initial?: string;
-  placeholder?: string;
-  confirmText?: string;
-  /** Saves the name; a rejection's message shows in the dialog. */
-  onSubmit(name: string): Promise<unknown>;
-}
+import type { Module, Project } from "@/mygo";
 
 export interface ConfirmRequest {
   title: string;
@@ -17,12 +9,23 @@ export interface ConfirmRequest {
   onConfirm(): void | Promise<void>;
 }
 
+/** What the project dialog adds or edits: a new project, or this one. */
+export interface ProjectRequest {
+  project: Project | null;
+}
+
+/** What the module dialog adds or edits: a new module of the open project, or this one. */
+export interface ModuleRequest {
+  module: Module | null;
+}
+
 /** The tabs of 设置. */
 export type SettingsTab = "keys" | "items" | "appearance" | "data";
 
 interface DialogsState {
-  name: NameRequest | null;
   confirm: ConfirmRequest | null;
+  project: ProjectRequest | null;
+  module: ModuleRequest | null;
   settings: boolean;
   settingsTab: SettingsTab;
   help: boolean;
@@ -31,22 +34,28 @@ interface DialogsState {
 }
 
 export const useDialogs = create<DialogsState>(() => ({
-  name: null,
   confirm: null,
+  project: null,
+  module: null,
   settings: false,
   settingsTab: "keys",
   help: false,
   helpAt: null,
 }));
 
-/** Asks for a name, as for a new project or module. */
-export function askName(request: NameRequest) {
-  useDialogs.setState({ name: request });
-}
-
 /** Asks to confirm something that cannot be undone. */
 export function askConfirm(request: ConfirmRequest) {
   useDialogs.setState({ confirm: request });
+}
+
+/** Opens the project dialog: to add a project, or to edit project's name, folder and icon. */
+export function askProject(project: Project | null = null) {
+  useDialogs.setState({ project: { project } });
+}
+
+/** Opens the module dialog: to add a module to the open project, or to edit module's name and icon. */
+export function askModule(module: Module | null = null) {
+  useDialogs.setState({ module: { module } });
 }
 
 /** Opens or closes 设置, at the tab last shown; opening it closes 使用说明. */

@@ -61,6 +61,7 @@ import { openImmersive, useImmersive } from "@/state/immersive";
 import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
 import { AgentIcon } from "./agent-icon";
 import { DeleteButton } from "./delete-button";
+import { ModuleIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { TypeChip } from "./item-marks";
 import { confirmDeleteItem } from "./queue";
@@ -375,16 +376,26 @@ export function TypeSelect({ item }: { item: Item }) {
 
 function ModuleSelect({ item }: { item: Item }) {
   const modules = useAtlas((s) => s.modules);
-  const name = modules.find((m) => m.id === item.moduleId)?.name;
+  const current = modules.find((m) => m.id === item.moduleId);
   return (
     <Select value={String(item.moduleId)} onValueChange={(v) => void setItemModule(item.id, Number(v))}>
       <SelectTrigger size="sm" aria-label="模块" className={QUIET_TRIGGER}>
-        <SelectValue>{name ? <span className="truncate">{name}</span> : <span className="text-muted-foreground">选择模块</span>}</SelectValue>
+        <SelectValue>
+          {current ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ModuleIcon module={current} className="size-3.5 text-muted-foreground" />
+              <span className="truncate">{current.name}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">选择模块</span>
+          )}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="0">{UNSORTED}</SelectItem>
         {modules.map((m) => (
           <SelectItem key={m.id} value={String(m.id)}>
+            <ModuleIcon module={m} className="size-3.5 text-muted-foreground" />
             {m.name}
           </SelectItem>
         ))}

@@ -673,6 +673,54 @@ html.dragging-rows * {
   transform-origin: top center;
   animation-name: format-pop-below;
 }
+/* The folder of the project bar: closed at rest; under the pointer the lid
+   lifts as it turns into the open folder; a click pops it open. */
+.folder-icon > svg {
+  transition:
+    opacity 150ms ease-out,
+    transform 220ms var(--spring-pop);
+}
+.folder-icon .folder-open {
+  opacity: 0;
+  transform: translateY(1px) scale(0.85);
+}
+.group\/folder:hover .folder-icon .folder-closed,
+.group\/folder:focus-visible .folder-icon .folder-closed,
+.folder-icon[data-popping] .folder-closed {
+  opacity: 0;
+  transform: translateY(-1px) scale(0.9);
+}
+.group\/folder:hover .folder-icon .folder-open,
+.group\/folder:focus-visible .folder-icon .folder-open,
+.folder-icon[data-popping] .folder-open {
+  opacity: 1;
+  transform: none;
+}
+.folder-icon[data-popping] {
+  animation: folder-pop 480ms var(--spring-pop);
+}
+@keyframes folder-pop {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(0.78);
+  }
+  60% {
+    transform: scale(1.22) rotate(-8deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .folder-icon > svg {
+    transition: opacity 150ms;
+  }
+  .folder-icon[data-popping] {
+    animation: none;
+  }
+}
 @keyframes format-pop {
   from {
     opacity: 0;

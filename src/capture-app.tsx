@@ -2,12 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type Keyboard
 import { Boxes, Check, ChevronsUpDown, FolderKanban, Inbox, Link2, Plus, Search, type LucideIcon } from "lucide-react";
 import { Atlas, events, type ItemType, type Module, type Project, type Source } from "@/mygo";
 import { errorMessage } from "@/lib/api";
+import { projectIcon } from "@/lib/icons";
 import { isComposing } from "@/lib/keys";
 import { nextType, typeInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/ui/kbd";
 import { TypeChip } from "@/components/app/item-marks";
 import { AgentIcon } from "@/components/app/agent-icon";
+import { EntityIcon } from "@/components/app/entity-icon";
 import { SessionPicker } from "@/components/app/session-picker";
 import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
 
@@ -380,7 +382,7 @@ export function CaptureApp() {
         <Picker
           key="project"
           what="项目"
-          choices={projects.map((p) => ({ id: p.id, name: p.name, icon: FolderKanban, open: p.counts.todo + p.counts.doing }))}
+          choices={projects.map((p) => ({ id: p.id, name: p.name, icon: FolderKanban, own: projectIcon(p), open: p.counts.todo + p.counts.doing }))}
           value={projectId}
           onPick={(id) => {
             pickProject(id);
@@ -396,7 +398,7 @@ export function CaptureApp() {
           what="模块"
           choices={[
             { id: 0, name: UNSORTED, icon: Inbox },
-            ...modules.map((m) => ({ id: m.id, name: m.name, icon: Boxes, open: m.counts.todo + m.counts.doing })),
+            ...modules.map((m) => ({ id: m.id, name: m.name, icon: Boxes, own: m.icon, open: m.counts.todo + m.counts.doing })),
           ]}
           value={moduleId}
           onPick={(id) => {
@@ -496,6 +498,7 @@ export function CaptureApp() {
       <footer className="flex h-11 shrink-0 items-center gap-0.5 border-t px-2 text-xs text-muted-foreground">
         <PickButton
           icon={FolderKanban}
+          own={project ? projectIcon(project) : ""}
           label={project?.name ?? ""}
           open={picking === "project"}
           title="项目：搜索、切换或新建（Ctrl+P）"
@@ -504,6 +507,7 @@ export function CaptureApp() {
         <span className="text-muted-foreground/40">/</span>
         <PickButton
           icon={moduleId ? Boxes : Inbox}
+          own={modules.find((m) => m.id === moduleId)?.icon ?? ""}
           label={moduleName}
           open={picking === "module"}
           title="模块：搜索、切换或新建（Ctrl+M）"
@@ -571,6 +575,8 @@ function Hint({ keys, children, onClick }: { keys: string; children: ReactNode; 
 
 interface PickButtonProps {
   icon: LucideIcon;
+  /** The project's or module's own icon, "" for icon. */
+  own: string;
   label: string;
   open: boolean;
   title: string;
@@ -578,7 +584,7 @@ interface PickButtonProps {
 }
 
 /** The project or the module in the bottom bar; a click opens its list. */
-function PickButton({ icon: Icon, label, open, title, onClick }: PickButtonProps) {
+function PickButton({ icon, own, label, open, title, onClick }: PickButtonProps) {
   return (
     <button
       type="button"
@@ -592,7 +598,7 @@ function PickButton({ icon: Icon, label, open, title, onClick }: PickButtonProps
         open && "bg-muted text-foreground",
       )}
     >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <EntityIcon icon={own} fallback={icon} className="size-3.5 text-muted-foreground" />
       <span className="truncate">{label}</span>
       <ChevronsUpDown className="size-3 shrink-0 opacity-50" />
     </button>
@@ -603,6 +609,8 @@ interface Choice {
   id: number;
   name: string;
   icon: LucideIcon;
+  /** Its own icon, "" for icon. */
+  own?: string;
   /** How many of its items are not done yet. */
   open?: number;
 }
@@ -729,7 +737,7 @@ function Picker({ what, choices, value, onPick, onCreate, onClose }: PickerProps
           row(
             i,
             <>
-              <c.icon className="size-3.5 shrink-0 text-muted-foreground" />
+              <EntityIcon icon={c.own ?? ""} fallback={c.icon} className="size-3.5 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{c.name}</span>
               {!!c.open && (
                 <span className="meta-mono shrink-0 text-muted-foreground" title={`未完成 ${c.open} 条`}>

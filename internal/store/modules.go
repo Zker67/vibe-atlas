@@ -12,19 +12,21 @@ type Module struct {
 	ID        int64 `json:"id"`
 	ProjectID int64 `json:"projectId"`
 	// Name is unique within the project, ignoring the case of Latin letters.
-	Name      string `json:"name"`
+	Name string `json:"name"`
+	// Icon is the icon the user chose (see checkIcon), or "" for the default.
+	Icon      string `json:"icon"`
 	SortOrder int64  `json:"sortOrder"`
 	CreatedAt int64  `json:"createdAt"`
 	// Counts are the module's items in each status.
 	Counts Counts `json:"counts"`
 }
 
-const moduleColumns = `m.id, m.project_id, m.name, m.sort_order, m.created_at,
+const moduleColumns = `m.id, m.project_id, m.name, m.icon, m.sort_order, m.created_at,
 	COALESCE(SUM(i.status = 'todo'), 0), COALESCE(SUM(i.status = 'doing'), 0), COALESCE(SUM(i.status = 'done'), 0)`
 
 func scanModule(row scanner) (Module, error) {
 	var m Module
-	err := row.Scan(&m.ID, &m.ProjectID, &m.Name, &m.SortOrder, &m.CreatedAt,
+	err := row.Scan(&m.ID, &m.ProjectID, &m.Name, &m.Icon, &m.SortOrder, &m.CreatedAt,
 		&m.Counts.Todo, &m.Counts.Doing, &m.Counts.Done)
 	return m, err
 }
@@ -121,6 +123,27 @@ func (s *Store) RenameModule(id int64, name string) (Module, error) {
 		}
 		if _, err := tx.Exec(`UPDATE modules SET name = ? WHERE id = ?`, name, id); err != nil {
 			return err
+		}
+		m, err = moduleIn(tx, id)
+		return err
+	})
+	return m, err
+}
+
+// SetModuleIcon sets the icon the user chose for the module, "" for the
+// default.
+func (s *Store) SetModuleIcon(id int64, icon string) (Module, error) {
+	if err := checkIcon(icon); err != nil {
+		return Module{}, err
+	}
+	var m Module
+	err := s.inTx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`UPDATE modules SET icon = ? WHERE id = ?`, icon, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
 		}
 		m, err = moduleIn(tx, id)
 		return err

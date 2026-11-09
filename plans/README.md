@@ -62,6 +62,7 @@ plans/
 | [2026-11-08-multi-select](./2026-11-08-multi-select/00-overview.md) | 队列多选：`Ctrl` / `Shift` 点选、`Shift+↑ ↓`、`Ctrl+A`、空白处框选；批量改状态 / 类型 / 模块、复制、移动、删除；整组一起拖动；详情面板显示「已选 N 条」 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-markdown-plus](./2026-11-08-markdown-plus/00-overview.md) | Markdown 编辑器：划词浮出格式工具栏；备注里贴 / 拖图片（存进数据目录 `images/`，同一行并排，大图预览可缩放拖动切换），复制给 AI 时换成本机路径，没人引用的图片自动清理 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-trash](./2026-11-08-trash/00-overview.md) | 回收站：删除先进回收站（不确认，提示里可以撤销，`Ctrl+Z`），按住 `Shift` 彻底删除（按钮和菜单跟着变）；侧栏打开所有项目的回收站，恢复回到原处、子改进点放回；默认保留 30 天 | `[partial]`：已实现，等用户验收 |
+| [2026-11-08-icons](./2026-11-08-icons/00-overview.md) | 项目和模块的图标：项目默认用文件夹里项目自己的图标（借鉴 Orca 的约定路径 + 入口文件声明，只做本地、不联网），可以自选内置图标 / emoji / 本机图片；新建和编辑项目合成一个弹窗，图标、名称、文件夹都能改，选了文件夹名称为空时用文件夹名 | `[partial]`：已实现，等用户验收 |
 | [2026-11-08-local-sessions](./2026-11-08-local-sessions/00-overview.md) | 设置里三选一会话来源（Claude Code / Codex / codeg），读本机会话快速选择填入链接；会话链接显示成 agent 图标 + 会话名 | `[partial]`：已实现，等用户验收 |
 
 计划只包含当前要做的事。以后再考虑的功能在 [docs/backlog.md](../docs/backlog.md)，已放弃的想法在 [docs/archive/dropped-ideas.md](../docs/archive/dropped-ideas.md)。

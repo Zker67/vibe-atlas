@@ -36,6 +36,19 @@ export interface Counts {
   done: number;
 }
 
+/** FolderChoice is a folder the user chose for a project. */
+export interface FolderChoice {
+  /** Path is the folder, or "" when the user cancelled. */
+  path: string;
+  /** Name is the folder's name, which a project without a name takes. */
+  name: string;
+  /**
+   * Icon is the project's own icon found in the folder, "image:<name>",
+   * or "".
+   */
+  icon: string;
+}
+
 /**
  * Glass is the frosted glass of the main window's frame (title bar and
  * sidebar) and of its content panel, over a background or a picture. It
@@ -121,6 +134,8 @@ export interface Module {
   projectId: number;
   /** Name is unique within the project, ignoring the case of Latin letters. */
   name: string;
+  /** Icon is the icon the user chose (see checkIcon), or "" for the default. */
+  icon: string;
   sortOrder: number;
   createdAt: number;
   /** Counts are the module's items in each status. */
@@ -189,11 +204,34 @@ export interface Project {
   folderPath: string;
   /** FolderExists tells whether FolderPath is a folder that exists now. */
   folderExists: boolean;
+  /**
+   * Icon is the icon the user chose (see checkIcon), or "" for 自动: the
+   * one found in the folder, else the default.
+   */
+  icon: string;
+  /**
+   * DetectedIcon is the project's own icon found in its folder, an
+   * "image:<name>" picture, or "".
+   */
+  detectedIcon: string;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
   /** Counts are the project's items in each status. */
   counts: Counts;
+}
+
+/** ProjectDraft is what the user fills in to add or edit a project. */
+export interface ProjectDraft {
+  /**
+   * Name may be left empty when FolderPath is set: the folder's name is
+   * taken.
+   */
+  name: string;
+  /** FolderPath is an absolute path, or "" for no folder. */
+  folderPath: string;
+  /** Icon is as Project.Icon: "" for 自动. */
+  icon: string;
 }
 
 /** Session is one conversation with an agent. */
@@ -345,11 +383,36 @@ export interface WallpaperLook {
  */
 export const Atlas = {
   /**
+   * AddProject adds a project at the end of the list. A project bound to a
+   * folder without a name takes the folder's; its icon, unless chosen, is
+   * the one found in the folder.
+   */
+  addProject(draft: ProjectDraft): Promise<Project> {
+    return call("Atlas.AddProject", draft);
+  },
+  /**
    * CaptureItem adds an item from quick capture, and remembers its project
    * for the next capture.
    */
   captureItem(item: NewItem): Promise<Item> {
     return call("Atlas.CaptureItem", item);
+  },
+  /**
+   * ChooseFolder asks for a project's folder, opening at current when it
+   * exists, and looks in it for the project's own icon. Nothing is saved:
+   * AddProject or EditProject does.
+   */
+  chooseFolder(current: string): Promise<FolderChoice> {
+    return call("Atlas.ChooseFolder", current);
+  },
+  /**
+   * ChooseIconImage asks for a picture on this machine to be an icon, and
+   * keeps it shrunk: "image:<name>", or "" when the user cancels. Nothing is
+   * saved to a project or module: SetProjectIcon, SetModuleIcon or
+   * EditProject does.
+   */
+  chooseIconImage(): Promise<string> {
+    return call("Atlas.ChooseIconImage");
   },
   /**
    * ChooseImages asks for pictures on this machine to put in a note, and
@@ -360,8 +423,9 @@ export const Atlas = {
     return call("Atlas.ChooseImages");
   },
   /**
-   * ChooseProjectFolder asks for a folder and binds the project to it. It
-   * returns the project unchanged when the user cancels.
+   * ChooseProjectFolder asks for a folder and binds the project to it, with
+   * the project's own icon found there. It returns the project unchanged
+   * when the user cancels.
    */
   chooseProjectFolder(id: number): Promise<Project> {
     return call("Atlas.ChooseProjectFolder", id);
@@ -432,6 +496,17 @@ export const Atlas = {
   /** DeleteProject deletes a project with its modules and items. */
   deleteProject(id: number): Promise<void> {
     return call("Atlas.DeleteProject", id);
+  },
+  /** DetectProjectIcon looks again for the project's own icon in its folder. */
+  detectProjectIcon(id: number): Promise<Project> {
+    return call("Atlas.DetectProjectIcon", id);
+  },
+  /**
+   * EditProject replaces a project's name, folder and icon, as AddProject
+   * takes them.
+   */
+  editProject(id: number, draft: ProjectDraft): Promise<Project> {
+    return call("Atlas.EditProject", id, draft);
   },
   /**
    * EmptyTrash deletes everything in the trash for good and returns how many
@@ -692,9 +767,20 @@ export const Atlas = {
   setItemsType(ids: number[], itemType: ItemType): Promise<Item[]> {
     return call("Atlas.SetItemsType", ids, itemType);
   },
+  /**
+   * SetModuleIcon sets the icon the user chose for a module, "" for the
+   * default.
+   */
+  setModuleIcon(id: number, icon: string): Promise<Module> {
+    return call("Atlas.SetModuleIcon", id, icon);
+  },
   /** SetProjectDescription replaces a project's notes, in Markdown. */
   setProjectDescription(id: number, description: string): Promise<Project> {
     return call("Atlas.SetProjectDescription", id, description);
+  },
+  /** SetProjectIcon sets the icon the user chose for a project, "" for 自动. */
+  setProjectIcon(id: number, icon: string): Promise<Project> {
+    return call("Atlas.SetProjectIcon", id, icon);
   },
   /**
    * SetSessionSource picks where the sessions to link items to are read

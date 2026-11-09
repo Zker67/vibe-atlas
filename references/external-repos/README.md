@@ -21,6 +21,7 @@ references/external-repos/
 | 仓库 | commit/release | license | 参考范围 | 状态 |
 |---|---|---|---|---|
 | [Zker67/Next-AIGC](./Zker67__Next-AIGC/README.md) | `374b650` | 用户本人；React Bits 为 MIT + Commons Clause | 视觉风格「暗场 + 信号光」、React Bits 背景组件 | 已采纳一部分 |
+| [stablyai/orca](./stablyai__orca/README.md) | `be059c4` | MIT | 自动识别项目图标：约定路径、入口文件里的 `<link rel="icon">` | 已采纳本地部分（见 [图标计划](../../plans/2026-11-08-icons/00-overview.md)） |
 | [spacering-net/codeg](./spacering-net__codeg/README.md) | `39fe4cc` | Apache-2.0 | 读本机 Claude Code / Codex 会话、读 codeg 自己的会话库、agent 图标 | 已采纳（见 [本机会话计划](../../plans/2026-11-08-local-sessions/00-overview.md)） |
 
 ## 使用边界

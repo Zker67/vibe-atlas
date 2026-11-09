@@ -23,6 +23,7 @@ import {
   Repeat,
   Rocket,
   Settings,
+  Smile,
   SquareCheck,
   TextCursorInput,
   TextSelect,
@@ -402,7 +403,10 @@ function OverviewSection() {
         <li>查看进行中的改进点和每天的完成记录。</li>
       </Points>
       <Feature icon={FolderOpen} title="绑定文件夹">
-        为项目绑定本地文件夹后，可以一键打开。
+        为项目绑定本地文件夹后，可以一键打开。新建或编辑项目时选好文件夹，名称没填会用文件夹名，图标自动用项目自己的（比如 <Code>public/favicon.png</Code>、<Code>resources/icon.png</Code>）。
+      </Feature>
+      <Feature icon={Smile} title="图标">
+        点侧栏里项目或模块的图标就能换，右键「编辑项目」「编辑模块」里也能改：内置图标、emoji 或一张本机图片。项目选「自动」就用文件夹里检测到的图标。
       </Feature>
     </Section>
   );

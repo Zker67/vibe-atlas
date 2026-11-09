@@ -112,6 +112,7 @@ func (a *app) start() {
 	// The old trash first: the pictures only its notes held go with the
 	// cleanup after it.
 	a.atlas.purgeTrashLater(db)
+	a.atlas.detectIconsLater(db)
 	a.cleanImagesLater(db)
 
 	throttling := mygo.ThrottlingOn

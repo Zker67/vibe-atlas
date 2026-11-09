@@ -122,7 +122,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -209,6 +209,12 @@ CREATE TABLE trash (
 );
 CREATE INDEX trash_by_batch ON trash (batch);
 CREATE INDEX trash_by_project ON trash (project_id);`,
+	// Icons: the one the user chose for a project or module (see checkIcon),
+	// "" for the default, and the one found in a project's folder.
+	4: `
+ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN detected_icon TEXT NOT NULL DEFAULT '';
+ALTER TABLE modules ADD COLUMN icon TEXT NOT NULL DEFAULT '';`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction
