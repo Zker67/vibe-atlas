@@ -58,9 +58,11 @@ func (a *app) smokeSelect(main *mygo.Window) (map[string]any, error) {
 			row(title).dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...opts }));
 		const key = (k, opts = {}) =>
 			document.body.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...opts }));
+		// A mouse's pointer: without pointerType, the row's context menu takes it for a
+		// touch and opens on a long press, which takes the keys from the queue.
 		const pointer = (type, target, x, y, id) =>
 			target.dispatchEvent(
-				new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y }),
+				new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: "mouse", isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y }),
 			);
 
 		const out = {};

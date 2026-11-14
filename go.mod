@@ -3,7 +3,7 @@ module github.com/Zker67/vibe-atlas
 go 1.27.3
 
 require (
-	github.com/egoist/mygo v0.8.3
+	github.com/egoist/mygo v0.9.0
 	modernc.org/sqlite v1.61.1
 )
 
