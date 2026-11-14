@@ -38,6 +38,7 @@ import {
   nearestPort,
   overlaps,
   rectBetween,
+  revealView,
   snap,
   snapToGuides,
   toChart,
@@ -50,7 +51,22 @@ import {
   type Viewport,
 } from "@/lib/flow/geometry";
 import { lastAt, record, redoStep, stepLabel, undoStep, type FlowStep, type Spot } from "@/lib/flow/history";
-import { cardEdges, cardHeight, cardsOf, COLUMN_GAP, GRID, NODE_HEIGHT, NODE_WIDTH, placesOf, rowMiddle, tidyPlaces, type Edge } from "@/lib/flow/layout";
+import {
+  cardEdges,
+  cardHeight,
+  cardsOf,
+  COLUMN_GAP,
+  DRAFT_HEIGHT,
+  draftSpot,
+  GRID,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  placesOf,
+  rowMiddle,
+  tidyPlaces,
+  type DraftFrom,
+  type Edge,
+} from "@/lib/flow/layout";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
 import { nextType } from "@/lib/labels";
 import { buildForest, progress, queueOrder } from "@/lib/tree";
@@ -118,10 +134,13 @@ interface Linking {
 /** What the board's own menu is for: the empty chart at a point, or a line. */
 type BoardMenu = { kind: "pane"; at: Point } | { kind: "edge"; key: string };
 
-/** Puts the keyboard in the detail's title, as Enter does in the queue. */
-function editTitle() {
+/** Puts the keyboard in the detail's title, as Enter does in the queue; the detail may show only a frame or two later. */
+function editTitle(tries = 5) {
   const el = document.querySelector<HTMLTextAreaElement>("[data-item-title]");
-  if (!el) return;
+  if (!el) {
+    if (tries > 0) requestAnimationFrame(() => editTitle(tries - 1));
+    return;
+  }
   el.focus();
   el.setSelectionRange(el.value.length, el.value.length);
 }
@@ -384,15 +403,56 @@ export function FlowBoard() {
     [make, undoIfLatest],
   );
 
-  /** Opens the field of a new item, its card centered on at (a point of the chart), or by a card's side for a line. */
+  /**
+   * Opens the field of a new item, its card centered on at (a point of the
+   * chart), or by its side for a line: lined up with the item the line
+   * comes from and the cards near (draftSpot).
+   */
   const openDraft = useCallback((at: Point, line: Draft["link"] = null) => {
+    const now = live.current;
+    const zoom = viewRef.current?.zoom ?? 1;
+    const others = [...now.places].map(([id, p]): Rect => ({ ...p, width: NODE_WIDTH, height: now.heightOf(id) }));
+    let from: DraftFrom | null = null;
+    const root = line ? now.cards.rootOf.get(line.otherId) : undefined;
+    const p = root === undefined ? undefined : now.places.get(root);
+    if (line && root !== undefined && p) {
+      from = {
+        card: { ...p, width: NODE_WIDTH, height: now.heightOf(root) },
+        y: p.y + rowMiddle(now.cards.index.get(line.otherId) ?? -1),
+        side: line.side,
+      };
+    }
     const x = !line ? at.x - NODE_WIDTH / 2 : line.side === "out" ? at.x : at.x - NODE_WIDTH;
-    setDraft((d) => ({
-      at: { x: snap(x, GRID), y: snap(at.y - NODE_HEIGHT / 2, GRID) },
-      type: d?.type ?? "improve",
-      link: line,
-    }));
+    const spot = draftSpot({ x, y: at.y - NODE_HEIGHT / 2 }, others, (GUIDE_SNAP * 2) / zoom, from);
+    setDraft((d) => ({ at: spot, type: d?.type ?? "improve", link: line }));
   }, []);
+
+  // A new item's card shows whole, with the card its line comes from: the chart moves, and zooms out when need be.
+  useEffect(() => {
+    const el = box.current;
+    if (!draft || !el) return;
+    const now = live.current;
+    const rects: Rect[] = [{ ...draft.at, width: NODE_WIDTH, height: DRAFT_HEIGHT }];
+    const root = draft.link ? now.cards.rootOf.get(draft.link.otherId) : undefined;
+    const p = root === undefined ? undefined : now.places.get(root);
+    if (root !== undefined && p) rects.push({ ...p, width: NODE_WIDTH, height: now.heightOf(root) });
+    const b = boundsOf(rects)!;
+    setView((v) => v && revealView(v, b, el.clientWidth, el.clientHeight));
+  }, [draft]);
+
+  // The detail opening beside narrows the chart: the card selected stays in sight.
+  const lastWidth = useRef(0);
+  useEffect(() => {
+    const was = lastWidth.current;
+    lastWidth.current = size.width;
+    if (!was || size.width >= was) return;
+    const now = live.current;
+    const root = now.cards.rootOf.get(useAtlas.getState().selectedId);
+    const p = root === undefined ? undefined : now.places.get(root);
+    if (root === undefined || !p) return;
+    const card = { ...p, width: NODE_WIDTH, height: now.heightOf(root) };
+    setView((v) => v && revealView(v, card, size.width, size.height));
+  }, [size.width, size.height]);
 
   const centerPoint = useCallback((): Point => {
     const v = viewRef.current;
@@ -833,6 +893,11 @@ export function FlowBoard() {
               setHoverCard(card ? Number(card.dataset.id) : 0);
             }}
             onPointerLeave={() => setHoverCard(0)}
+            // Hidden overflow still scrolls to show what takes the focus: the chart moves by its viewport only.
+            onScroll={(e) => {
+              e.currentTarget.scrollLeft = 0;
+              e.currentTarget.scrollTop = 0;
+            }}
             onDoubleClick={(e) => {
               // The pointer was captured: what is under it, not the event's target.
               const t = document.elementFromPoint(e.clientX, e.clientY);
@@ -1003,12 +1068,12 @@ export function FlowBoard() {
                         void (side === "out" ? addDep(otherId, item.id) : addDep(item.id, otherId));
                       }
                       select(item.id);
-                      setDraft(
-                        chain
-                          ? { at: { x: at.x + NODE_WIDTH + COLUMN_GAP, y: at.y }, type: draft.type, link: { otherId: item.id, side: "out" } }
-                          : null,
-                      );
-                      if (!chain) box.current?.focus({ preventScroll: true });
+                      if (chain) {
+                        openDraft({ x: at.x + NODE_WIDTH + COLUMN_GAP, y: at.y + NODE_HEIGHT / 2 }, { otherId: item.id, side: "out" });
+                      } else {
+                        setDraft(null);
+                        box.current?.focus({ preventScroll: true });
+                      }
                     }}
                   />
                 )}
@@ -1305,6 +1370,15 @@ function ZoomBar({ zoom, onZoom, onFit }: { zoom: number; onZoom(zoom: number): 
   );
 }
 
+/** The keys of a new item's field, shown under it. */
+const DRAFT_KEYS: [string[], string][] = [
+  [["Enter"], "保存"],
+  [["Shift", "Enter"], "接着写下一条"],
+  [["Tab"], "换类型"],
+  [["Esc"], "不建"],
+];
+const draftKey = "h-4 min-w-4 border border-b-2 bg-background px-1 text-[10px] font-semibold text-foreground shadow-xs";
+
 /**
  * The card of a new item being named on the chart: Enter saves it, Shift+
  * Enter saves it and names the next one, to its right and waiting for it;
@@ -1325,6 +1399,9 @@ function DraftCard({
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const saving = useRef(false);
+  const field = useRef<HTMLInputElement>(null);
+  // Not autoFocus: that scrolls the board to show the field.
+  useEffect(() => field.current?.focus({ preventScroll: true }), []);
   const save = async (chain: boolean) => {
     const text = title.trim();
     if (!text) {
@@ -1360,7 +1437,7 @@ function DraftCard({
           <TypeIcon type={draft.type} />
         </button>
         <input
-          autoFocus
+          ref={field}
           value={title}
           maxLength={300}
           placeholder={draft.link ? (draft.link.side === "out" ? "新的一条，等前一条做完" : "新的一条，做完它再做后一条") : "新的一条"}
@@ -1392,7 +1469,18 @@ function DraftCard({
       {error ? (
         <p className="text-xs text-destructive">{error}</p>
       ) : (
-        <p className="text-[11px] text-muted-foreground">Enter 保存 · Shift+Enter 接着写下一条 · Tab 换类型</p>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          {DRAFT_KEYS.map(([keys, text]) => (
+            <span key={text} className="flex items-center gap-1">
+              {keys.map((k) => (
+                <Kbd key={k} className={draftKey}>
+                  {k}
+                </Kbd>
+              ))}
+              {text}
+            </span>
+          ))}
+        </p>
       )}
     </div>
   );

@@ -14,6 +14,7 @@ import {
   nearestPort,
   overlaps,
   rectBetween,
+  revealView,
   snapToGuides,
   toChart,
   toScreen,
@@ -26,6 +27,8 @@ import {
   cardsOf,
   COLUMN_GAP,
   columnsOf,
+  DRAFT_HEIGHT,
+  draftSpot,
   groupsOf,
   NODE_HEIGHT,
   NODE_WIDTH,
@@ -345,4 +348,35 @@ test("a step of the history says what it is, a tidy as one", () => {
   expect(stepLabel({ kind: "place", before: [], after: [] })).toBe("移动");
   expect(stepLabel({ kind: "link", fromId: 1, toId: 2 })).toBe("连线");
   expect(stepLabel({ kind: "unlink", fromId: 1, toId: 2 })).toBe("删除连线");
+});
+
+test("revealView leaves what shows, moves just enough, zooms out only when too large", () => {
+  const v = { x: 0, y: 0, zoom: 1 };
+  expect(revealView(v, { x: 100, y: 100, width: 200, height: 80 }, 800, 600)).toBe(v);
+  // Over the right edge: moved left until 32 in.
+  expect(revealView(v, { x: 700, y: 100, width: 200, height: 80 }, 800, 600)).toEqual({ x: -132, y: 0, zoom: 1 });
+  // Above the top: moved down.
+  expect(revealView(v, { x: 100, y: -50, width: 200, height: 80 }, 800, 600)).toEqual({ x: 0, y: 82, zoom: 1 });
+  // Wider than the canvas: zoomed out to fit, all of it in.
+  const z = revealView(v, { x: 0, y: 0, width: 1600, height: 80 }, 800, 600);
+  expect(z.zoom).toBeLessThan(1);
+  expect(z.x).toBeGreaterThanOrEqual(31);
+  expect(z.x + 1600 * z.zoom).toBeLessThanOrEqual(800 - 31);
+});
+
+test("draftSpot puts a new card drawn from an item in the next column, on its row, past the cards there", () => {
+  const card = { x: 0, y: 0, width: NODE_WIDTH, height: NODE_HEIGHT };
+  const from = { card, y: NODE_HEIGHT / 2, side: "out" as const };
+  // Dropped a little off: to the next column, on the row.
+  expect(draftSpot({ x: NODE_WIDTH + 50, y: 30 }, [card], 12, from)).toEqual({ x: NODE_WIDTH + COLUMN_GAP, y: 0 });
+  // From the left side: the column before.
+  expect(draftSpot({ x: -300, y: 10 }, [card], 12, { ...from, side: "in" }).x).toBe(-COLUMN_GAP - NODE_WIDTH);
+  // Far away: where dropped, on the grid.
+  expect(draftSpot({ x: 1001, y: 499 }, [card], 12, from)).toEqual({ x: 1000, y: 496 });
+  // A card already in that spot: just under it.
+  const there = { x: NODE_WIDTH + COLUMN_GAP, y: 0, width: NODE_WIDTH, height: NODE_HEIGHT };
+  const spot = draftSpot({ x: NODE_WIDTH + 60, y: 0 }, [card, there], 12, from);
+  expect(spot.x).toBe(NODE_WIDTH + COLUMN_GAP);
+  expect(spot.y).toBeGreaterThanOrEqual(NODE_HEIGHT + ROW_GAP);
+  expect(overlaps({ ...spot, width: NODE_WIDTH, height: DRAFT_HEIGHT }, there)).toBe(false);
 });

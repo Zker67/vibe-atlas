@@ -1,4 +1,4 @@
-import { snap, type Point } from "./geometry";
+import { overlaps, snap, snapToGuides, type Point, type Rect } from "./geometry";
 
 // Laying out the flow chart: an item with the items under it is one card,
 // its head and a row for each of them; the cards with prerequisites in
@@ -16,6 +16,41 @@ export const GRID = 8;
 /** Between the columns, and between the cards of a column. */
 export const COLUMN_GAP = 88;
 export const ROW_GAP = 24;
+
+/** How tall the card of a new item being named is, with the keys under its field. */
+export const DRAFT_HEIGHT = NODE_HEIGHT + 24;
+
+/** The item a new one is drawn from: its card, the middle of its row, and the side the line leaves from. */
+export interface DraftFrom {
+  card: Rect;
+  y: number;
+  side: "out" | "in";
+}
+
+/**
+ * Where the card of a new item goes, its top left, wanted at want: drawn
+ * from another item, near the next column over (COLUMN_GAP from its card)
+ * it goes to that column, and near that item's row it lines up with it;
+ * else it lines up with the cards near it (within reach) or snaps to the
+ * grid. Then it moves down past the cards it would cover.
+ */
+export function draftSpot(want: Point, others: readonly Rect[], reach: number, from: DraftFrom | null): Point {
+  const g = snapToGuides({ ...want, width: NODE_WIDTH, height: DRAFT_HEIGHT }, others, reach, GRID);
+  let { x, y } = g;
+  if (from) {
+    const column = from.side === "out" ? from.card.x + from.card.width + COLUMN_GAP : from.card.x - COLUMN_GAP - NODE_WIDTH;
+    if (Math.abs(want.x - column) <= COLUMN_GAP) x = column;
+    const row = from.y - NODE_HEIGHT / 2;
+    if (Math.abs(want.y - row) <= NODE_HEIGHT) y = row;
+  }
+  for (let i = 0; i < 100; i++) {
+    const rect = { x, y, width: NODE_WIDTH, height: DRAFT_HEIGHT };
+    const covered = others.filter((o) => overlaps(rect, o));
+    if (covered.length === 0) break;
+    y = upToGrid(Math.max(...covered.map((o) => o.y + o.height)) + ROW_GAP);
+  }
+  return { x, y };
+}
 
 /** A line of the chart: to waits for from. */
 export interface Edge {

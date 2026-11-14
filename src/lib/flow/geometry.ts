@@ -86,6 +86,26 @@ export function fitView(bounds: Rect | null, width: number, height: number, pad 
   };
 }
 
+/**
+ * The viewport that shows all of r in a canvas of width × height, pad in
+ * from its edges: v itself when it already does, else moved as little as
+ * it takes, zoomed out (never in) when r is too large at v's zoom.
+ */
+export function revealView(v: Viewport, r: Rect, width: number, height: number, pad = 32): Viewport {
+  if (width <= 0 || height <= 0) return v;
+  const left = r.x * v.zoom + v.x;
+  const top = r.y * v.zoom + v.y;
+  const w = r.width * v.zoom;
+  const h = r.height * v.zoom;
+  if (left >= pad && top >= pad && left + w <= width - pad && top + h <= height - pad) return v;
+  const zoom = clampZoom(Math.min(v.zoom, (width - pad * 2) / Math.max(r.width, 1), (height - pad * 2) / Math.max(r.height, 1)));
+  if (zoom < v.zoom) return fitView(r, width, height, pad, zoom);
+  // Just over the edge it was: the least move that brings it in.
+  const dx = left < pad ? pad - left : left + w > width - pad ? width - pad - (left + w) : 0;
+  const dy = top < pad ? pad - top : top + h > height - pad ? height - pad - (top + h) : 0;
+  return { zoom: v.zoom, x: v.x + dx, y: v.y + dy };
+}
+
 /** The rectangle between two corners, in any order. */
 export function rectBetween(a: Point, b: Point): Rect {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) };
