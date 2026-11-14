@@ -27,14 +27,24 @@ export function TitleBar() {
       >
         <img src={appIcon} alt="" draggable={false} className="size-6 shrink-0" />
         {!collapsed && <span className="font-semibold tracking-tight">Vibe Atlas</span>}
+        {/* Open, the button sits at the sidebar's right end; folded, just past the rail. */}
+        {!collapsed && <SidebarButton className="-mr-1.5 ml-auto" />}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-between px-2">
-        <IconButton label={collapsed ? "展开侧栏" : "收起侧栏"} shortcut="Ctrl+\" onClick={toggleSidebar}>
-          {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-        </IconButton>
+        {collapsed ? <SidebarButton /> : <span />}
         <ThemeButton />
       </div>
     </header>
+  );
+}
+
+/** Folds the sidebar into a rail of icons, or opens it again. */
+function SidebarButton({ className }: { className?: string }) {
+  const collapsed = useSidebar((s) => s.collapsed);
+  return (
+    <IconButton label={collapsed ? "展开侧栏" : "收起侧栏"} shortcut="Ctrl+\" className={className} onClick={toggleSidebar}>
+      {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+    </IconButton>
   );
 }
 
