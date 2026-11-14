@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow,
   ArrowLeftToLine,
@@ -222,14 +222,14 @@ function CaptureSection() {
 }
 
 const STATUS_HINTS: Record<string, string> = {
-  todo: "等待处理，可以拖动排序",
-  doing: "正在处理，默认按开始先后，可以拖动调整",
-  done: "已完成，默认收起",
+  todo: "还没开始，拖动排序",
+  doing: "正在做，按开始的先后排",
+  done: "做完了，默认收起",
 };
 
 function QueueSection() {
   return (
-    <Section id="queue" lead="每个项目有一个队列，改进点按状态分组显示。">
+    <Section id="queue" lead="每个项目一个队列，改进点按状态分成三组。">
       <div className="grid grid-cols-3 gap-2.5">
         {STATUSES.map((s) => (
           <div key={s.value} className="flex flex-col gap-1.5 rounded-lg bg-card p-3 ring-1 ring-foreground/[0.07]">
@@ -241,45 +241,118 @@ function QueueSection() {
           </div>
         ))}
       </div>
+      <Actions
+        rows={[
+          [
+            "完成 / 重新打开",
+            <>
+              点行首圆圈，或按 <K>D</K>
+            </>,
+          ],
+          [
+            "开始 / 退回待办",
+            <>
+              <K>S</K>
+            </>,
+          ],
+          [
+            "新增",
+            <>
+              <K>N</K>，<K>Tab</K> 切换类型
+            </>,
+          ],
+          ["打开详情", "单击"],
+          [
+            "改名",
+            <>
+              双击，或按 <K>Enter</K>
+            </>,
+          ],
+          [
+            "多选",
+            <>
+              <K>Ctrl</K> 单击加选，<K>Shift</K> 单击连选，或在空白处拖框
+            </>,
+          ],
+          [
+            "删除",
+            <>
+              <K>Delete</K> 进回收站，<K>Ctrl+Z</K> 撤销
+            </>,
+          ],
+          ["更多操作", "右键单击改进点"],
+          ["筛选", "队列顶部按状态、类型；侧栏按模块"],
+        ]}
+      />
       <div className="flex flex-wrap items-center gap-1.5">
         {TYPES.map((t) => (
           <TypeChip key={t.value} type={t.value} />
         ))}
-        <span className="ml-1 text-muted-foreground">
-          新增时按 <K>Tab</K> 切换类型
-        </span>
+        <span className="ml-1 text-muted-foreground">三种类型</span>
       </div>
-      <Points>
-        <li>点击行首的圆圈，标记完成或重新打开；重新打开回到完成前的状态，之前在进行中就回到进行中。父改进点完成时，没完成的子改进点一起完成；父改进点重新打开时，这些跟着完成的子改进点也撤回，本来就完成的不变。</li>
-        <li>单击改进点打开详情，双击或按 Enter 直接在行内改名（Enter 保存，Esc 放弃，Shift+Enter 保存并在下面新加一条同级的；光标在标题中间时，后半段挪到新加的那一条里）。</li>
-        <li>在队列顶部按状态和类型筛选，在侧栏按模块筛选。</li>
-        <li>侧栏的项目和模块可以拖动排序，双击直接改名。</li>
-        <li>右键单击改进点，可以修改状态、添加子改进点、移动或删除。</li>
-        <li>
-          按住 <K>Ctrl</K> 单击加选，按住 <K>Shift</K> 单击连选，也可以在空白处拖出选择框。选中多条后，右键菜单、快捷键和右侧详情都对整组生效；从选中的行开始拖动，整组一起移动。
-        </li>
-        <li>点击分区标题，收起或展开进行中、待办、已完成。</li>
-        <li>把改进点拖到另一个分区的标题或空白处，就改成那个状态；分区收起时也可以拖到标题上。</li>
-        <li>把改进点拖到侧栏的模块上，就改成那个模块，子改进点一起改。</li>
-      </Points>
+
+      <Sub>拖动</Sub>
       <DropGuide />
       <Points>
-        <li>子改进点可以一层层往下套，层数不限，每一条都有自己的状态。</li>
-        <li>
-          点击行首的箭头，或按 <K>←</K> <K>→</K>，收起和展开子改进点。
-        </li>
-        <li>删除父改进点时，子改进点会上移一层，不会被一起删除。</li>
+        <li>拖到分区标题：改成那个状态。</li>
+        <li>拖到侧栏的模块：改成那个模块，子改进点一起改。</li>
+        <li>选中多条后拖动，整组一起移动。</li>
       </Points>
+
+      <Sub>子改进点</Sub>
       <Points>
+        <li>可以一层层往下套，每一条有自己的状态。</li>
         <li>
-          删除的改进点先进侧栏左下角的「回收站」，不用确认；右下角的提示里点「撤销」或按 <K>Ctrl+Z</K>，放回原处。按住 <K>Shift</K> 再删除（<K>Shift+Delete</K>，或按住 <K>Shift</K> 点删除按钮、右键菜单的删除），就跳过回收站彻底删除，会先确认；按住时删除按钮变红，菜单里变成「彻底删除」。
+          点行首箭头或按 <K>←</K> <K>→</K> 收起、展开。
+        </li>
+        <li>上级完成时，没完成的子改进点一起完成。</li>
+      </Points>
+
+      <Sub>回收站</Sub>
+      <Points>
+        <li>删除的改进点进侧栏左下角的回收站，保留 30 天（设置 → 数据 可以改）。</li>
+        <li>
+          <K>Shift+Delete</K> 跳过回收站彻底删除，会先确认。
         </li>
         <li>
-          回收站里是所有项目删除的改进点。恢复时回到原来的位置，当时上移的子改进点也放回它下面；原来的上级已经不在时放到项目最后。默认保留 30 天，在 设置 → 数据 里修改。在回收站里 <K>Enter</K> 恢复，<K>Delete</K> 彻底删除，<K>Esc</K> 返回。
+          回收站里：<K>Enter</K> 恢复，<K>Delete</K> 彻底删除，<K>Esc</K> 返回。
         </li>
+      </Points>
+
+      <Sub>细节</Sub>
+      <Points quiet>
+        <li>
+          行内改名时：<K>Enter</K> 保存，<K>Esc</K> 放弃，<K>Shift+Enter</K> 保存并在下面新加一条；光标在中间时，后半段挪到新的那条。
+        </li>
+        <li>重新打开回到完成前的状态：之前在进行中，就回到进行中。跟着上级一起完成的子改进点，上级重新打开时一起撤回。</li>
+        <li>删除上级时，子改进点上移一层，不会一起删除；恢复时放回原处，原来的上级不在了就放到项目最后。</li>
+        <li>
+          按住 <K>Shift</K> 时，删除按钮和右键菜单里的删除都变成彻底删除。
+        </li>
+        <li>点分区标题收起或展开；分区收起时也能拖到它的标题上。</li>
+        <li>侧栏的项目和模块可以拖动排序，双击改名。</li>
       </Points>
     </Section>
   );
+}
+
+/** What to do, and how: the main moves of a section, one a row. */
+function Actions({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-2.5 rounded-lg bg-card p-3.5 ring-1 ring-foreground/[0.07]">
+      {rows.map(([what, how]) => (
+        <Fragment key={what}>
+          <dt className="text-muted-foreground">{what}</dt>
+          <dd>{how}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
+
+/** A heading within a section. */
+function Sub({ children }: { children: ReactNode }) {
+  return <h3 className="-mb-1.5 pt-1 font-medium">{children}</h3>;
 }
 
 /** Where a row dragged onto another lands, drawn as three rows. */
@@ -616,9 +689,15 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function Points({ children }: { children: ReactNode }) {
+/** A list of points; quiet ones, the details, smaller and fainter. */
+function Points({ quiet, children }: { quiet?: boolean; children: ReactNode }) {
   return (
-    <ul className="flex flex-col gap-2 leading-relaxed [&>li]:relative [&>li]:pl-4 [&>li]:before:absolute [&>li]:before:top-[0.6em] [&>li]:before:left-0.5 [&>li]:before:size-1.5 [&>li]:before:rounded-full [&>li]:before:bg-muted-foreground/50">
+    <ul
+      className={cn(
+        "flex flex-col gap-2 leading-relaxed [&>li]:relative [&>li]:pl-4 [&>li]:before:absolute [&>li]:before:top-[0.6em] [&>li]:before:left-0.5 [&>li]:before:size-1.5 [&>li]:before:rounded-full [&>li]:before:bg-muted-foreground/50",
+        quiet && "gap-1.5 text-xs text-muted-foreground [&>li]:before:size-1 [&>li]:before:bg-muted-foreground/40",
+      )}
+    >
       {children}
     </ul>
   );

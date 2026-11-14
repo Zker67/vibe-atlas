@@ -59,6 +59,7 @@ import {
   DRAFT_HEIGHT,
   draftSpot,
   GRID,
+  headHeight,
   NODE_HEIGHT,
   NODE_WIDTH,
   placesOf,
@@ -87,7 +88,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { IconButton } from "@/components/app/icon-button";
 import { TypeIcon } from "@/components/app/item-marks";
 import { addDep, createItem, lastTrashAt, matchesFilters, removeDep, select, setSelection, toggleSelected, useAtlas } from "@/state/atlas";
-import { FlowCard, type FlowRowData, type LinkView } from "./flow-node";
+import { FlowCard, titleLines, type FlowRowData, type LinkView } from "./flow-node";
 import { loadCanvas, saveSpots, savedViewport, saveViewport, setHintsOpen, setHistory, setShowDone, useFlow } from "./flow-store";
 
 /** How far the pointer moves before a press becomes a drag, in screen pixels. */
@@ -209,7 +210,17 @@ export function FlowBoard() {
       ),
     [shown, byId],
   );
-  const heightOf = useCallback((root: number) => cardHeight(cards.rows.get(root)?.length ?? 0), [cards]);
+  /** How tall a card's head is: a long title takes a third line. */
+  const headOf = useCallback((root: number) => headHeight(titleLines(byId.get(root)?.title ?? "")), [byId]);
+  const heightOf = useCallback((root: number) => cardHeight(cards.rows.get(root)?.length ?? 0, headOf(root)), [cards, headOf]);
+  /** How far down its card an item's row is, its handles there. */
+  const middleOf = useCallback(
+    (id: number) => {
+      const root = cards.rootOf.get(id) ?? id;
+      return rowMiddle(cards.index.get(id) ?? -1, headOf(root));
+    },
+    [cards, headOf],
+  );
   const edges = useMemo(() => deps.filter((d) => shownIds.has(d.fromId) && shownIds.has(d.toId)), [deps, shownIds]);
   /** The lines between cards, which lay them out. */
   const between = useMemo(() => cardEdges(edges, cards.rootOf), [edges, cards]);
@@ -233,9 +244,9 @@ export function FlowBoard() {
   }, [shown, byId, index]);
 
   // Kept for the handlers, which outlive a render.
-  const live = useRef({ shown, cards, heightOf, places, between, saved, projectId, items, deps });
+  const live = useRef({ shown, cards, heightOf, middleOf, places, between, saved, projectId, items, deps });
   useLayoutEffect(() => {
-    live.current = { shown, cards, heightOf, places, between, saved, projectId, items, deps };
+    live.current = { shown, cards, heightOf, middleOf, places, between, saved, projectId, items, deps };
   });
 
   // ---- Loading, size, viewport ----
@@ -422,7 +433,7 @@ export function FlowBoard() {
     if (line && root !== undefined && p) {
       from = {
         card: { ...p, width: NODE_WIDTH, height: now.heightOf(root) },
-        y: p.y + rowMiddle(now.cards.index.get(line.otherId) ?? -1),
+        y: p.y + now.middleOf(line.otherId),
         side: line.side,
       };
     }
@@ -617,7 +628,7 @@ export function FlowBoard() {
       ports.push({
         id: it.id,
         card: { ...p, width: NODE_WIDTH, height: now.heightOf(root) },
-        at: { x: side === "out" ? p.x : p.x + NODE_WIDTH, y: p.y + rowMiddle(now.cards.index.get(it.id) ?? -1) },
+        at: { x: side === "out" ? p.x : p.x + NODE_WIDTH, y: p.y + now.middleOf(it.id) },
         ok: !problems.get(it.id),
       });
     }
@@ -829,7 +840,7 @@ export function FlowBoard() {
     const root = cards.rootOf.get(id);
     const p = root === undefined ? undefined : placeOf(root);
     if (!p) return null;
-    return { x: side === "out" ? p.x + NODE_WIDTH : p.x, y: p.y + rowMiddle(cards.index.get(id) ?? -1) };
+    return { x: side === "out" ? p.x + NODE_WIDTH : p.x, y: p.y + middleOf(id) };
   };
   /** The line from fromId to toId: right side to left side; within a card, out of the right side and back in. */
   const lineOf = (fromId: number, toId: number) => {
@@ -1039,6 +1050,7 @@ export function FlowBoard() {
                       x={p.x}
                       y={p.y}
                       height={heightOf(root)}
+                      head={headOf(root)}
                       selected={own.filter((id) => selectedIds.has(id)).join(",")}
                       focus={selectedIds.size > 1 && own.includes(selectedId) ? selectedId : 0}
                       waits={waits}

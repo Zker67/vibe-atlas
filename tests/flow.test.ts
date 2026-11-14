@@ -30,6 +30,7 @@ import {
   DRAFT_HEIGHT,
   draftSpot,
   groupsOf,
+  headHeight,
   NODE_HEIGHT,
   NODE_WIDTH,
   placesOf,
@@ -379,4 +380,16 @@ test("draftSpot puts a new card drawn from an item in the next column, on its ro
   expect(spot.x).toBe(NODE_WIDTH + COLUMN_GAP);
   expect(spot.y).toBeGreaterThanOrEqual(NODE_HEIGHT + ROW_GAP);
   expect(overlaps({ ...spot, width: NODE_WIDTH, height: DRAFT_HEIGHT }, there)).toBe(false);
+});
+
+test("a long title makes the head a line taller, the rows and handles moving down with it", () => {
+  expect(headHeight(1)).toBe(NODE_HEIGHT);
+  expect(headHeight(2)).toBe(NODE_HEIGHT);
+  expect(headHeight(3)).toBe(NODE_HEIGHT + 20);
+  expect(headHeight(9)).toBe(headHeight(3));
+  const head = headHeight(3);
+  expect(cardHeight(0, head)).toBe(head);
+  expect(cardHeight(2, head) - cardHeight(2)).toBe(20);
+  expect(rowMiddle(-1, head)).toBe(head / 2);
+  expect(rowMiddle(0, head) - rowMiddle(0)).toBe(20);
 });

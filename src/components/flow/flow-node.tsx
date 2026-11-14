@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { CornerLeftUp, FileText, ListTree } from "lucide-react";
 import type { Item } from "@/mygo";
-import { NODE_HEIGHT, NODE_WIDTH, ROW_HEIGHT, ROWS_PAD } from "@/lib/flow/layout";
+import { NODE_HEIGHT, NODE_WIDTH, ROW_HEIGHT, ROWS_PAD, TITLE_LINES, TITLE_WIDTH } from "@/lib/flow/layout";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { StatusButton, TypeIcon } from "@/components/app/item-marks";
@@ -30,6 +30,8 @@ export interface FlowCardProps {
   x: number;
   y: number;
   height: number;
+  /** How tall the head is: a third line of title makes it taller. */
+  head: number;
   /** The ids of the card's items that are selected, joined by commas. */
   selected: string;
   /** The item of the card the keys act from among several selected, or 0. */
@@ -88,6 +90,7 @@ export const FlowCard = memo(function FlowCard({
   x,
   y,
   height,
+  head: headTall,
   selected,
   focus,
   waits,
@@ -124,7 +127,7 @@ export const FlowCard = memo(function FlowCard({
           <div
             data-flow-item=""
             data-id={root.id}
-            style={group ? { height: NODE_HEIGHT - 1 } : undefined}
+            style={group ? { height: headTall - 1 } : undefined}
             className={cn(
               "group/item relative flex shrink-0 flex-col justify-between rounded-t-[7px] px-2.5 py-2 transition-opacity duration-150",
               group ? "border-b" : "h-full rounded-b-[7px]",
@@ -137,7 +140,7 @@ export const FlowCard = memo(function FlowCard({
             <Port side="out" mode={head.out} idle="opacity-40" />
             <div className="flex min-w-0 items-start gap-1.5">
               <StatusButton item={root} onToggle={() => toggleItemDone(root)} />
-              <span className={cn("line-clamp-2 min-w-0 flex-1 text-sm leading-5 break-words", done && "text-muted-foreground line-through decoration-muted-foreground/50")}>
+              <span className={cn(headTall > NODE_HEIGHT ? "line-clamp-3" : "line-clamp-2", "min-w-0 flex-1 text-sm leading-5 break-words", done && "text-muted-foreground line-through decoration-muted-foreground/50")}>
                 {root.title}
               </span>
             </div>
@@ -184,6 +187,26 @@ export const FlowCard = memo(function FlowCard({
     </div>
   );
 });
+
+let measure: CanvasRenderingContext2D | null = null;
+const lineCounts = new Map<string, number>();
+
+/**
+ * How many lines a head's title takes, up to TITLE_LINES, measured in the
+ * card's font (text-sm). A little over the width counts as a line more:
+ * words wrap before the edge.
+ */
+export function titleLines(title: string): number {
+  const known = lineCounts.get(title);
+  if (known !== undefined) return known;
+  measure ??= document.createElement("canvas").getContext("2d");
+  if (!measure) return 2;
+  measure.font = `14px ${getComputedStyle(document.body).fontFamily}`;
+  const width = measure.measureText(title).width;
+  const lines = Math.min(TITLE_LINES, Math.max(1, Math.ceil((width * 1.06) / TITLE_WIDTH)));
+  lineCounts.set(title, lines);
+  return lines;
+}
 
 /** How far in a row's tree lines are, by depth: under the head's status, then under each row's. */
 const guideX = (depth: number) => 20 + (depth - 1) * 16;

@@ -58,14 +58,25 @@ export interface Edge {
   toId: number;
 }
 
-/** How tall a card is: its head, and its rows under. */
-export function cardHeight(rows: number): number {
-  return rows > 0 ? NODE_HEIGHT + ROWS_PAD * 2 + rows * ROW_HEIGHT : NODE_HEIGHT;
+/** A line of a head's title, and how wide the title is, by the status beside it. */
+export const TITLE_LINE = 20;
+export const TITLE_WIDTH = NODE_WIDTH - 48;
+/** The most lines a head's title takes. */
+export const TITLE_LINES = 3;
+
+/** How tall a card's head is with a title of lines lines: two fit NODE_HEIGHT, a third makes it taller. */
+export function headHeight(lines: number): number {
+  return NODE_HEIGHT + Math.max(0, Math.min(lines, TITLE_LINES) - 2) * TITLE_LINE;
 }
 
-/** How far down a card the middle of its row index is, where its handles are: -1 for its head. */
-export function rowMiddle(index: number): number {
-  return index < 0 ? NODE_HEIGHT / 2 : NODE_HEIGHT + ROWS_PAD + index * ROW_HEIGHT + ROW_HEIGHT / 2;
+/** How tall a card is: its head (head tall), and its rows under. */
+export function cardHeight(rows: number, head = NODE_HEIGHT): number {
+  return rows > 0 ? head + ROWS_PAD * 2 + rows * ROW_HEIGHT : head;
+}
+
+/** How far down a card (its head head tall) the middle of its row index is, where its handles are: -1 for its head. */
+export function rowMiddle(index: number, head = NODE_HEIGHT): number {
+  return index < 0 ? head / 2 : head + ROWS_PAD + index * ROW_HEIGHT + ROW_HEIGHT / 2;
 }
 
 const fixedHeight = () => NODE_HEIGHT;
