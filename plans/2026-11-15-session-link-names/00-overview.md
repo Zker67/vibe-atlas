@@ -23,4 +23,5 @@
 - 名称查询按链接来源分组，失败隔离，列表缓存按来源独立保存；选择列表仍按设置读取。前端无需因选择来源变化重新查名，设置说明和接口文档已同步。
 - `CGO_ENABLED=0 go vet ./...`、`CGO_ENABLED=0 go test ./...`、新增入口定向测试、`bun run generate`、`bun run typecheck`、`bun run lint`、`git diff --check` 均通过。
 - 使用用户提供的 Codex 链接调用修改后的读取器，只读验证成功取得本机会话名。
-- 修复纳入 0.6.3，发布入口为 [GitHub Release](https://github.com/Zker67/vibe-atlas/releases/tag/v0.6.3)；真实窗口交互由用户验收。
+- 已发布 0.6.3，发布入口为 [GitHub Release](https://github.com/Zker67/vibe-atlas/releases/tag/v0.6.3)；真实窗口交互由用户验收。
+- 发布验证：签名打包成功；隔离数据目录的打包冒烟报告 `ok: true`、版本 `0.6.3`，会话选择和名称显示检查通过；Ed25519 更新包签名验证通过，四个 GitHub 附件的大小和 SHA-256 均与本地产物一致。

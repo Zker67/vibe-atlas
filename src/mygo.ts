@@ -430,7 +430,7 @@ export interface Settings {
   currentOrgId: number;
 }
 
-/** Source is where sessions are read from: one at a time, as the user set. */
+/** Source identifies a local session store; the picker selects one source. */
 export type Source = "" | "claude" | "codex" | "codeg";
 
 /** Theme is the appearance the user chose. */
