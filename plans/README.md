@@ -46,7 +46,7 @@ plans/
 
 | 计划 | 内容 | 状态 |
 |---|---|---|
-| [2026-11-14-icon-discovery](./2026-11-14-icon-discovery/00-overview.md) | MyGo / Godot / Unity 配置图标、workspace 子应用发现、常见路径兜底 | `[partial]`：已实现，图标验证通过，等用户验收；全量冒烟另有多选退层级失败 |
+| [2026-11-14-icon-discovery](./2026-11-14-icon-discovery/00-overview.md) | MyGo / Godot / Unity 配置图标、workspace 子应用发现、常见路径兜底 | `[done]`：随 0.4.6 发布，用户已验收 |
 | [2026-11-07-prototype](./2026-11-07-prototype/00-overview.md) | 第一期：Windows 上可测试的原型，共 8 步（技术验证 → 应用底座 → 项目与模块 → 改进点与队列 → Markdown 编辑 → 快速记录 → 项目总览 → 打磨交付）；[实施报告](./2026-11-07-prototype/09-implementation-report.md) | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-visual-style](./2026-11-07-visual-style/00-overview.md) | 视觉风格：参照 Next-AIGC 的「暗场 + 信号光」，自建顶栏合成一条，耗性能的效果放进默认关闭的开关 | `[partial]`：已实现，等用户验收 |
 | [2026-11-07-queue-header](./2026-11-07-queue-header/00-overview.md) | 项目控件从顶栏挪到队列列顶部（两行），新增状态筛选 | `[partial]`：已实现，等用户验收 |

@@ -1,6 +1,6 @@
 # 按项目配置识别图标
 
-> 状态：`[partial]`：已实现，图标自动化验证通过，等用户真实窗口验收；全量冒烟有独立的多选退层级失败。范围：本地图标检测，无新增依赖、数据库变更或界面功能。
+> 状态：`[done]`：已实现，随 0.4.6 发布，用户已在真实窗口里验收通过（2026-11-14）。范围：本地图标检测，无新增依赖、数据库变更或界面功能。
 
 ## 目标与范围
 
@@ -45,4 +45,5 @@
 - 真实项目测试入口为 `TestProjectIconDiscoveryLocal`，通过环境变量 `VIBE_ATLAS_ICON_PROJECTS` 传 JSON 数组 `[{"folder":"项目绝对路径","want":"预期相对图标路径"}]`。默认跳过，不把机器路径写进源码。
 - 打包产物 `build/windows-amd64/Vibe Atlas.exe` 已生成。使用隔离数据目录及 WebView2 目录运行冒烟：`icons` 的 PNG 检测/显示、SVG 检测/显示、emoji 切换均通过；全量流程在 `select several` 的 `shiftTabOutdents` 断言失败，整体 `ok=false`。该测试所在的 `smoke_select.go` 有其他未提交改动，本任务未修改；不将全量冒烟标为通过。
 - 用户验收：启动新构建，图标菜单选择「自动」并点「重新检测」；上述三个已配置项目应显示自身图标，Godot 未配置项目保持默认。
+- 后续：上面的 `shiftTabOutdents` 失败来自冒烟脚本，模拟的指针事件缺少 `pointerType`，被右键菜单当成触摸长按，已在 `004a804` 修复。修复后全量冒烟通过，本次改动随 0.4.6 发布；2026-11-14 用户验收通过。
 - Orca 当前 `main` 图标源码复核及与本次实现的比较已写入[既有参考记录](../../references/external-repos/stablyai__orca/README.md)。
