@@ -10,7 +10,7 @@ import (
 var trashChecks = []string{
 	"deleteTrashes", "childMovedUp", "toastOffersUndo", "ctrlZRestores",
 	"shiftShowsPurge", "shiftDeleteAsks", "cancelKeeps",
-	"trashViewLists", "enterRestores", "escapeBack",
+	"trashViewLists", "whereShown", "enterRestores", "escapeBack",
 }
 
 // smokeTrash checks the trash in the main window, with the events the keys
@@ -18,7 +18,8 @@ var trashChecks = []string{
 // confirm, its child moving up, and a toast offers to undo; Ctrl+Z puts it
 // back, its child under it again; holding Shift turns the delete button of
 // the detail into 彻底删除, and Shift+Delete asks first, Cancel keeping the
-// item; the trash, opened from the sidebar, lists the item, Enter restores
+// item; the trash, opened from the sidebar, lists the item with its
+// organization and project, Enter restores
 // it, and Escape goes back to the queue.
 func (a *app) smokeTrash(main *mygo.Window) (map[string]any, error) {
 	result, err := mygo.EvalAs[map[string]any](main.Page(), `
@@ -100,6 +101,10 @@ func (a *app) smokeTrash(main *mygo.Window) (map[string]any, error) {
 		click(trashButton);
 		const entry = () => [...document.querySelectorAll("[data-trash-entry]")].find((el) => el.textContent.includes("回收测试条"));
 		out.trashViewLists = await until(() => !!entry());
+		// Where it was: the organization, then the project.
+		const personal = (await mygo.call("Atlas.Orgs")).find((o) => o.personal);
+		const where = entry()?.textContent ?? "";
+		out.whereShown = where.includes(personal.name + "冒烟测试项目");
 		click(entry());
 		key("Enter");
 		out.enterRestores = await until(async () => {

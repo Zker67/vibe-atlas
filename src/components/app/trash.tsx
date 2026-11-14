@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Flame, RotateCcw, Trash2, X } from "lucide-react";
-import type { Project, TrashEntry } from "@/mygo";
+import { ArchiveRestore, ArchiveX, BrushCleaning, ChevronRight, Trash2, X } from "lucide-react";
+import type { Org, Project, TrashEntry } from "@/mygo";
 import { isComposing, isTypingTarget, overlayOpen } from "@/lib/keys";
 import { statusInfo } from "@/lib/labels";
 import { PURGE_KEY } from "@/lib/purge-key";
@@ -12,7 +12,7 @@ import { Scroller } from "@/components/ui/scroller";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { emptyTrash, purgeTrash, restoreTrash, setView, useAtlas } from "@/state/atlas";
 import { askConfirm, showSettingsTab } from "@/state/dialogs";
-import { ProjectIcon } from "./entity-icon";
+import { OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { TypeIcon } from "./item-marks";
 
@@ -106,6 +106,8 @@ export function TrashView() {
   const cursor = selection.cursor;
 
   const projectOf = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const orgs = useAtlas((s) => s.orgs);
+  const orgOf = useMemo(() => new Map(orgs.map((o) => [o.id, o])), [orgs]);
   const groups = useMemo(() => {
     const out: { key: string; label: string; entries: TrashEntry[] }[] = [];
     for (const e of trash) {
@@ -199,11 +201,11 @@ export function TrashView() {
             <div key="picked" className="flex items-center gap-1 animate-in duration-150 fade-in-0 slide-in-from-right-1">
               <span className="mr-1 text-xs text-muted-foreground">已选 {picked.size} 条</span>
               <Button variant="outline" size="sm" onClick={() => void restoreTrash([...picked])}>
-                <RotateCcw />
+                <ArchiveRestore />
                 恢复
               </Button>
               <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => confirmPurge(chosen)}>
-                <Flame />
+                <ArchiveX />
                 彻底删除
               </Button>
               <IconButton label="取消选择" shortcut="Esc" onClick={() => select({ ...latest.current, picked: new Set() })}>
@@ -219,7 +221,7 @@ export function TrashView() {
               className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               onClick={() => confirmEmpty(trash.length)}
             >
-              <Flame />
+              <BrushCleaning />
               清空回收站
             </Button>
           )}
@@ -241,6 +243,7 @@ export function TrashView() {
                       key={e.id}
                       entry={e}
                       project={projectOf.get(e.item.projectId)}
+                      org={orgOf.get(projectOf.get(e.item.projectId)?.orgId ?? 0)}
                       expires={expiry(e.deletedAt, days, now)}
                       selected={picked.has(e.id)}
                       cursor={cursor === e.id}
@@ -277,6 +280,8 @@ export function TrashView() {
 interface TrashRowProps {
   entry: TrashEntry;
   project: Project | undefined;
+  /** The organization of the project. */
+  org: Org | undefined;
   expires: string;
   selected: boolean;
   cursor: boolean;
@@ -285,7 +290,24 @@ interface TrashRowProps {
   onPurge(): void;
 }
 
-function TrashRow({ entry, project, expires, selected, cursor, onPick, onRestore, onPurge }: TrashRowProps) {
+/** Where an entry was: its organization › its project, on a faint chip. */
+function Where({ org, project }: { org: Org | undefined; project: Project }) {
+  return (
+    <span className="flex h-5 min-w-0 items-center gap-1 rounded-md bg-foreground/[0.04] px-1.5 ring-1 ring-foreground/[0.06]">
+      {org && (
+        <>
+          <OrgIcon org={org} className="size-3 opacity-80" />
+          <span className="max-w-32 shrink-0 truncate">{org.name}</span>
+          <ChevronRight aria-hidden className="size-3 shrink-0 opacity-50" />
+        </>
+      )}
+      <ProjectIcon project={project} className="size-3" />
+      <span className="truncate text-foreground/80">{project.name}</span>
+    </span>
+  );
+}
+
+function TrashRow({ entry, project, org, expires, selected, cursor, onPick, onRestore, onPurge }: TrashRowProps) {
   const { item } = entry;
   const status = statusInfo(item.status);
   const StatusIcon = status.icon;
@@ -309,12 +331,7 @@ function TrashRow({ entry, project, expires, selected, cursor, onPick, onRestore
           <span className="truncate">{item.title}</span>
         </div>
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {project && (
-            <span className="flex min-w-0 items-center gap-1">
-              <ProjectIcon project={project} className="size-3" />
-              <span className="truncate">{project.name}</span>
-            </span>
-          )}
+          {project && <Where org={org} project={project} />}
           {entry.lifted > 0 && <span className="shrink-0">· {entry.lifted} 个子改进点已上移，恢复时放回</span>}
         </div>
       </div>
@@ -336,7 +353,7 @@ function TrashRow({ entry, project, expires, selected, cursor, onPick, onRestore
             onRestore();
           }}
         >
-          <RotateCcw />
+          <ArchiveRestore />
         </IconButton>
         <IconButton
           label="彻底删除"
@@ -347,7 +364,7 @@ function TrashRow({ entry, project, expires, selected, cursor, onPick, onRestore
             onPurge();
           }}
         >
-          <Flame />
+          <ArchiveX />
         </IconButton>
       </div>
     </div>
