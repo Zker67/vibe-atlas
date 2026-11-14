@@ -1,12 +1,14 @@
 // Package sessions reads, without writing, the AI sessions kept on this
 // machine by one of Claude Code, Codex or codeg, so that an item can be
 // linked to one picked from a list, and a link to one shows the session's
-// name. It never runs, watches or talks to an agent.
+// name. Link names are read from each link's source. It never runs,
+// watches or talks to an agent.
 package sessions
 
 import (
 	"bufio"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +20,7 @@ import (
 	"unicode/utf8"
 )
 
-// Source is where sessions are read from: one at a time, as the user set.
+// Source identifies a local session store; the picker selects one source.
 type Source string
 
 // The sources.
@@ -61,11 +63,13 @@ type Session struct {
 type Reader struct {
 	mu    sync.Mutex
 	files map[string]parsed
-	// list is the last list read, briefly, for the bursts of calls a page
-	// makes as it shows several links.
-	list     []Session
-	listFrom Source
-	listAt   time.Time
+	// lists keeps each source's last list briefly for bursts of lookups.
+	lists map[Source]sessionList
+}
+
+type sessionList struct {
+	items []Session
+	at    time.Time
 }
 
 // listFresh is how long a list read stays current.
@@ -102,8 +106,8 @@ func cached[T any](r *Reader, path string, info os.FileInfo, parse func() T) T {
 // not on this machine has none.
 func (r *Reader) List(src Source) ([]Session, error) {
 	r.mu.Lock()
-	if r.list != nil && r.listFrom == src && time.Since(r.listAt) < listFresh {
-		list := r.list
+	if entry, ok := r.lists[src]; ok && time.Since(entry.at) < listFresh {
+		list := entry.items
 		r.mu.Unlock()
 		return list, nil
 	}
@@ -126,7 +130,10 @@ func (r *Reader) List(src Source) ([]Session, error) {
 	}
 	list = newestFirst(list)
 	r.mu.Lock()
-	r.list, r.listFrom, r.listAt = list, src, time.Now()
+	if r.lists == nil {
+		r.lists = map[Source]sessionList{}
+	}
+	r.lists[src] = sessionList{items: list, at: time.Now()}
 	r.mu.Unlock()
 	return list, nil
 }
@@ -172,6 +179,29 @@ func newestFirst(list []Session) []Session {
 		return strings.Compare(a.ID, b.ID)
 	})
 	return list
+}
+
+// FindLinks resolves only the sources present in links. A failed source
+// leaves its links unnamed without discarding names from other sources.
+func (r *Reader) FindLinks(links []string) map[string]Session {
+	groups := map[Source][]string{}
+	for _, link := range links {
+		if src, _, ok := Parse(link); ok {
+			groups[src] = append(groups[src], link)
+		}
+	}
+	out := map[string]Session{}
+	for src, group := range groups {
+		found, err := r.Find(src, group)
+		if err != nil {
+			log.Printf("session names (%s): %v", src, err)
+			continue
+		}
+		for link, session := range found {
+			out[link] = session
+		}
+	}
+	return out
 }
 
 // Find returns the sessions of src the links open, by link; links of

@@ -1,12 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { create } from "zustand";
-import { Atlas, events, type Session, type Source } from "@/mygo";
+import { Atlas, type Session } from "@/mygo";
 import { parseSessionLink, shortId, SOURCE_NAMES, type SessionLink } from "@/lib/session-link";
 
-// The sessions that links on the page open, found by Go in the source the
-// user set, to show their names. Looked up as links show, several at once,
+// The sessions that links on the page open, found by Go in each link's
+// source, to show their names. Looked up as links show, several at once,
 // and looked up again after a while, when the window comes back to the
-// front and when the source changes: sessions are renamed meanwhile.
+// front: sessions are renamed meanwhile.
 
 interface Found {
   session: Session | null;
@@ -58,11 +58,6 @@ function stale() {
   });
 }
 
-let source: Source | undefined;
-events.settingsChanged.on((s) => {
-  if (source !== undefined && s.sessionSource !== source) stale();
-  source = s.sessionSource;
-});
 window.addEventListener("focus", stale);
 
 /** Keeps a session just picked, so that its name shows at once. */
@@ -73,7 +68,7 @@ export function rememberSession(session: Session) {
 /** How a link to a session shows. */
 export interface SessionLook {
   link: SessionLink;
-  /** The session, once found in the source set; null before, or when it is not there. */
+  /** The session, once found in the link's source; null before, or when it is not there. */
   session: Session | null;
   /** The agent whose icon shows. */
   agent: string;

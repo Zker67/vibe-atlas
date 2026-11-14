@@ -907,7 +907,7 @@ export const Atlas = {
   },
   /**
    * SessionsOf finds the sessions links open, by link, to show their names:
-   * only those of the source the user set.
+   * using each link's source, independently of the session picker setting.
    */
   sessionsOf(links: string[]): Promise<Record<string, Session>> {
     return call("Atlas.SessionsOf", links);

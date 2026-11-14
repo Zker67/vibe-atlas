@@ -269,7 +269,7 @@ func TestCodex(t *testing.T) {
 	}
 	f.WriteString(`{"id":"` + idB + `","thread_name":"后来起的名字"}` + "\n")
 	f.Close()
-	r.listAt = time.Time{}
+	r.lists = nil
 	list, _ = r.List(Codex)
 	for _, s := range list {
 		if s.ID == idB && s.Title != "后来起的名字" {
@@ -343,7 +343,7 @@ func TestCodeg(t *testing.T) {
 	if _, err := db.Exec(`UPDATE conversation SET title = '改了名' WHERE id = 10`); err != nil {
 		t.Fatalf("codeg cannot write while it is read: %v", err)
 	}
-	r.listAt = time.Time{}
+	r.lists = nil
 	found, err := r.Find(Codeg, []string{"codeg://session/10", "codeg://session/13", "codex://threads/" + idA, "https://x.dev"})
 	if err != nil {
 		t.Fatal(err)

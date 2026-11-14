@@ -191,7 +191,7 @@ function ItemsPanel({ settings }: { settings: Settings }) {
         title="会话来源"
         description={
           <>
-            选一个之后，链接旁边多出「选择会话」，列出这个软件在本机的会话（只读，不会改动它们），选中就填进链接；会话链接显示成图标和会话名。一次只读一个来源。
+            选一个之后，链接旁边多出「选择会话」，列出这个软件在本机的会话，选中就填进链接。粘贴的会话链接按链接类型读取名称，不受此设置影响；所有会话都只读，不会改动。
             <br />
             Claude Code 的会话由本软件运行 claude --desktop --resume 在 Claude 桌面版里打开。
           </>

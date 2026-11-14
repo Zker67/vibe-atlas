@@ -965,13 +965,9 @@ func (a *Atlas) ListSessions(folder string, all bool) ([]sessions.Session, error
 }
 
 // SessionsOf finds the sessions links open, by link, to show their names:
-// only those of the source the user set.
+// using each link's source, independently of the session picker setting.
 func (a *Atlas) SessionsOf(links []string) (map[string]sessions.Session, error) {
-	db, err := a.store()
-	if err != nil {
-		return nil, err
-	}
-	return a.sessions.Find(sessionSource(db), links)
+	return a.sessions.FindLinks(links), nil
 }
 
 // ---- Overview ----
