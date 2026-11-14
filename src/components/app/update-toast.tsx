@@ -51,7 +51,7 @@ export function UpdateToast() {
         toast.loading(`正在更新到 ${v}`, {
           id: ID,
           className: CLASS,
-          description: `已下载 ${Math.floor(update.progress * 100)}%`,
+          description: <DownloadProgress progress={update.progress} />,
           duration: Infinity,
           action: undefined,
           cancel: undefined,
@@ -106,4 +106,27 @@ export function UpdateToast() {
   }, [update, later]);
 
   return null;
+}
+
+/** How much of the update downloaded, 0 to 1: a bar that fills, and the percent beside it. */
+function DownloadProgress({ progress }: { progress: number }) {
+  const pct = Math.min(100, Math.max(0, Math.floor(progress * 100)));
+  return (
+    <div className="mt-1.5 flex items-center gap-2">
+      <div
+        role="progressbar"
+        aria-label="下载进度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out motion-reduce:transition-none"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="w-9 text-right text-xs tabular-nums">{pct}%</span>
+    </div>
+  );
 }
