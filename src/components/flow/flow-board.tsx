@@ -1328,7 +1328,6 @@ const keyCap = "h-5 min-w-5 gap-0.5 border border-b-2 bg-background px-1 text-[1
 const HINTS: { id: string; keys: { label: string; glyph?: ReactNode }[]; text: string }[] = [
   { id: "select", keys: [{ label: "左键拖空白处", glyph: [<MouseGlyph key="m" part="left" />, dragGlyph] }], text: "框选" },
   { id: "add", keys: [{ label: "Ctrl" }, { label: "左键", glyph: <MouseGlyph part="left" /> }], text: "加选" },
-  { id: "space", keys: [{ label: "Space" }, { label: "左键拖动", glyph: [<MouseGlyph key="m" part="left" />, dragGlyph] }], text: "平移" },
   { id: "pan", keys: [{ label: "右键拖动", glyph: [<MouseGlyph key="m" part="right" />, dragGlyph] }], text: "平移" },
   { id: "menu", keys: [{ label: "右键", glyph: <MouseGlyph part="right" /> }], text: "菜单" },
   { id: "zoom", keys: [{ label: "滚轮", glyph: <MouseGlyph part="wheel" /> }], text: "缩放" },
@@ -1338,7 +1337,6 @@ const HINTS: { id: string; keys: { label: string; glyph?: ReactNode }[]; text: s
     text: "连线",
   },
   { id: "new", keys: [{ label: "N" }], text: "新建" },
-  { id: "done", keys: [{ label: "D" }], text: "完成" },
   { id: "delete", keys: [{ label: "Delete", glyph: "Del" }], text: "删除" },
   { id: "undo", keys: [{ label: "Ctrl" }, { label: "Z" }], text: "撤回" },
   { id: "redo", keys: [{ label: "Ctrl" }, { label: "Y" }], text: "重做" },
