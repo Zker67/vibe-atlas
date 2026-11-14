@@ -59,11 +59,14 @@
 - 绑定的文件夹只是记录路径，用来一键打开和找项目自己的图标。文件夹不存在时只做提示，不影响其他功能。
 - 选了文件夹而名称没填时，名称用文件夹名。
 - 项目图标「自动」时，按这个顺序找，找到就停：
-  1. 约定位置：`favicon`、`public/favicon`、`app/icon`、`src/app/icon`、`assets/icon`、`logo`、`public/logo`、`src-tauri/icons/icon`、`resources/icon`、`build/appicon`、`build/icon`、`icon` 等，每个依次试 `.png`、`.webp`、`.svg`；
+  1. 应用配置明确指定的图标：MyGo 的 `mygo.config.ts/js/mjs` 中 `export default defineConfig({...})` 顶层静态 `icon`；Godot 的 `project.godot` 中 `[application] config/icon="res://..."`；Unity 的 `ProjectSettings/ProjectSettings.asset` 图标 GUID，通过 `Assets` 下的 `.meta` 找到图片。Unity 按默认、Standalone、Android、其他平台的顺序尝试；不读取无关材质或启动画面的 GUID；
   2. `index.html`、`app/root.tsx` 等入口文件里 `<link rel="icon">` 指向的图片；
-  3. 入口文件里 `<link rel="apple-touch-icon">` 指向的图片；
-  4. `apple-touch-icon.png`（根目录、`public/`、`static/`）。
-- 项目根目录里找不到时，再在它直接下一层、有 `package.json` 或 `index.html` 的子文件夹里（按名字顺序）用同样的顺序找，比如前端放在 `mj_webui/` 里的项目；跳过 `node_modules`、`dist`、`build`、`out`、`target`、`vendor`、`coverage` 和以 `.` 开头的文件夹。不递归扫描，不读文件夹以外的文件，**不联网**（不取网站图标和 GitHub 头像）。
+  3. 约定位置：`favicon`、`public/favicon`、`app/icon`、`src/app/icon`、`assets/icon`、`logo`、`public/logo`、`src-tauri/icons/icon`、`resources/icon`、`build/appicon`、`build/icon`、`app-icon`、`app_icon`、`assets/app-icon`、`assets/app_icon`、`public/app-icon`、`public/app_icon`、`resources/app-icon`、`resources/app_icon`、`icon` 等，每个依次试 `.png`、`.webp`、`.svg`；
+  4. 入口文件里 `<link rel="apple-touch-icon">` 指向的图片；
+  5. `apple-touch-icon.png`（根目录、`public/`、`static/`）。
+- 项目根目录找不到时，先在 workspace 声明的应用中找，再检查直接下一层的应用文件夹；各组按路径名称排序，取首个合格图标。应用标记包括 `package.json`、`index.html`、MyGo 配置、`project.godot` 和 Unity 配置。支持 npm/Yarn `workspaces` 数组或 `{packages: [...]}`，以及 pnpm-workspace.yaml 的顶层 packages 字符串列表（逐行列表或 JSON 格式行内数组）；支持 `*`、`?`、字符集合、`**` 和 `!` 排除，不解释 YAML 标签/别名或复杂表达式。
+- 查找受范围限制：workspace 最多 128 个模式、8 层、4096 个目录项、64 个应用；直接子应用另限 4096 个目录项和 64 个应用。跳过 `node_modules`、`dist`、`build`、`out`、`target`、`vendor`、`coverage`、`Library`、`Temp`、`obj`、`Logs`、`Builds` 和隐藏目录。Unity 只为已声明的 GUID 在 `Assets` 下查找，最多 32 层、20000 个目录项，循环检查 2 秒时间预算；成功路径在内存中缓存（最多 128 项），每次使用前重新校验 `.meta` 和图片。配置/入口/单个 `.meta` 最多读 256 KB。
+- 不执行项目配置代码：MyGo 的变量、函数调用、插值或对象展开会退回其他检测方式。图片和配置路径拒绝绝对路径、`..` 及指向目录外的符号链接；**不联网**（不取网站图标和 GitHub 头像）。没有可靠图片时仍用默认图标，可手动选择图片。
 - 只认按内容判断是 PNG、WebP（不超过 4 MB）或 SVG（扩展名是 `.svg`、内容是 SVG，不超过 1 MB）的图片；ICO 不认。`vite.svg`、`react.svg`、`vue.svg`、`next.svg`、`vercel.svg` 这类脚手架模板自带的图标不认，因为每个项目都一样。PNG 缩到 128 像素保存，WebP 和 SVG 原样保存。
 - 检测的时机：绑定或更换文件夹时、图标弹窗里点「重新检测」时、程序启动 3 秒后（把绑定了文件夹的项目都看一遍）。手动选的图标不会被检测覆盖。
 - 删除模块时，下面的改进点不删除，变成「未分类」。
@@ -166,7 +169,7 @@
 - 项目：新建、编辑（右键菜单或项目菜单的「编辑项目」，或双击直接在行内改名，Enter 保存，Esc 放弃）、删除（确认并说明会一起删掉多少条改进点）、拖动排序；重名就地提示。
 - 绑定、更换、解除本地文件夹，一键在资源管理器打开；文件夹不存在时标红提示。项目栏的文件夹按钮平时是合上的文件夹图标（文字偏淡），悬停时变亮、图标打开，点击时按下缩一下、图标弹开一次再合上。
 - 新建和编辑项目是同一个弹窗（侧栏 `+`，右键或项目菜单的「编辑项目」）：左边是图标，右边是名称和文件夹，三项都能改。选好文件夹后，名称没填就填上文件夹名，图标没手动选时显示检测到的图标（图标右下角标「自动」）；文件夹可以更换、解除。
-- 图标：点侧栏里项目或模块的图标，在旁边弹出图标选择（和双击改名一样快），选中立即保存；也可以在「编辑项目」「编辑模块」弹窗里点图标换。项目和模块的右键菜单只有「编辑」和「删除」。选择框的高度跟着窗口可用空间走，列表在里面滚动。最上面是「自动」（项目，显示检测到的图标和说明，可以「重新检测」）或「默认图标」（模块）；下面分三页：图标（80 个内置图标，可以按中文搜索）、Emoji（常用 64 个，也可以输入或粘贴任意 emoji）、图片（选一张本机的 PNG、JPG、WebP 或 GIF，缩到 128 像素存进数据目录）。
+- 图标：点侧栏里项目或模块的图标，在旁边弹出图标选择（和双击改名一样快），选中立即保存；也可以在「编辑项目」「编辑模块」弹窗里点图标换。项目和模块的右键菜单只有「编辑」和「删除」。选择框的高度跟着窗口可用空间走，列表在里面滚动。最上面是「自动」（项目，按应用配置、网页声明和常见路径检测，支持 workspace 子应用，详见上面的检测规则，可以「重新检测」）或「默认图标」（模块）；下面分三页：图标（80 个内置图标，可以按中文搜索）、Emoji（常用 64 个，也可以输入或粘贴任意 emoji）、图片（选一张本机的 PNG、JPG、WebP、GIF 或 SVG，PNG/JPG/GIF 缩到 128 像素，WebP/SVG 原样存进数据目录）。
 - 图标显示在侧栏、项目菜单按钮、详情的模块选择、总览的模块进度、回收站的所属项目，以及快速记录小窗的项目 / 模块列表和底栏。
 - 项目说明用 Markdown 写（即时预览），在总览页编辑。
 - 模块：新建、编辑（新建和右键菜单的「编辑模块」是同一个弹窗：左边图标、右边名称；或双击直接在行内改名，Enter 保存，Esc 放弃）、删除（下面的改进点变「未分类」）、拖动排序；点击模块就是按模块筛选。有未分类的改进点时，模块列表里显示「未分类」。

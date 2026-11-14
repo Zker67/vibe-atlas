@@ -64,7 +64,10 @@
 | `app.go` | 窗口（主窗口、快速记录面板）、托盘、全局快捷键（快速记录、老板键）、主题、页面导航保护 |
 | `atlas.go` | 绑定给前端的 `Atlas` 服务和事件，调用数据层并广播变化 |
 | `images.go` | 备注里的图片：存进数据目录的 `images/`、`image` 协议、复制时换成本机路径、清理没人引用的图片 |
-| `icons.go` | 项目和模块的图标：在项目文件夹里按约定位置和入口文件找项目自己的图标、缩图后存进 `images/`、启动后重新检测；新建 / 编辑项目和选图标的绑定方法 |
+| `icons.go` | 项目和模块的图标：组织配置、网页声明和常见路径检测，缩图后存进 `images/`、启动后重新检测；新建 / 编辑项目和选图标的绑定方法 |
+| `icons_config.go` | MyGo 静态配置、Godot 图标声明、Unity 图标 GUID 解析与有界素材定位、内存路径缓存 |
+| `icons_workspace.go` | npm/Yarn/pnpm workspace 声明解析、有界通配与排除、子应用发现 |
+| `icons_files.go` | 图标相关文件的目录内安全读取、大小和目录项数量限制 |
 | `updates.go` | 检查更新：后台检查、下载签名的更新包并替换、`updateChanged` 事件；测试用的本地更新源（`VIBE_ATLAS_UPDATE_DIR`） |
 | `smoke_updates.go` | 冒烟测试里检查更新：右下角提示、签名不对的包被拒绝、程序文件夹不变；`VIBE_ATLAS_SMOKE_UPDATE=install` 时做一次真实安装 |
 | `claude_session.go`、`console_*.go` | 打开 `claude-session:` 链接：运行 `claude --desktop --resume <ID>`，Windows 上不弹控制台 |

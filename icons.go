@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,14 +26,9 @@ import (
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
 
-// The icon of a project is, unless the user chose one, the project's own
-// icon found in its folder. As Orca does (references/external-repos/
-// stablyai__orca), only conventional paths are looked at, then the icon an
-// entry page declares; the folder is never walked. When its root has none,
-// the folders right in it that hold an app (a package.json or an
-// index.html) are looked at the same way, for a project whose web page
-// lives in a folder of its own. Unlike Orca, nothing is fetched from the
-// web: no favicon of a homepage, no GitHub avatar.
+// Project icons come from local app declarations, then conventional paths.
+// Workspace manifests locate nested apps; Unity GUID lookup is confined to
+// Assets. Detection never executes a project's code or fetches remote images.
 
 // iconStems are where projects keep their icon, in the order looked at.
 var iconStems = []string{
@@ -53,6 +49,13 @@ var iconStems = []string{
 	"build/appicon",        // Wails
 	"build/icon",           // electron-builder
 	"app-icon",
+	"app_icon",
+	"assets/app-icon",
+	"assets/app_icon",
+	"public/app-icon",
+	"public/app_icon",
+	"resources/app-icon",
+	"resources/app_icon",
 	"icon",
 }
 
@@ -107,6 +110,11 @@ var skippedIconDirs = map[string]bool{
 	"target":       true,
 	"vendor":       true,
 	"coverage":     true,
+	"library":      true,
+	"temp":         true,
+	"obj":          true,
+	"logs":         true,
+	"builds":       true,
 }
 
 // maxIconSourceBytes is the largest entry page read for its icon.
@@ -230,13 +238,8 @@ func readIconFile(folder, rel string) []byte {
 	if templateIcons[strings.ToLower(path.Base(rel))] {
 		return nil
 	}
-	p := filepath.Join(folder, filepath.FromSlash(rel))
-	info, err := os.Stat(p)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxIconFileBytes {
-		return nil
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
+	data := readIconInput(folder, rel, maxIconFileBytes)
+	if data == nil {
 		return nil
 	}
 	switch http.DetectContentType(data) {
@@ -252,12 +255,22 @@ func readIconFile(folder, rel string) []byte {
 
 // findProjectIcon returns the project's own icon in folder and where it
 // is, relative to the folder with forward slashes; nil when there is none.
-// The root comes first, then the folders of apps right in it.
+// The root comes first, then declared workspaces, then direct app folders.
 func findProjectIcon(folder string) ([]byte, string) {
 	if folder == "" {
 		return nil, ""
 	}
-	for _, dir := range append([]string{""}, appDirs(folder)...) {
+	// Avoid manifest traversal entirely when the root already has an icon.
+	if data, rel := findIconIn(folder); data != nil {
+		return data, rel
+	}
+	dirs := append(workspaceAppDirs(folder), appDirs(folder)...)
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
 		if data, rel := findIconIn(filepath.Join(folder, dir)); data != nil {
 			if dir != "" {
 				rel = dir + "/" + rel
@@ -268,37 +281,41 @@ func findProjectIcon(folder string) ([]byte, string) {
 	return nil, ""
 }
 
-// appDirs returns the folders right in folder that hold an app, a
-// package.json or an index.html, in the order of their names.
+// appDirs returns direct folders with an app marker, sorted by name.
 func appDirs(folder string) []string {
-	entries, err := os.ReadDir(folder)
-	if err != nil {
-		return nil
-	}
+	remaining := 4096
+	entries := iconEntries(folder, ".", &remaining)
+	slices.SortFunc(entries, func(a, b os.DirEntry) int { return strings.Compare(a.Name(), b.Name()) })
+	patterns := workspacePatterns(folder)
 	var dirs []string
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || strings.HasPrefix(name, ".") || skippedIconDirs[strings.ToLower(name)] {
+		if !e.IsDir() || skipIconDir(name) || len(dirs) >= maxIconAppDirs {
 			continue
 		}
-		for _, marker := range []string{"package.json", "index.html"} {
-			if info, err := os.Stat(filepath.Join(folder, name, marker)); err == nil && info.Mode().IsRegular() {
-				dirs = append(dirs, name)
+		excluded := false
+		for _, pattern := range patterns {
+			if strings.HasPrefix(pattern, "!") && iconGlobMatch(iconRelativePath(pattern[1:]), name) {
+				excluded = true
 				break
 			}
+		}
+		if !excluded && isIconAppDir(folder, name) {
+			dirs = append(dirs, name)
 		}
 	}
 	return dirs
 }
 
-// findIconIn looks in folder for its icon: at the conventional paths, then
-// the icon its entry pages declare, then the icon for the home screen of
-// iPhones they declare, then the one at its conventional paths.
+// Explicit app and entry-page declarations outrank conventional filenames.
 func findIconIn(folder string) ([]byte, string) {
-	if data, rel := firstIconFile(folder, iconStems, iconExts); data != nil {
+	if data, rel := configuredIcon(folder); data != nil {
 		return data, rel
 	}
 	if data, rel := declaredIcon(folder, iconHref); data != nil {
+		return data, rel
+	}
+	if data, rel := firstIconFile(folder, iconStems, iconExts); data != nil {
 		return data, rel
 	}
 	if data, rel := declaredIcon(folder, appleIconHref); data != nil {
@@ -323,13 +340,8 @@ func firstIconFile(folder string, stems, exts []string) ([]byte, string) {
 // href reads it.
 func declaredIcon(folder string, href func(string) string) ([]byte, string) {
 	for _, src := range iconSources {
-		p := filepath.Join(folder, filepath.FromSlash(src))
-		info, err := os.Stat(p)
-		if err != nil || !info.Mode().IsRegular() || info.Size() > maxIconSourceBytes {
-			continue
-		}
-		text, err := os.ReadFile(p)
-		if err != nil {
+		text := readIconInput(folder, src, maxIconSourceBytes)
+		if text == nil {
 			continue
 		}
 		for _, rel := range iconHrefPaths(href(string(text)), src) {
