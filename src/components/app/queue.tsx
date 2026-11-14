@@ -26,6 +26,7 @@ import {
   ExternalLink,
   FileText,
   Flame,
+  Hourglass,
   Inbox,
   Link2,
   ListChecks,
@@ -43,6 +44,7 @@ import { nextType, statusInfo, UNSORTED } from "@/lib/labels";
 import { elapsed, formatTime, useNow } from "@/lib/time";
 import { errorMessage, run } from "@/lib/api";
 import { ancestors, applyMove, buildForest, linkSource, subtreeIds, topMost, type Row, type TreeRows } from "@/lib/tree";
+import { depIndex, waitingFor } from "@/lib/deps";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Scroller } from "@/components/ui/scroller";
@@ -281,7 +283,7 @@ function clickRow(id: number, e: ReactMouseEvent) {
 }
 
 /** Right-click: a row of the selection keeps it and becomes the one the keys act from; another row is selected alone. */
-function selectForMenu(id: number) {
+export function selectForMenu(id: number) {
   const s = useAtlas.getState();
   if (s.selectedIds.size > 1 && s.selectedIds.has(id)) setSelection(s.selectedIds, id);
   else select(id);
@@ -865,6 +867,8 @@ export function Queue() {
   // The module shows on each row unless the queue shows one module only.
   const moduleOf = (item: Item) => (moduleFilter === "all" ? (moduleNames.get(item.moduleId) ?? "") : "");
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const deps = useAtlas((s) => s.deps);
+  const index = useMemo(() => depIndex(deps), [deps]);
   const many = selectedIds.size > 1;
   const rows = (trees: TreeRows[]) => {
     // Selected rows next to each other in a section join into one block.
@@ -876,6 +880,7 @@ export function Queue() {
         const i = n++;
         const selected = selectedIds.has(r.item.id);
         const source = linkSource(byId, r.item.id, shared);
+        const waiting = waitingFor(r.item, byId, index);
         return (
           <ItemRow
             key={r.item.id}
@@ -890,6 +895,7 @@ export function Queue() {
             moduleName={moduleOf(r.item)}
             link={source?.deeplink ?? ""}
             linkFrom={source && source.id !== r.item.id ? source.title : ""}
+            waiting={waiting.map((w) => w.title).join("\n")}
             selected={selected}
             focus={r.item.id === selectedId}
             many={many}
@@ -1083,6 +1089,8 @@ interface ItemRowProps {
   /** The link it opens, or "" for none; linkFrom is the title of the item above it the link comes from, or "". */
   link: string;
   linkFrom: string;
+  /** The titles of the prerequisites it still waits for, a line each, or "" when it waits for none. */
+  waiting: string;
   selected: boolean;
   /** It is the one the keys act from. */
   focus: boolean;
@@ -1106,6 +1114,7 @@ const ItemRow = memo(function ItemRow({
   moduleName,
   link,
   linkFrom,
+  waiting,
   selected,
   focus,
   many,
@@ -1205,6 +1214,7 @@ const ItemRow = memo(function ItemRow({
               <span className={cn("min-w-0 flex-1 truncate", isDone && "text-muted-foreground")}>{item.title}</span>
             )}
             {hasChildren && <TreeProgress done={done} total={total} />}
+            {waiting && <WaitMark titles={waiting} />}
             {moduleName && (
               <span className="max-w-32 shrink-0 truncate rounded-sm bg-muted px-1.5 text-xs leading-5 text-muted-foreground">
                 {moduleName}
@@ -1238,7 +1248,7 @@ const ItemRow = memo(function ItemRow({
 });
 
 /** The right-click menu of a row: for the selection when the row is one of several selected, else for the row. */
-function RowMenuItems({ item }: { item: Item }) {
+export function RowMenuItems({ item }: { item: Item }) {
   const ofSelection = useAtlas((s) => s.selectedIds.size > 1 && s.selectedIds.has(item.id));
   return ofSelection ? <SelectionMenuItems /> : <ItemMenuItems item={item} />;
 }
@@ -1309,6 +1319,32 @@ function TreeProgress({ done, total }: { done: number; total: number }) {
         {done}/{total}
       </span>
     </span>
+  );
+}
+
+/** Marks an item that still waits for prerequisites not done; they show under the pointer. */
+export function WaitMark({ titles, className }: { titles: string; className?: string }) {
+  const list = titles.split("\n");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={`在等 ${list.length} 条前置`}
+          className={cn("flex shrink-0 items-center gap-0.5 text-muted-foreground", className)}
+        >
+          <Hourglass className="size-3.5" />
+          {list.length > 1 && <span className="meta-mono">{list.length}</span>}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">
+        <span className="block opacity-70">在等 {list.length} 条前置完成：</span>
+        {list.map((t, i) => (
+          <span key={i} className="block truncate">
+            · {t}
+          </span>
+        ))}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

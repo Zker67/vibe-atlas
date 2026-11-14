@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChartPie, ChevronDown, Folder, FolderOpen, FolderPlus, FolderX, ListTodo, SquarePen, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChartPie, ChevronDown, Folder, FolderOpen, FolderPlus, FolderX, ListTodo, SquarePen, Trash2, TriangleAlert, Workflow, X } from "lucide-react";
 import type { Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { statusInfo, TYPES } from "@/lib/labels";
@@ -95,7 +95,7 @@ function FolderButton({ project }: { project: Project }) {
   );
 }
 
-/** The open project's first row, atop the queue column or the overview. */
+/** The open project's first row, atop the queue column, the flow chart or the overview. */
 export function ProjectBar({ project }: { project: Project }) {
   const view = useAtlas((s) => s.view);
 
@@ -146,7 +146,7 @@ export function ProjectBar({ project }: { project: Project }) {
         aria-label="视图"
         className="shrink-0 rounded-lg bg-muted p-0.5"
         glideClassName="bg-foreground/10 shadow-xs"
-        // The bar is another one in the queue and in the overview.
+        // The bar is another one in the queue, the flow chart and the overview.
         glideMemory="views"
       >
         {VIEWS.map((v) => (
@@ -168,6 +168,7 @@ export function ProjectBar({ project }: { project: Project }) {
 
 const VIEWS: { value: View; label: string; icon: typeof ListTodo }[] = [
   { value: "queue", label: "队列", icon: ListTodo },
+  { value: "flow", label: "流程图", icon: Workflow },
   { value: "overview", label: "总览", icon: ChartPie },
 ];
 

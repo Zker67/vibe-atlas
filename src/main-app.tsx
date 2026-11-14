@@ -58,6 +58,8 @@ import type { Project } from "@/mygo";
 // The effects load only once there is something behind the window: a
 // moving background or a picture (设置 → 外观).
 const EffectsLayer = lazy(() => import("@/components/effects/effects-layer"));
+// The flow chart loads the first time it opens.
+const FlowView = lazy(() => import("@/components/flow/flow-view"));
 
 /** The main window: projects on the left, the open project's queue or overview. */
 export function MainApp() {
@@ -93,6 +95,10 @@ export function MainApp() {
                 ) : project ? (
                   view === "queue" ? (
                     <QueueLayout project={project} />
+                  ) : view === "flow" ? (
+                    <Suspense fallback={null}>
+                      <FlowView project={project} />
+                    </Suspense>
                   ) : (
                     <>
                       <ProjectBar project={project} />
@@ -281,14 +287,16 @@ function useShortcuts() {
         focusNewItem();
         return;
       }
-      if (s.view !== "queue") return;
+      // The flow chart takes the keys of the selection too; its own keys come first (flow-board.tsx).
+      if (s.view !== "queue" && s.view !== "flow") return;
+      const queue = s.view === "queue";
       const item = s.items.find((i) => i.id === s.selectedId);
       // With several selected, the keys act on all of them, in the queue's order.
       const many = s.selectedIds.size > 1;
       const ids = many ? selectedInOrder() : [];
 
       if (mod) {
-        if (key === "a") {
+        if (key === "a" && queue) {
           e.preventDefault();
           selectAllRows();
         }
@@ -302,13 +310,13 @@ function useShortcuts() {
       switch (key) {
         case "ArrowDown":
         case "j":
-          if (key === "ArrowDown" && usesArrows(focus)) return;
+          if (!queue || (key === "ArrowDown" && usesArrows(focus))) return;
           e.preventDefault();
           moveSelection(1);
           return;
         case "ArrowUp":
         case "k":
-          if (key === "ArrowUp" && usesArrows(focus)) return;
+          if (!queue || (key === "ArrowUp" && usesArrows(focus))) return;
           e.preventDefault();
           moveSelection(-1);
           return;
@@ -322,12 +330,12 @@ function useShortcuts() {
       if (!item) return;
       switch (key) {
         case "ArrowLeft":
-          if (usesArrows(focus)) return;
+          if (!queue || usesArrows(focus)) return;
           e.preventDefault();
           collapseOrUp();
           break;
         case "ArrowRight":
-          if (usesArrows(focus)) return;
+          if (!queue || usesArrows(focus)) return;
           e.preventDefault();
           expandOrDown();
           break;

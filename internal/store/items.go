@@ -741,6 +741,14 @@ func (s *Store) moveToProject(projectID int64) func(tx *sql.Tx, it Item) error {
 			if _, err := tx.Exec(`UPDATE items SET project_id = ?, module_id = NULL, updated_at = ? WHERE id = ?`, projectID, now, v); err != nil {
 				return err
 			}
+			// Another chart: it lays them out anew.
+			if _, err := tx.Exec(`DELETE FROM item_canvas WHERE item_id = ?`, v); err != nil {
+				return err
+			}
+		}
+		// Prerequisites with the items left behind go; those among the items moved stay.
+		if err := dropForeignDeps(tx); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(`UPDATE items SET parent_id = NULL, sort_order = ? WHERE id = ?`, order, it.ID); err != nil {
 			return err

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import {
   AppWindow,
+  ArrowLeftToLine,
+  ArrowRightFromLine,
   ArrowRightLeft,
   ChevronRight,
   CircleDashed,
@@ -62,6 +64,7 @@ import { openImmersive, useImmersive } from "@/state/immersive";
 import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
 import { AgentIcon } from "./agent-icon";
 import { DeleteButton } from "./delete-button";
+import { DepField } from "./dep-field";
 import { ModuleIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { TypeChip } from "./item-marks";
@@ -152,6 +155,12 @@ function Detail({ item }: { item: Item }) {
           </Prop>
           <Prop label="链接" icon={Link2}>
             <LinkField item={item} />
+          </Prop>
+          <Prop label="前置" icon={ArrowLeftToLine} top>
+            <DepField item={item} side="before" />
+          </Prop>
+          <Prop label="后续" icon={ArrowRightFromLine} top>
+            <DepField item={item} side="after" />
           </Prop>
           <Prop label="时间" icon={Clock} top>
             <Timeline item={item} />

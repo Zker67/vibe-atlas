@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   Atlas,
   events,
+  type Dep,
   type Item,
   type ItemStatus,
   type ItemType,
@@ -15,6 +16,7 @@ import {
   type TrashEntry,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
+import { brokenByMove } from "@/lib/deps";
 import {
   ancestors,
   applyMove,
@@ -28,8 +30,8 @@ import {
   type TreeNode,
 } from "@/lib/tree";
 
-/** What the panel shows: the open project's queue or overview, or the trash of every project. */
-export type View = "queue" | "overview" | "trash";
+/** What the panel shows: the open project's queue, flow chart or overview, or the trash of every project. */
+export type View = "queue" | "flow" | "overview" | "trash";
 export type TypeFilter = ItemType | "all";
 /** A module's id, 0 for the items without a module, or all. */
 export type ModuleFilter = number | "all";
@@ -44,6 +46,8 @@ interface AtlasState {
   modules: Module[];
   /** The project's items: doing, to do in the user's order, then done. */
   items: Item[];
+  /** The prerequisites between the project's items: each toId waits for its fromId. */
+  deps: Dep[];
   overview: Overview | null;
   settings: Settings | null;
   view: View;
@@ -109,6 +113,7 @@ export const useAtlas = create<AtlasState>(() => ({
   projectId: 0,
   modules: [],
   items: [],
+  deps: [],
   overview: null,
   settings: null,
   view: "queue",
@@ -209,9 +214,10 @@ async function load() {
   const projectId = projects.some((p) => p.id === requested) ? requested : (projects[0]?.id ?? 0);
   let modules: Module[] = [];
   let items: Item[] = [];
+  let deps: Dep[] = [];
   let overview: Overview | null = null;
   if (projectId) {
-    [modules, items] = await Promise.all([Atlas.modules(projectId), Atlas.items(projectId)]);
+    [modules, items, deps] = await Promise.all([Atlas.modules(projectId), Atlas.items(projectId), Atlas.deps(projectId)]);
     if (get().view === "overview") overview = await Atlas.overview(projectId);
   }
   if (get().projectId !== requested) {
@@ -230,6 +236,7 @@ async function load() {
     projectId,
     modules,
     items,
+    deps,
     overview: overview ?? (s.overview?.projectId === projectId ? s.overview : null),
     ...keepSelected(s, (id) => present.has(id)),
     moduleFilter:
@@ -266,7 +273,7 @@ export async function init() {
 export function openProject(id: number) {
   leaveTrash();
   if (id === get().projectId) return;
-  set({ projectId: id, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [] });
+  set({ projectId: id, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [], deps: [] });
   void Atlas.setCurrentProject(id);
   void refresh();
 }
@@ -526,7 +533,7 @@ export async function deleteProject(id: number) {
   if (await runOk(Atlas.deleteProject(id))) {
     set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
     if (get().projectId === id) {
-      set({ projectId: 0, ...only(0), items: [], modules: [], overview: null });
+      set({ projectId: 0, ...only(0), items: [], modules: [], deps: [], overview: null });
     }
     void refresh();
   }
@@ -885,13 +892,19 @@ export async function mergeItems(id: number, targetId: number): Promise<Item | u
 }
 
 export async function moveItemToProject(id: number, projectId: number) {
+  // The items under it go along; prerequisites with the items left behind break.
+  const gone = subtreeIds(buildForest(get().items), id);
+  const broken = brokenByMove(get().deps, gone);
   const item = await run(Atlas.moveItemToProject(id, projectId));
   if (!item) return;
   const project = get().projects.find((p) => p.id === projectId);
-  // The items under it go along.
-  const gone = subtreeIds(buildForest(get().items), id);
   set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
-  toast.success(`已移到「${project?.name ?? "另一个项目"}」`);
+  toast.success(`已移到「${project?.name ?? "另一个项目"}」${brokenText(broken)}`);
+}
+
+/** What a move to another project adds to its toast about the prerequisites it broke. */
+function brokenText(n: number): string {
+  return n > 0 ? `，断开了 ${n} 条前置关系` : "";
 }
 
 export async function deleteItem(id: number) {
@@ -968,16 +981,17 @@ export async function setItemsModule(ids: number[], moduleId: number): Promise<b
 
 /** Moves the items ids to another project, with those under them, in the queue's order. */
 export async function moveItemsToProject(ids: number[], projectId: number) {
-  const { items } = get();
+  const { items, deps } = get();
   const list = inQueueOrder(items, ids);
-  if (!(await run(Atlas.moveItemsToProject(list, projectId)))) return;
   const forest = buildForest(items);
   const top = topMost(forest, list);
   const gone = new Set(top.flatMap((id) => [...subtreeIds(forest, id)]));
+  const broken = brokenByMove(deps, gone);
+  if (!(await run(Atlas.moveItemsToProject(list, projectId)))) return;
   set((s) => ({ items: s.items.filter((i) => !gone.has(i.id)), ...keepSelected(s, (v) => !gone.has(v)) }));
   const name = get().projects.find((p) => p.id === projectId)?.name ?? "另一个项目";
   const under = gone.size - top.length;
-  toast.success(`已把 ${top.length} 条移到「${name}」${under > 0 ? `，子改进点 ${under} 条一起` : ""}`);
+  toast.success(`已把 ${top.length} 条移到「${name}」${under > 0 ? `，子改进点 ${under} 条一起` : ""}${brokenText(broken)}`);
 }
 
 /** Deletes the items ids for good, past the trash; their children not deleted move up. */
@@ -989,10 +1003,35 @@ export async function deleteItems(ids: number[]) {
   }
 }
 
+// ---- Prerequisites ----
+
+/** Makes toId wait for fromId; false after showing why it cannot. */
+export async function addDep(fromId: number, toId: number): Promise<boolean> {
+  const dep = await run(Atlas.addDep(fromId, toId));
+  if (!dep) return false;
+  set((s) => ({
+    deps: s.deps.some((d) => d.fromId === fromId && d.toId === toId) ? s.deps : [...s.deps, dep],
+  }));
+  return true;
+}
+
+/** Makes toId no longer wait for fromId; false after showing why it failed. */
+export async function removeDep(fromId: number, toId: number): Promise<boolean> {
+  set((s) => ({ deps: s.deps.filter((d) => d.fromId !== fromId || d.toId !== toId) }));
+  if (await runOk(Atlas.removeDep(fromId, toId))) return true;
+  void refresh();
+  return false;
+}
+
 // ---- Trash ----
 
 /** The deletion Ctrl+Z undoes: the batch the trash took last, 0 for none. */
 let lastBatch = 0;
+/** When lastBatch went to the trash, 0 for none. */
+let lastBatchAt = 0;
+
+/** When the deletion Ctrl+Z undoes went to the trash, 0 for none: the flow chart undoes its own steps made since. */
+export const lastTrashAt = () => (lastBatch ? lastBatchAt : 0);
 
 /**
  * Moves the items ids to the trash, in the queue's order, with nothing to
@@ -1005,6 +1044,7 @@ export async function trashItems(ids: number[]) {
   const batch = await run(Atlas.trashItems(list));
   if (batch === undefined) return;
   lastBatch = batch;
+  lastBatchAt = Date.now();
   const gone = new Set(list);
   set((s) => ({
     items: s.items.filter((i) => !gone.has(i.id)),

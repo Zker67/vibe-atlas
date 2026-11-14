@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Boxes, ChevronRight, CircleCheck, FileText, History, Inbox, Layers, Timer, TrendingUp } from "lucide-react";
+import { Boxes, ChevronRight, CircleCheck, FileText, History, Inbox, Layers, Play, Timer, TrendingUp } from "lucide-react";
 import type { Counts, Item, Overview as OverviewData, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { useDebouncedSave } from "@/lib/debounce";
@@ -291,6 +291,23 @@ function Summary({ overview }: { overview: OverviewData }) {
         </Card>
       </div>
 
+      {overview.ready.length > 0 && (
+        <Card
+          icon={<Play className="text-doing" />}
+          title={
+            <>
+              可以开始
+              <span className="meta-mono rounded-full bg-foreground/[0.07] px-1.5 py-px text-foreground">{overview.ready.length}</span>
+            </>
+          }
+          aside={<span className="text-xs text-muted-foreground">设了前置，前置都已完成的待办</span>}
+        >
+          <div className="px-2 pb-2">
+            <ItemList items={overview.ready} time="none" />
+          </div>
+        </Card>
+      )}
+
       {overview.doing.length > 0 && (
         <Card
           icon={<span className="signal-dot ml-0.5 mr-0.5 size-1.5 rounded-full" />}
@@ -372,8 +389,8 @@ function useModuleNames() {
   return useMemo(() => new Map(modules.map((m) => [m.id, m.name])), [modules]);
 }
 
-/** Rows of items; a click shows the item in the queue. */
-function ItemList({ items, time }: { items: Item[]; time: "started" | "done" }) {
+/** Rows of items, with when they started or were done, or no time; a click shows the item in the queue. */
+function ItemList({ items, time }: { items: Item[]; time: "started" | "done" | "none" }) {
   const names = useModuleNames();
   const now = useNow();
   return (
@@ -400,10 +417,12 @@ function ItemList({ items, time }: { items: Item[]; time: "started" | "done" }) 
             <span className="max-w-36 shrink-0 truncate rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {names.get(item.moduleId) ?? UNSORTED}
             </span>
-            <span className="flex w-20 shrink-0 items-center justify-end gap-1 whitespace-nowrap">
-              {time === "started" && <Timer className="size-3 shrink-0 text-doing" />}
-              <span className="meta-mono text-muted-foreground">{label}</span>
-            </span>
+            {time !== "none" && (
+              <span className="flex w-20 shrink-0 items-center justify-end gap-1 whitespace-nowrap">
+                {time === "started" && <Timer className="size-3 shrink-0 text-doing" />}
+                <span className="meta-mono text-muted-foreground">{label}</span>
+              </span>
+            )}
           </button>
         );
       })}

@@ -117,12 +117,18 @@ func trashItemIn(tx *sql.Tx, id, batch, now int64) error {
 	if err != nil {
 		return err
 	}
+	deps, err := depsOfIn(tx, id)
+	if err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`INSERT INTO trash (batch, deleted_at, item_id, project_id, parent_id, parent_created, place, module_id,
-			type, status, title, note, deeplink, auto_title, created_at, started_at, done_at, done_with, updated_at, lifted, carried)
+			type, status, title, note, deeplink, auto_title, created_at, started_at, done_at, done_with, updated_at, lifted, carried,
+			deps, canvas_x, canvas_y)
 		SELECT ?, ?, id, project_id, parent_id, ?, ?, module_id,
-			type, status, title, note, deeplink, auto_title, created_at, started_at, done_at, done_with, updated_at, ?, ?
+			type, status, title, note, deeplink, auto_title, created_at, started_at, done_at, done_with, updated_at, ?, ?,
+			?, (SELECT x FROM item_canvas WHERE item_id = items.id), (SELECT y FROM item_canvas WHERE item_id = items.id)
 		FROM items WHERE id = ?`,
-		batch, now, parentCreated, slices.Index(siblings, id), lifted, carried, id); err != nil {
+		batch, now, parentCreated, slices.Index(siblings, id), lifted, carried, deps, id); err != nil {
 		return err
 	}
 	return deleteItemIn(tx, id)
@@ -164,7 +170,7 @@ func (s *Store) RestoreTrash(ids []int64) ([]Item, error) {
 	var out []Item
 	err := s.inTx(func(tx *sql.Tx) error {
 		var err error
-		out, err = restoreIn(tx, ids)
+		out, err = restoreIn(tx, ids, s.millis())
 		return err
 	})
 	return out, err
@@ -183,13 +189,13 @@ func (s *Store) RestoreBatch(batch int64) ([]Item, error) {
 		if len(ids) == 0 {
 			return userErr("回收站里已经没有这些改进点了")
 		}
-		out, err = restoreIn(tx, ids)
+		out, err = restoreIn(tx, ids, s.millis())
 		return err
 	})
 	return out, err
 }
 
-func restoreIn(tx *sql.Tx, ids []int64) ([]Item, error) {
+func restoreIn(tx *sql.Tx, ids []int64, now int64) ([]Item, error) {
 	// The last deleted goes back first: undoing the deletions one by one,
 	// each finds the items around it as they were when it went.
 	order := slices.Clone(ids)
@@ -197,7 +203,7 @@ func restoreIn(tx *sql.Tx, ids []int64) ([]Item, error) {
 	order = slices.Compact(order)
 	restored := make([]Item, 0, len(order))
 	for i := len(order) - 1; i >= 0; i-- {
-		it, err := restoreEntryIn(tx, order[i])
+		it, err := restoreEntryIn(tx, order[i], now)
 		if err != nil {
 			return nil, err
 		}
@@ -216,16 +222,19 @@ func restoreIn(tx *sql.Tx, ids []int64) ([]Item, error) {
 	return out, nil
 }
 
-func restoreEntryIn(tx *sql.Tx, entryID int64) (Item, error) {
+func restoreEntryIn(tx *sql.Tx, entryID, now int64) (Item, error) {
 	var (
 		id, projectID, place              int64
 		parentID, parentCreated, moduleID sql.NullInt64
 		doneWith                          sql.NullInt64
-		liftedJSON, carriedJSON           string
+		liftedJSON, carriedJSON, depsJSON string
+		canvasX, canvasY                  sql.NullFloat64
 	)
-	err := tx.QueryRow(`SELECT item_id, project_id, parent_id, parent_created, place, module_id, done_with, lifted, carried
+	err := tx.QueryRow(`SELECT item_id, project_id, parent_id, parent_created, place, module_id, done_with, lifted, carried,
+			deps, canvas_x, canvas_y
 		FROM trash WHERE id = ?`, entryID).
-		Scan(&id, &projectID, &parentID, &parentCreated, &place, &moduleID, &doneWith, &liftedJSON, &carriedJSON)
+		Scan(&id, &projectID, &parentID, &parentCreated, &place, &moduleID, &doneWith, &liftedJSON, &carriedJSON,
+			&depsJSON, &canvasX, &canvasY)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Item{}, ErrNotFound
 	}
@@ -354,7 +363,21 @@ func restoreEntryIn(tx *sql.Tx, entryID int64) (Item, error) {
 	if err := syncAutoTitles(tx, parent, newID); err != nil {
 		return Item{}, err
 	}
-	return itemIn(tx, newID)
+	it, err := itemIn(tx, newID)
+	if err != nil {
+		return Item{}, err
+	}
+
+	// Its place on the flow chart, and its prerequisites.
+	if canvasX.Valid && canvasY.Valid {
+		if _, err := tx.Exec(`INSERT INTO item_canvas (item_id, x, y) VALUES (?, ?, ?)`, newID, canvasX.Float64, canvasY.Float64); err != nil {
+			return Item{}, err
+		}
+	}
+	if err := restoreDepsIn(tx, it, depsJSON, now); err != nil {
+		return Item{}, err
+	}
+	return it, nil
 }
 
 // PurgeTrash deletes the trash entries ids for good.

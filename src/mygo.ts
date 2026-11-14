@@ -10,6 +10,16 @@ import { call, event } from "mygo-runtime";
  */
 export type Background = "grid" | "waves";
 
+/**
+ * CanvasSpot is where an item sits on its project's flow chart: the top
+ * left corner of its card, in the chart's pixels.
+ */
+export interface CanvasSpot {
+  itemId: number;
+  x: number;
+  y: number;
+}
+
 /** CaptureState is how the quick capture panel starts. */
 export interface CaptureState {
   /**
@@ -34,6 +44,19 @@ export interface Counts {
   todo: number;
   doing: number;
   done: number;
+}
+
+/**
+ * Dep is a prerequisite: the item ToID waits for the item FromID to be
+ * done. Both are of one project. It tells only: no status changes because
+ * of it, and the user may start or finish an item still waiting.
+ */
+export interface Dep {
+  /** FromID is the item done first, the prerequisite. */
+  fromId: number;
+  /** ToID is the item that waits for it. */
+  toId: number;
+  createdAt: number;
 }
 
 /** FolderChoice is a folder the user chose for a project. */
@@ -188,6 +211,11 @@ export interface Overview {
   doing: Item[];
   /** Done lists the done items, the most recently done first. */
   done: Item[];
+  /**
+   * Ready lists the items to do that have prerequisites, all done: those
+   * that waited and may start now, in the order of the items to do.
+   */
+  ready: Item[];
 }
 
 /** Place is where MoveItem puts an item, against its anchor. */
@@ -430,12 +458,27 @@ export interface WallpaperLook {
  */
 export const Atlas = {
   /**
+   * AddDep makes the item toID wait for the item fromID, of the same project.
+   * It fails when they are one item, one sits under the other, or it would
+   * close a loop; when it is there already, it returns it.
+   */
+  addDep(fromID: number, toID: number): Promise<Dep> {
+    return call("Atlas.AddDep", fromID, toID);
+  },
+  /**
    * AddProject adds a project at the end of the list. A project bound to a
    * folder without a name takes the folder's; its icon, unless chosen, is
    * the one found in the folder.
    */
   addProject(draft: ProjectDraft): Promise<Project> {
     return call("Atlas.AddProject", draft);
+  },
+  /**
+   * Canvas returns where the items of a project sit on its flow chart; those
+   * it leaves out have no place yet, and the chart lays them out itself.
+   */
+  canvas(projectID: number): Promise<CanvasSpot[]> {
+    return call("Atlas.Canvas", projectID);
   },
   /**
    * CaptureItem adds an item from quick capture, and remembers its project
@@ -487,6 +530,13 @@ export const Atlas = {
    */
   chooseWallpaper(): Promise<Settings> {
     return call("Atlas.ChooseWallpaper");
+  },
+  /**
+   * ClearCanvas forgets where the items ids of a project sit on its flow
+   * chart, which lays them out itself again.
+   */
+  clearCanvas(projectID: number, ids: number[]): Promise<void> {
+    return call("Atlas.ClearCanvas", projectID, ids);
   },
   /** ClearProjectFolder unbinds a project from its folder. */
   clearProjectFolder(id: number): Promise<Project> {
@@ -547,6 +597,13 @@ export const Atlas = {
   /** DeleteProject deletes a project with its modules and items. */
   deleteProject(id: number): Promise<void> {
     return call("Atlas.DeleteProject", id);
+  },
+  /**
+   * Deps returns the prerequisites between the items of a project: each
+   * toId waits for its fromId.
+   */
+  deps(projectID: number): Promise<Dep[]> {
+    return call("Atlas.Deps", projectID);
   },
   /** DetectProjectIcon looks again for the project's own icon in its folder. */
   detectProjectIcon(id: number): Promise<Project> {
@@ -688,6 +745,10 @@ export const Atlas = {
   purgeTrash(ids: number[]): Promise<void> {
     return call("Atlas.PurgeTrash", ids);
   },
+  /** RemoveDep makes the item toID no longer wait for the item fromID. */
+  removeDep(fromID: number, toID: number): Promise<void> {
+    return call("Atlas.RemoveDep", fromID, toID);
+  },
   /** RenameModule renames a module. */
   renameModule(id: number, name: string): Promise<Module> {
     return call("Atlas.RenameModule", id, name);
@@ -762,6 +823,13 @@ export const Atlas = {
    */
   setBossKey(shortcut: string): Promise<Settings> {
     return call("Atlas.SetBossKey", shortcut);
+  },
+  /**
+   * SetCanvas saves where items of a project sit on its flow chart. Only the
+   * main window shows the chart, which keeps what it saved: no changed event.
+   */
+  setCanvas(projectID: number, spots: CanvasSpot[]): Promise<void> {
+    return call("Atlas.SetCanvas", projectID, spots);
   },
   /**
    * SetCurrentProject records the project open in the main window, which

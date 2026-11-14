@@ -422,6 +422,38 @@ html[data-effects] .signal-dot {
 }
 
 /*
+ * The flow chart (components/flow): a dot grid that moves and scales with
+ * the chart (the board sets its size and position), and the lines between
+ * the cards. A line whose prerequisite is not done yet flows toward the
+ * item that waits.
+ */
+.flow-board {
+  background-image: radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1.2px);
+}
+.flow-edge {
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  transition: stroke 150ms ease-out;
+}
+.flow-edge-waiting {
+  stroke-dasharray: 6 5;
+  animation: flow-dash 0.9s linear infinite;
+}
+.flow-edge-selected {
+  stroke-width: 2.5;
+}
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-edge-waiting {
+    animation: none;
+  }
+}
+
+/*
  * Where a dragged row would land: the line draws out from its left end. It
  * is uncovered rather than stretched, so the badge on it keeps its shape;
  * the margins leave room for the dot and the badge around the thin line.

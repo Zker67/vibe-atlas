@@ -622,6 +622,80 @@ func (a *Atlas) EmptyTrash() (int, error) {
 	return n, err
 }
 
+// ---- Prerequisites and the flow chart ----
+
+// Deps returns the prerequisites between the items of a project: each
+// toId waits for its fromId.
+func (a *Atlas) Deps(projectID int64) ([]store.Dep, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return db.Deps(projectID)
+}
+
+// AddDep makes the item toID wait for the item fromID, of the same project.
+// It fails when they are one item, one sits under the other, or it would
+// close a loop; when it is there already, it returns it.
+func (a *Atlas) AddDep(fromID, toID int64) (store.Dep, error) {
+	db, err := a.store()
+	if err != nil {
+		return store.Dep{}, err
+	}
+	d, err := db.AddDep(fromID, toID)
+	if err == nil {
+		if it, err := db.Item(toID); err == nil {
+			a.changed(it.ProjectID)
+		}
+	}
+	return d, err
+}
+
+// RemoveDep makes the item toID no longer wait for the item fromID.
+func (a *Atlas) RemoveDep(fromID, toID int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	if err := db.RemoveDep(fromID, toID); err != nil {
+		return err
+	}
+	if it, err := db.Item(toID); err == nil {
+		a.changed(it.ProjectID)
+	}
+	return nil
+}
+
+// Canvas returns where the items of a project sit on its flow chart; those
+// it leaves out have no place yet, and the chart lays them out itself.
+func (a *Atlas) Canvas(projectID int64) ([]store.CanvasSpot, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return db.Canvas(projectID)
+}
+
+// SetCanvas saves where items of a project sit on its flow chart. Only the
+// main window shows the chart, which keeps what it saved: no changed event.
+func (a *Atlas) SetCanvas(projectID int64, spots []store.CanvasSpot) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	return db.SetCanvas(projectID, spots)
+}
+
+// ClearCanvas forgets where the items ids of a project sit on its flow
+// chart, which lays them out itself again.
+func (a *Atlas) ClearCanvas(projectID int64, ids []int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	return db.ClearCanvas(projectID, ids)
+}
+
 // projectsOf returns the project of each of the items ids.
 func projectsOf(db *store.Store, ids []int64) ([]int64, error) {
 	out := make([]int64, 0, len(ids))

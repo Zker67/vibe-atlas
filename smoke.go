@@ -261,6 +261,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	flowed, err := a.smokeFlow(main)
+	report["flow"] = flowed
+	if err != nil {
+		finish(err, "prerequisites and the flow chart")
+		return
+	}
+
 	updated, err := a.smokeUpdates(main)
 	report["updates"] = updated
 	if err != nil {

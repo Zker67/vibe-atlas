@@ -122,7 +122,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 5
+const schemaVersion = 6
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -215,6 +215,27 @@ CREATE INDEX trash_by_project ON trash (project_id);`,
 ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT '';
 ALTER TABLE projects ADD COLUMN detected_icon TEXT NOT NULL DEFAULT '';
 ALTER TABLE modules ADD COLUMN icon TEXT NOT NULL DEFAULT '';`,
+	// Prerequisites: to_id waits for from_id, both of one project. Where
+	// each item sits on the flow chart. The trash keeps both of an item:
+	// deps, a JSON list of {"id", "created", "next"} (next: the other one
+	// waits for it), and its place on the chart.
+	5: `
+CREATE TABLE item_deps (
+	from_id    INTEGER NOT NULL REFERENCES items (id) ON DELETE CASCADE,
+	to_id      INTEGER NOT NULL REFERENCES items (id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (from_id, to_id),
+	CHECK (from_id <> to_id)
+) WITHOUT ROWID;
+CREATE INDEX item_deps_by_to ON item_deps (to_id);
+CREATE TABLE item_canvas (
+	item_id INTEGER PRIMARY KEY REFERENCES items (id) ON DELETE CASCADE,
+	x       REAL NOT NULL,
+	y       REAL NOT NULL
+);
+ALTER TABLE trash ADD COLUMN deps TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE trash ADD COLUMN canvas_x REAL;
+ALTER TABLE trash ADD COLUMN canvas_y REAL;`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction

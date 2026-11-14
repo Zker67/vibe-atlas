@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow,
+  ArrowLeftToLine,
   ChevronRight,
   Combine,
   Copy,
@@ -8,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  Hourglass,
   Images,
   Keyboard,
   LayoutDashboard,
@@ -17,6 +19,7 @@ import {
   ListTodo,
   Maximize2,
   MousePointerClick,
+  Network,
   NotebookPen,
   PanelRight,
   PenLine,
@@ -27,6 +30,7 @@ import {
   SquareCheck,
   TextCursorInput,
   TextSelect,
+  Workflow,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -47,6 +51,7 @@ const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "capture", label: "快速记录", icon: Zap },
   { id: "queue", label: "队列与状态", icon: ListTodo },
   { id: "detail", label: "改进点详情", icon: PanelRight },
+  { id: "flow", label: "前置与流程图", icon: Workflow },
   { id: "markdown", label: "Markdown 备注", icon: FileText },
   { id: "overview", label: "项目总览", icon: LayoutDashboard },
   { id: "keys", label: "快捷键", icon: Keyboard },
@@ -151,6 +156,7 @@ function HelpBody() {
           <CaptureSection />
           <QueueSection />
           <DetailSection />
+          <FlowSection />
           <MarkdownSection />
           <OverviewSection />
           <KeysSection />
@@ -340,6 +346,34 @@ function DetailSection() {
   );
 }
 
+function FlowSection() {
+  return (
+    <Section id="flow" lead="改进点之间可以设先后顺序：A 是 B 的前置，表示 B 要等 A 做完。它只是提示，不会自动改状态。">
+      <div className="flex flex-col gap-2.5">
+        <Feature icon={ArrowLeftToLine} title="前置 / 后续">
+          详情里「前置」一行是这条要等的，「后续」一行是等这条的；点「添加」搜索同一个项目的改进点，悬停在一条上点 × 去掉。不能连自己的上级或子改进点，也不能绕成一圈。
+        </Feature>
+        <Feature icon={Hourglass} title="等待中">
+          还有前置没完成时，队列里这一条后面显示沙漏，悬停看在等哪几条。照样可以开始或完成，由你决定。前置都完成的待办会列在总览的「可以开始」里。
+        </Feature>
+        <Feature icon={Workflow} title="流程图">
+          在队列顶部切换到「流程图」。方块是改进点，箭头从前置指向后续：前置没完成时是流动的虚线，完成后变成实线。默认不显示已完成的（连着线的照样显示），工具栏里可以打开。
+        </Feature>
+      </div>
+      <Points>
+        <li>拖动方块移动位置，位置会记住；选中几条一起拖。拖空白处框选，按住 <K>Ctrl</K> 加选。</li>
+        <li>右键或中键拖动画布，滚轮缩放（<K>Shift</K>+滚轮左右移动）；右下角可以回到 100% 或显示全部。</li>
+        <li>从方块右侧的圆点拉到另一条：那条等这条；从左侧圆点拉出：这条等那条。拉到空白处松手，就在那里新建一条并自动连上。</li>
+        <li>双击空白处或按 <K>N</K> 在那里新建；<K>Shift+Enter</K> 保存后接着写下一条，自动排在它后面。</li>
+        <li>点一下连线选中它，按 <K>Delete</K> 删除，悬停时中间也有删除按钮。</li>
+      </Points>
+      <Feature icon={Network} title="一键整理">
+        按前后顺序重新排：前置在左、后续在右，没连线的排在下方。拖动、整理、连线、删线都可以 <K>Ctrl+Z</K> 撤回、<K>Ctrl+Shift+Z</K> 重做。
+      </Feature>
+    </Section>
+  );
+}
+
 function MarkdownSection() {
   return (
     <Section id="markdown" lead="备注和项目说明支持 Markdown，输入时直接显示效果。">
@@ -400,7 +434,7 @@ function OverviewSection() {
       <Points>
         <li>编写项目说明。</li>
         <li>查看各模块的进度和类型分布，点击可以跳到对应的队列。</li>
-        <li>查看进行中的改进点和每天的完成记录。</li>
+        <li>查看可以开始的（前置都完成了）、进行中的改进点和每天的完成记录。</li>
       </Points>
       <Feature icon={FolderOpen} title="绑定文件夹">
         为项目绑定本地文件夹后，可以一键打开。新建或编辑项目时选好文件夹，名称没填会用文件夹名，图标自动用项目自己的（比如 <Code>public/favicon.png</Code>、<Code>resources/icon.png</Code>）。
@@ -443,6 +477,18 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["展开子改进点 / 进入第一条", ["→"]],
       ["删除到回收站", ["Delete"]],
       ["彻底删除（不进回收站）", ["Shift+Delete"]],
+    ],
+  },
+  {
+    icon: Workflow,
+    title: "流程图",
+    hint: "选中的方块和队列一样，可以用上面的按键",
+    rows: [
+      ["在画布中间新建", ["N"]],
+      ["选中全部方块", ["Ctrl+A"]],
+      ["删除选中的连线", ["Delete"]],
+      ["撤回 / 重做", ["Ctrl+Z", "Ctrl+Shift+Z"]],
+      ["保存新建的一条 / 保存并接着写下一条", ["Enter", "Shift+Enter"]],
     ],
   },
   {

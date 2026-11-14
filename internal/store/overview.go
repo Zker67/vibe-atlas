@@ -28,6 +28,9 @@ type Overview struct {
 	Doing []Item `json:"doing"`
 	// Done lists the done items, the most recently done first.
 	Done []Item `json:"done"`
+	// Ready lists the items to do that have prerequisites, all done: those
+	// that waited and may start now, in the order of the items to do.
+	Ready []Item `json:"ready"`
 }
 
 func (c *Counts) add(status ItemStatus) {
@@ -54,12 +57,30 @@ func (s *Store) Overview(projectID int64) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	deps, err := s.Deps(projectID)
+	if err != nil {
+		return Overview{}, err
+	}
 	o := Overview{
 		ProjectID: projectID,
 		Modules:   make([]ModuleStats, 0, len(modules)+1),
 		Types:     []TypeStats{{Type: TypeImprove}, {Type: TypeBug}, {Type: TypeFeature}},
 		Doing:     []Item{},
 		Done:      []Item{},
+		Ready:     []Item{},
+	}
+	status := make(map[int64]ItemStatus, len(items))
+	for _, it := range items {
+		status[it.ID] = it.Status
+	}
+	// For each item, whether it has prerequisites, and whether all are done.
+	hasDeps := map[int64]bool{}
+	waiting := map[int64]bool{}
+	for _, d := range deps {
+		hasDeps[d.ToID] = true
+		if status[d.FromID] != StatusDone {
+			waiting[d.ToID] = true
+		}
 	}
 	byModule := make(map[int64]int, len(modules))
 	for _, m := range modules {
@@ -84,6 +105,10 @@ func (s *Store) Overview(projectID int64) (Overview, error) {
 			o.Doing = append(o.Doing, it)
 		case StatusDone:
 			o.Done = append(o.Done, it)
+		case StatusTodo:
+			if hasDeps[it.ID] && !waiting[it.ID] {
+				o.Ready = append(o.Ready, it)
+			}
 		}
 	}
 	if unsorted != (Counts{}) {
