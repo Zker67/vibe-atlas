@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Module, Project } from "@/mygo";
+import type { Module, Org, Project } from "@/mygo";
 
 export interface ConfirmRequest {
   title: string;
@@ -19,6 +19,11 @@ export interface ModuleRequest {
   module: Module | null;
 }
 
+/** What the organization dialog adds or edits: a new organization, or this one. */
+export interface OrgRequest {
+  org: Org | null;
+}
+
 /** The tabs of 设置. */
 export type SettingsTab = "general" | "appearance" | "items" | "data" | "updates";
 
@@ -26,6 +31,7 @@ interface DialogsState {
   confirm: ConfirmRequest | null;
   project: ProjectRequest | null;
   module: ModuleRequest | null;
+  org: OrgRequest | null;
   settings: boolean;
   settingsTab: SettingsTab;
   help: boolean;
@@ -37,6 +43,7 @@ export const useDialogs = create<DialogsState>(() => ({
   confirm: null,
   project: null,
   module: null,
+  org: null,
   settings: false,
   settingsTab: "general",
   help: false,
@@ -56,6 +63,11 @@ export function askProject(project: Project | null = null) {
 /** Opens the module dialog: to add a module to the open project, or to edit module's name and icon. */
 export function askModule(module: Module | null = null) {
   useDialogs.setState({ module: { module } });
+}
+
+/** Opens the organization dialog: to add an organization, or to edit org's name and icon. */
+export function askOrg(org: Org | null = null) {
+  useDialogs.setState({ org: { org } });
 }
 
 /** Opens or closes 设置, at the tab last shown; opening it closes 使用说明. */

@@ -22,6 +22,7 @@ import {
   setItemsType,
   toggleSelected,
   useAtlas,
+  useOrgProjects,
 } from "@/state/atlas";
 import { DeleteButton } from "./delete-button";
 import { IconButton } from "./icon-button";
@@ -177,7 +178,7 @@ function ModuleSelect({ ids, items }: { ids: number[]; items: Item[] }) {
 
 /** Moves the items to another project, picked from a menu; gone when there is none. */
 function MoveMenu({ ids }: { ids: number[] }) {
-  const projects = useAtlas((s) => s.projects);
+  const projects = useOrgProjects();
   const projectId = useAtlas((s) => s.projectId);
   const others = projects.filter((p) => p.id !== projectId);
   if (others.length === 0) return null;

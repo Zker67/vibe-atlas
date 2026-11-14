@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { Boxes, FolderKanban, type LucideIcon } from "lucide-react";
+import { Boxes, Building2, FolderKanban, User, type LucideIcon } from "lucide-react";
 import { Atlas } from "@/mygo";
 import { parseIcon, projectIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
@@ -64,4 +64,12 @@ export function ProjectIcon({ project, className }: { project: { icon: string; d
 /** A module's icon, or the default one. */
 export function ModuleIcon({ module, className }: { module: { icon: string }; className?: string }) {
   return <EntityIcon icon={module.icon} fallback={Boxes} className={className} />;
+}
+
+/** The default icon of an organization: a person for 个人, a building for the others. */
+export const orgFallback = (personal: boolean): LucideIcon => (personal ? User : Building2);
+
+/** An organization's icon, or its default one. */
+export function OrgIcon({ org, className }: { org: { icon: string; personal: boolean }; className?: string }) {
+  return <EntityIcon icon={org.icon} fallback={orgFallback(org.personal)} className={className} />;
 }

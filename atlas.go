@@ -50,9 +50,13 @@ var CaptureShown = mygo.NewEvent[CaptureState]("captureShown")
 
 // CaptureState is how the quick capture panel starts.
 type CaptureState struct {
-	// ProjectID is the project new items go to unless the user picks
-	// another: the one open in the main window, else the one last captured
-	// into, else the first; 0 when there is no project.
+	// OrgID is the organization open in the main window, whose projects
+	// the panel lists.
+	OrgID int64 `json:"orgId"`
+	// ProjectID is the project of OrgID new items go to unless the user
+	// picks another: the one open in the main window, else the one last
+	// captured into, else the first; 0 when the organization has no
+	// project.
 	ProjectID int64 `json:"projectId"`
 }
 
@@ -136,6 +140,9 @@ type Settings struct {
 	DataDir string `json:"dataDir"`
 	// CurrentProjectID is the project open in the main window, or 0.
 	CurrentProjectID int64 `json:"currentProjectId"`
+	// CurrentOrgID is the organization open in the main window: 个人 until
+	// the user switches.
+	CurrentOrgID int64 `json:"currentOrgId"`
 }
 
 // Keys of the settings table.
@@ -149,6 +156,7 @@ const (
 	keyTrashDays      = "trashDays"
 	keySessionSource  = "sessionSource"
 	keyCurrentProject = "currentProject"
+	keyCurrentOrg     = "currentOrg"
 	keyLastCapture    = "lastCaptureProject"
 	keyUpdateCheck    = "updateCheck"
 	keyUpdateInterval = "updateInterval"
@@ -203,9 +211,12 @@ func (a *Atlas) Projects() ([]store.Project, error) {
 	return db.Projects()
 }
 
-// CreateProject adds a project at the end of the list.
+// CreateProject adds a project at the end of the list, in the
+// organization open in the main window.
 func (a *Atlas) CreateProject(name string) (store.Project, error) {
-	return do(a, 0, func(db *store.Store) (store.Project, error) { return db.CreateProject(name) })
+	return do(a, 0, func(db *store.Store) (store.Project, error) {
+		return db.AddProject(store.ProjectDraft{Name: name, OrgID: a.currentOrg(db)}, "")
+	})
 }
 
 // RenameProject renames a project.
@@ -292,6 +303,40 @@ func (a *Atlas) DeleteProject(id int64) error {
 func (a *Atlas) ReorderProjects(ids []int64) error {
 	_, err := do(a, 0, func(db *store.Store) (struct{}, error) { return struct{}{}, db.ReorderProjects(ids) })
 	return err
+}
+
+// ---- Organizations ----
+
+// Orgs returns every organization: 个人 first, then the others in the order
+// they were added.
+func (a *Atlas) Orgs() ([]store.Org, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return db.Orgs()
+}
+
+// CreateOrg adds an organization.
+func (a *Atlas) CreateOrg(draft store.OrgDraft) (store.Org, error) {
+	return do(a, 0, func(db *store.Store) (store.Org, error) { return db.CreateOrg(draft) })
+}
+
+// EditOrg replaces an organization's name and icon.
+func (a *Atlas) EditOrg(id int64, draft store.OrgDraft) (store.Org, error) {
+	return do(a, 0, func(db *store.Store) (store.Org, error) { return db.EditOrg(id, draft) })
+}
+
+// DeleteOrg deletes an organization other than 个人; its projects move to
+// 个人. It returns how many moved.
+func (a *Atlas) DeleteOrg(id int64) (int, error) {
+	return do(a, 0, func(db *store.Store) (int, error) { return db.DeleteOrg(id) })
+}
+
+// SetProjectOrg moves a project to another organization, at the end of its
+// projects.
+func (a *Atlas) SetProjectOrg(id, orgID int64) (store.Project, error) {
+	return do(a, 0, func(db *store.Store) (store.Project, error) { return db.SetProjectOrg(id, orgID) })
 }
 
 // ---- Modules ----
@@ -974,6 +1019,7 @@ func (a *Atlas) Settings() (Settings, error) {
 		DataDir:         a.app.dataDir,
 	}
 	s.CurrentProjectID = a.settingID(db, keyCurrentProject)
+	s.CurrentOrgID = a.currentOrg(db)
 	return s, nil
 }
 
@@ -1256,6 +1302,27 @@ func (a *Atlas) SetCurrentProject(id int64) error {
 	return db.SetSetting(keyCurrentProject, strconv.FormatInt(id, 10))
 }
 
+// SetCurrentOrg records the organization open in the main window, whose
+// projects quick capture lists.
+func (a *Atlas) SetCurrentOrg(id int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	return db.SetSetting(keyCurrentOrg, strconv.FormatInt(id, 10))
+}
+
+// currentOrg is the organization open in the main window: 个人 until the
+// user switches, or when the one recorded is gone.
+func (a *Atlas) currentOrg(db *store.Store) int64 {
+	if id := a.settingID(db, keyCurrentOrg); id != 0 {
+		if _, err := db.Org(id); err == nil {
+			return id
+		}
+	}
+	return store.PersonalOrg
+}
+
 // canOpenAtLogin is false in development builds, whose program is a
 // temporary build.
 func canOpenAtLogin() bool { return !mygo.IsDev() }
@@ -1283,15 +1350,21 @@ func (a *Atlas) OpenDataFolder() error {
 
 // ---- Quick capture ----
 
-// captureState picks the project quick capture starts with.
+// captureState picks the organization and project quick capture starts
+// with.
 func (a *Atlas) captureState() CaptureState {
 	db, err := a.store()
 	if err != nil {
 		return CaptureState{}
 	}
+	org := a.currentOrg(db)
 	projects, err := db.Projects()
-	if err != nil || len(projects) == 0 {
-		return CaptureState{}
+	if err != nil {
+		return CaptureState{OrgID: org}
+	}
+	projects = slices.DeleteFunc(projects, func(p store.Project) bool { return p.OrgID != org })
+	if len(projects) == 0 {
+		return CaptureState{OrgID: org}
 	}
 	exists := func(id int64) bool {
 		for _, p := range projects {
@@ -1303,10 +1376,10 @@ func (a *Atlas) captureState() CaptureState {
 	}
 	for _, key := range []string{keyCurrentProject, keyLastCapture} {
 		if id := a.settingID(db, key); id != 0 && exists(id) {
-			return CaptureState{ProjectID: id}
+			return CaptureState{OrgID: org, ProjectID: id}
 		}
 	}
-	return CaptureState{ProjectID: projects[0].ID}
+	return CaptureState{OrgID: org, ProjectID: projects[0].ID}
 }
 
 // CaptureItem adds an item from quick capture, and remembers its project

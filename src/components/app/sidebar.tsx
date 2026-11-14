@@ -1,4 +1,17 @@
-import { BookOpen, Boxes, CornerDownRight, FolderKanban, Inbox, LayoutList, Plus, Settings, SquarePen, Trash2, type LucideIcon } from "lucide-react";
+import {
+  ArrowRightLeft,
+  BookOpen,
+  Boxes,
+  CornerDownRight,
+  FolderKanban,
+  Inbox,
+  LayoutList,
+  Plus,
+  Settings,
+  SquarePen,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
@@ -11,6 +24,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Scroller } from "@/components/ui/scroller";
@@ -21,6 +37,7 @@ import {
   detectProjectIcon,
   moveModule,
   moveProject,
+  moveProjectToOrg,
   openProject,
   renameModule,
   renameProject,
@@ -29,11 +46,12 @@ import {
   setProjectIcon,
   setView,
   useAtlas,
+  useOrgProjects,
   type ModuleFilter,
 } from "@/state/atlas";
 import { askConfirm, askModule, askProject, openHelp, openSettings } from "@/state/dialogs";
 import { useSidebar } from "@/state/sidebar";
-import { ModuleIcon, ProjectIcon } from "./entity-icon";
+import { ModuleIcon, OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { IconPopover } from "./icon-picker";
 import { useModuleDropOver } from "./queue";
@@ -248,7 +266,7 @@ function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDou
 }
 
 function Projects() {
-  const projects = useAtlas((s) => s.projects);
+  const projects = useOrgProjects();
   const projectId = useAtlas((s) => s.projectId);
   return (
     <section className="flex max-h-[45%] min-h-0 flex-col">
@@ -270,6 +288,8 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
   const [renaming, setRenaming] = useState(false);
   // In the rail a click on the icon opens the project; the picker is in 编辑项目.
   const collapsed = useSidebar((s) => s.collapsed);
+  const orgs = useAtlas((s) => s.orgs);
+  const otherOrgs = orgs.filter((o) => o.id !== p.orgId);
   return (
     <SortableRow id={p.id}>
       <ContextMenu>
@@ -305,6 +325,22 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
             <SquarePen />
             编辑项目
           </ContextMenuItem>
+          {otherOrgs.length > 0 && (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <ArrowRightLeft />
+                移到组织
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="max-h-80 w-48 overflow-y-auto">
+                {otherOrgs.map((o) => (
+                  <ContextMenuItem key={o.id} onSelect={() => void moveProjectToOrg(p.id, o.id)}>
+                    <OrgIcon org={o} />
+                    <span className="truncate">{o.name}</span>
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          )}
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => confirmDeleteProject(p)}>
             <Trash2 />

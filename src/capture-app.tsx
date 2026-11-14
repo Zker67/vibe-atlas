@@ -46,6 +46,9 @@ export function CaptureApp() {
   const [ready, setReady] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState(0);
+  // The organization whose projects the panel lists: the main window's as
+  // it shows, kept by a draft.
+  const orgId = useRef(0);
   // The modules, with the project they belong to.
   const [loaded, setLoaded] = useState<{ projectId: number; modules: Module[] }>({ projectId: 0, modules: [] });
   const [moduleId, setModuleId] = useState(0);
@@ -72,9 +75,11 @@ export function CaptureApp() {
     draft.current = { title, note, link };
   }, [title, note, link]);
 
-  /** Fetches the projects, keeping the one picked when it still exists. */
+  /** Fetches the organization's projects, keeping the one picked when it still exists. */
   const loadProjects = useCallback(async (want?: number) => {
-    const list = await Atlas.projects();
+    // Not known yet: the settings or the panel showing will tell.
+    if (!orgId.current) return;
+    const list = (await Atlas.projects()).filter((p) => p.orgId === orgId.current);
     setProjects(list);
     setProjectId((current) => {
       const pick = want || current;
@@ -88,6 +93,7 @@ export function CaptureApp() {
       try {
         const settings = await Atlas.settings();
         setSessionSource(settings.sessionSource);
+        orgId.current = settings.currentOrgId;
         await loadProjects(settings.currentProjectId);
       } catch (e) {
         setError(errorMessage(e));
@@ -102,14 +108,15 @@ export function CaptureApp() {
       const d = draft.current;
       const fresh = !d.title && !d.note.trim() && !d.link.trim();
       if (fresh) {
-        // A fresh start: the defaults, and the project the app suggests.
+        // A fresh start: the defaults, and the organization and project the app suggests.
+        orgId.current = state.orgId;
         setType("improve");
         setModuleId(0);
         setNote("");
         setLink("");
         setDetails(false);
       }
-      // A draft keeps the project and module it was written for.
+      // A draft keeps the organization, project and module it was written for.
       void loadProjects(fresh ? state.projectId : undefined).catch((e: unknown) => setError(errorMessage(e)));
       input.current?.focus();
     });
@@ -203,7 +210,7 @@ export function CaptureApp() {
   };
 
   const createProject = async (name: string) => {
-    const p = await Atlas.createProject(name);
+    const p = await newProject(name, orgId.current);
     await loadProjects(p.id);
     setModuleId(0);
     closePicker();
@@ -336,7 +343,7 @@ export function CaptureApp() {
   };
 
   if (ready && projects.length === 0) {
-    return <NoProject onCreated={(id) => loadProjects(id)} />;
+    return <NoProject onCreate={async (name) => loadProjects((await newProject(name, orgId.current)).id)} />;
   }
 
   return (
@@ -767,8 +774,13 @@ function Picker({ what, choices, value, onPick, onCreate, onClose }: PickerProps
   );
 }
 
-/** What the panel shows before any project exists: a field to create the first. */
-function NoProject({ onCreated }: { onCreated(id: number): Promise<void> }) {
+/** A project added from the panel, to the organization it lists. */
+function newProject(name: string, orgId: number) {
+  return Atlas.addProject({ name, folderPath: "", icon: "", orgId });
+}
+
+/** What the panel shows before the organization has any project: a field to create the first. */
+function NoProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -785,8 +797,7 @@ function NoProject({ onCreated }: { onCreated(id: number): Promise<void> }) {
     if (!text || busy) return;
     setBusy(true);
     try {
-      const p = await Atlas.createProject(text);
-      await onCreated(p.id);
+      await onCreate(text);
     } catch (e) {
       setError(errorMessage(e));
       setBusy(false);

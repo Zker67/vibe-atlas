@@ -23,9 +23,15 @@ export interface CanvasSpot {
 /** CaptureState is how the quick capture panel starts. */
 export interface CaptureState {
   /**
-   * ProjectID is the project new items go to unless the user picks
-   * another: the one open in the main window, else the one last captured
-   * into, else the first; 0 when there is no project.
+   * OrgID is the organization open in the main window, whose projects
+   * the panel lists.
+   */
+  orgId: number;
+  /**
+   * ProjectID is the project of OrgID new items go to unless the user
+   * picks another: the one open in the main window, else the one last
+   * captured into, else the first; 0 when the organization has no
+   * project.
    */
   projectId: number;
 }
@@ -216,6 +222,29 @@ export interface NewItem {
   deeplink?: string;
 }
 
+/**
+ * Org is an organization: the projects of one source, such as the user's
+ * own or a company's. It only groups projects on this machine; there are
+ * no members.
+ */
+export interface Org {
+  id: number;
+  /** Name is unique among organizations, ignoring the case of Latin letters. */
+  name: string;
+  /** Icon is the icon the user chose (see checkIcon), or "" for the default. */
+  icon: string;
+  /** Personal marks 个人, which cannot be deleted. */
+  personal: boolean;
+  createdAt: number;
+}
+
+/** OrgDraft is what the user fills in to add or edit an organization. */
+export interface OrgDraft {
+  name: string;
+  /** Icon is as Org.Icon. */
+  icon: string;
+}
+
 /** Overview sums up a project from its items. */
 export interface Overview {
   projectId: number;
@@ -263,6 +292,8 @@ export interface Project {
    * "image:<name>" picture, or "".
    */
   detectedIcon: string;
+  /** OrgID is the organization the project is in. */
+  orgId: number;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
@@ -281,6 +312,11 @@ export interface ProjectDraft {
   folderPath: string;
   /** Icon is as Project.Icon: "" for 自动. */
   icon: string;
+  /**
+   * OrgID is the organization a new project goes to, 0 for 个人.
+   * EditProject leaves the organization alone: see SetProjectOrg.
+   */
+  orgId: number;
 }
 
 /** Session is one conversation with an agent. */
@@ -387,6 +423,11 @@ export interface Settings {
   dataDir: string;
   /** CurrentProjectID is the project open in the main window, or 0. */
   currentProjectId: number;
+  /**
+   * CurrentOrgID is the organization open in the main window: 个人 until
+   * the user switches.
+   */
+  currentOrgId: number;
 }
 
 /** Source is where sessions are read from: one at a time, as the user set. */
@@ -596,7 +637,14 @@ export const Atlas = {
   createModule(projectID: number, name: string): Promise<Module> {
     return call("Atlas.CreateModule", projectID, name);
   },
-  /** CreateProject adds a project at the end of the list. */
+  /** CreateOrg adds an organization. */
+  createOrg(draft: OrgDraft): Promise<Org> {
+    return call("Atlas.CreateOrg", draft);
+  },
+  /**
+   * CreateProject adds a project at the end of the list, in the
+   * organization open in the main window.
+   */
   createProject(name: string): Promise<Project> {
     return call("Atlas.CreateProject", name);
   },
@@ -622,6 +670,13 @@ export const Atlas = {
   deleteModule(id: number): Promise<number> {
     return call("Atlas.DeleteModule", id);
   },
+  /**
+   * DeleteOrg deletes an organization other than 个人; its projects move to
+   * 个人. It returns how many moved.
+   */
+  deleteOrg(id: number): Promise<number> {
+    return call("Atlas.DeleteOrg", id);
+  },
   /** DeleteProject deletes a project with its modules and items. */
   deleteProject(id: number): Promise<void> {
     return call("Atlas.DeleteProject", id);
@@ -636,6 +691,10 @@ export const Atlas = {
   /** DetectProjectIcon looks again for the project's own icon in its folder. */
   detectProjectIcon(id: number): Promise<Project> {
     return call("Atlas.DetectProjectIcon", id);
+  },
+  /** EditOrg replaces an organization's name and icon. */
+  editOrg(id: number, draft: OrgDraft): Promise<Org> {
+    return call("Atlas.EditOrg", id, draft);
   },
   /**
    * EditProject replaces a project's name, folder and icon, as AddProject
@@ -742,6 +801,13 @@ export const Atlas = {
   /** OpenProjectFolder opens the project's folder in the file manager. */
   openProjectFolder(id: number): Promise<void> {
     return call("Atlas.OpenProjectFolder", id);
+  },
+  /**
+   * Orgs returns every organization: 个人 first, then the others in the order
+   * they were added.
+   */
+  orgs(): Promise<Org[]> {
+    return call("Atlas.Orgs");
   },
   /**
    * Overview sums up a project: the progress of its modules, its kinds of
@@ -867,6 +933,13 @@ export const Atlas = {
     return call("Atlas.SetCanvas", projectID, spots);
   },
   /**
+   * SetCurrentOrg records the organization open in the main window, whose
+   * projects quick capture lists.
+   */
+  setCurrentOrg(id: number): Promise<void> {
+    return call("Atlas.SetCurrentOrg", id);
+  },
+  /**
    * SetCurrentProject records the project open in the main window, which
    * quick capture adds items to unless the user picks another.
    */
@@ -949,6 +1022,13 @@ export const Atlas = {
   /** SetProjectIcon sets the icon the user chose for a project, "" for 自动. */
   setProjectIcon(id: number, icon: string): Promise<Project> {
     return call("Atlas.SetProjectIcon", id, icon);
+  },
+  /**
+   * SetProjectOrg moves a project to another organization, at the end of its
+   * projects.
+   */
+  setProjectOrg(id: number, orgID: number): Promise<Project> {
+    return call("Atlas.SetProjectOrg", id, orgID);
   },
   /**
    * SetSessionSource picks where the sessions to link items to are read

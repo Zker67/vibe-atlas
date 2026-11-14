@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { addProject, createModule, detectProjectIcon, editProject, renameModule, setModuleIcon } from "@/state/atlas";
-import { useDialogs, type ModuleRequest, type ProjectRequest } from "@/state/dialogs";
-import { EntityIcon } from "./entity-icon";
+import { addProject, createModule, createOrg, detectProjectIcon, editOrg, editProject, renameModule, setModuleIcon } from "@/state/atlas";
+import { useDialogs, type ModuleRequest, type OrgRequest, type ProjectRequest } from "@/state/dialogs";
+import { EntityIcon, orgFallback } from "./entity-icon";
 import { IconPopover } from "./icon-picker";
 
 const closeProject = () => useDialogs.setState({ project: null });
 const closeModule = () => useDialogs.setState({ module: null });
+const closeOrg = () => useDialogs.setState({ org: null });
 
 /** The dialog that adds a project, or edits its icon, name and folder. */
 export function ProjectDialog() {
@@ -301,6 +302,117 @@ function ModuleForm({ request }: { request: ModuleRequest }) {
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={closeModule}>
+          取消
+        </Button>
+        <Button onClick={() => void submit()} disabled={busy}>
+          {editing ? "保存" : "创建"}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+/** The dialog that adds an organization, or edits its icon and name. */
+export function OrgDialog() {
+  const request = useDialogs((s) => s.org);
+  return (
+    <Dialog open={!!request} onOpenChange={(open) => !open && closeOrg()}>
+      <DialogContent className="sm:max-w-sm">
+        {request && <OrgForm key={request.org?.id ?? "new"} request={request} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OrgForm({ request }: { request: OrgRequest }) {
+  const editing = request.org;
+  const [name, setName] = useState(editing?.name ?? "");
+  const [icon, setIcon] = useState(editing?.icon ?? "");
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fallback = orgFallback(editing?.personal ?? false);
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (editing) await editOrg(editing.id, { name, icon });
+      else await createOrg({ name, icon });
+      closeOrg();
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <DialogHeader className="flex-row items-center gap-1.5">
+        <DialogTitle>{editing ? "编辑组织" : "新建组织"}</DialogTitle>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="说明"
+              className="grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">组织把不同来源的项目分开，比如个人和公司。已有的项目右键「移到组织」。</TooltipContent>
+        </Tooltip>
+      </DialogHeader>
+      <div className="flex items-start gap-3">
+        <IconPopover
+          open={picking}
+          onOpenChange={setPicking}
+          value={icon}
+          fallback={fallback}
+          onPick={(i) => {
+            setIcon(i);
+            setPicking(false);
+          }}
+        >
+          <button
+            type="button"
+            aria-label="更换图标"
+            className="group relative flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted ring-1 ring-border transition-all duration-150 hover:ring-primary/60"
+          >
+            <EntityIcon
+              icon={icon}
+              fallback={fallback}
+              className="size-6 text-muted-foreground transition-transform duration-200 group-hover:scale-90"
+            />
+            <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/70 text-foreground opacity-0 backdrop-blur-[1px] transition-opacity duration-150 group-hover:opacity-100">
+              <Pencil className="size-4" />
+            </span>
+          </button>
+        </IconPopover>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-2">
+          <Input
+            autoFocus
+            value={name}
+            maxLength={40}
+            aria-label="组织名称"
+            aria-invalid={!!error}
+            placeholder="组织名称，比如「公司」「开源」"
+            onChange={(e) => {
+              setName(e.target.value);
+              setError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isComposing(e)) {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={closeOrg}>
           取消
         </Button>
         <Button onClick={() => void submit()} disabled={busy}>

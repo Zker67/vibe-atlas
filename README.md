@@ -34,6 +34,7 @@
 | 能力 | 实现 |
 |---|---|
 | **快速记录** | 在任何软件上按 `Ctrl+Alt+Space` 呼出小窗，输入一行回车就存进项目；`Shift+Enter` 展开 Markdown 备注和链接。见 [capture-app.tsx](src/capture-app.tsx) |
+| **组织** | 顶栏左边切换组织（默认「个人」），每个组织有自己的项目，个人和公司的项目分开放；项目可以移到别的组织。见 [org-switcher.tsx](src/components/app/org-switcher.tsx)、[orgs.go](internal/store/orgs.go) |
 | **项目 → 模块 → 改进点** | 改进点分改进、bug、新需求三种，可以挂在模块下，也可以有任意层子改进点；拖动排序、改层级、合并。见 [queue.tsx](src/components/app/queue.tsx)、[数据层](internal/store/README.md) |
 | **状态全靠手点** | 待办、进行中、完成随时切换，进行中不限条数，自动记录开始和完成时间；`Ctrl` / `Shift` 多选后批量操作。规则见 [product.md](docs/product.md#规则) |
 | **前置与流程图** | 改进点之间可以设先后（B 等 A 做完），队列里标出还在等的；「流程图」视图是自己写的画布：上级和子改进点合成一张卡片，拖动对齐、框选、从圆点拉线（靠近自动吸附）、拉到空白处新建、右键菜单、一键整理、撤回重做。只提示，不改状态。见 [flow/](src/components/flow/)、[deps.go](internal/store/deps.go) |

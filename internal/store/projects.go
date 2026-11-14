@@ -32,21 +32,23 @@ type Project struct {
 	// DetectedIcon is the project's own icon found in its folder, an
 	// "image:<name>" picture, or "".
 	DetectedIcon string `json:"detectedIcon"`
-	SortOrder    int64  `json:"sortOrder"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// OrgID is the organization the project is in.
+	OrgID     int64 `json:"orgId"`
+	SortOrder int64 `json:"sortOrder"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 	// Counts are the project's items in each status.
 	Counts Counts `json:"counts"`
 }
 
-const projectColumns = `p.id, p.name, p.description, p.folder_path, p.icon, p.detected_icon, p.sort_order, p.created_at, p.updated_at,
+const projectColumns = `p.id, p.name, p.description, p.folder_path, p.icon, p.detected_icon, p.org_id, p.sort_order, p.created_at, p.updated_at,
 	COALESCE(SUM(i.status = 'todo'), 0), COALESCE(SUM(i.status = 'doing'), 0), COALESCE(SUM(i.status = 'done'), 0)`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanProject(row scanner) (Project, error) {
 	var p Project
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.FolderPath, &p.Icon, &p.DetectedIcon, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.FolderPath, &p.Icon, &p.DetectedIcon, &p.OrgID, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
 		&p.Counts.Todo, &p.Counts.Doing, &p.Counts.Done)
 	if err != nil {
 		return p, err
@@ -102,13 +104,27 @@ func projectIn(q queryer, id int64) (Project, error) {
 	return p, err
 }
 
-func projectNameTaken(tx *sql.Tx, name string, except int64) (bool, error) {
-	var n int
-	err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name = ? AND id != ?`, name, except).Scan(&n)
-	return n > 0, err
+// projectNameFree fails when a project other than except has the name.
+// Names are unique among all organizations: when the other one is in
+// another organization than orgID, the error says which.
+func projectNameFree(tx *sql.Tx, name string, except, orgID int64) error {
+	var org int64
+	var orgName string
+	err := tx.QueryRow(`SELECT p.org_id, COALESCE(o.name, '') FROM projects p LEFT JOIN orgs o ON o.id = p.org_id
+		WHERE p.name = ? AND p.id != ?`, name, except).Scan(&org, &orgName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if org != orgID && orgName != "" {
+		return userErr("组织「%s」里已经有叫「%s」的项目了", orgName, name)
+	}
+	return userErr("已经有叫「%s」的项目了", name)
 }
 
-// CreateProject adds a project named name at the end of the list.
+// CreateProject adds a project named name at the end of the list, in 个人.
 func (s *Store) CreateProject(name string) (Project, error) {
 	return s.AddProject(ProjectDraft{Name: name}, "")
 }
@@ -122,6 +138,9 @@ type ProjectDraft struct {
 	FolderPath string `json:"folderPath"`
 	// Icon is as Project.Icon: "" for 自动.
 	Icon string `json:"icon"`
+	// OrgID is the organization a new project goes to, 0 for 个人.
+	// EditProject leaves the organization alone: see SetProjectOrg.
+	OrgID int64 `json:"orgId"`
 }
 
 // clean checks the draft and fills in the name from the folder.
@@ -169,19 +188,22 @@ func (s *Store) AddProject(d ProjectDraft, detected string) (Project, error) {
 	if err := checkDetected(detected); err != nil {
 		return Project{}, err
 	}
+	org := d.OrgID
+	if org == 0 {
+		org = PersonalOrg
+	}
 	var p Project
 	err = s.inTx(func(tx *sql.Tx) error {
-		taken, err := projectNameTaken(tx, d.Name, 0)
-		if err != nil {
+		if _, err := orgIn(tx, org); err != nil {
 			return err
 		}
-		if taken {
-			return userErr("已经有叫「%s」的项目了", d.Name)
+		if err := projectNameFree(tx, d.Name, 0, org); err != nil {
+			return err
 		}
 		now := s.millis()
-		res, err := tx.Exec(`INSERT INTO projects (name, folder_path, icon, detected_icon, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM projects), ?, ?)`,
-			d.Name, d.FolderPath, d.Icon, detected, now, now)
+		res, err := tx.Exec(`INSERT INTO projects (name, folder_path, icon, detected_icon, org_id, sort_order, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM projects), ?, ?)`,
+			d.Name, d.FolderPath, d.Icon, detected, org, now, now)
 		if err != nil {
 			return err
 		}
@@ -207,15 +229,12 @@ func (s *Store) EditProject(id int64, d ProjectDraft, detected string) (Project,
 	}
 	var p Project
 	err = s.inTx(func(tx *sql.Tx) error {
-		if _, err := projectIn(tx, id); err != nil {
-			return err
-		}
-		taken, err := projectNameTaken(tx, d.Name, id)
+		cur, err := projectIn(tx, id)
 		if err != nil {
 			return err
 		}
-		if taken {
-			return userErr("已经有叫「%s」的项目了", d.Name)
+		if err := projectNameFree(tx, d.Name, id, cur.OrgID); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(`UPDATE projects SET name = ?, folder_path = ?, icon = ?, detected_icon = ?, updated_at = ?
 			WHERE id = ?`, d.Name, d.FolderPath, d.Icon, detected, s.millis(), id); err != nil {
@@ -264,15 +283,12 @@ func (s *Store) RenameProject(id int64, name string) (Project, error) {
 	}
 	var p Project
 	err = s.inTx(func(tx *sql.Tx) error {
-		if _, err := projectIn(tx, id); err != nil {
-			return err
-		}
-		taken, err := projectNameTaken(tx, name, id)
+		cur, err := projectIn(tx, id)
 		if err != nil {
 			return err
 		}
-		if taken {
-			return userErr("已经有叫「%s」的项目了", name)
+		if err := projectNameFree(tx, name, id, cur.OrgID); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(`UPDATE projects SET name = ?, updated_at = ? WHERE id = ?`, name, s.millis(), id); err != nil {
 			return err

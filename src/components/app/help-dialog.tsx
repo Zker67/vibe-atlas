@@ -170,8 +170,10 @@ function HelpBody() {
 
 function StartSection() {
   return (
-    <Section id="start" lead="Vibe Atlas 用项目、模块、改进点三层来整理工作。">
+    <Section id="start" lead="Vibe Atlas 用组织、项目、模块、改进点四层来整理工作。">
       <div className="flex flex-wrap items-center gap-2">
+        <Node title="组织" hint="个人或公司，左上角切换" />
+        <ChevronRight className="size-4 text-muted-foreground" />
         <Node title="项目" hint="一个完整的项目" />
         <ChevronRight className="size-4 text-muted-foreground" />
         <Node title="模块" hint="项目的一部分，可选" />

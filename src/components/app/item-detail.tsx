@@ -59,6 +59,7 @@ import {
   setItemType,
   useAtlas,
   useLinkSource,
+  useOrgProjects,
 } from "@/state/atlas";
 import { openImmersive, useImmersive } from "@/state/immersive";
 import { rememberSession, sessionLabel, useSessionLook } from "@/state/sessions";
@@ -322,7 +323,7 @@ const STEP_LOOK = {
 
 /** Moves the item to another project, picked from a menu; gone when there is none. */
 function MoveMenu({ item }: { item: Item }) {
-  const projects = useAtlas((s) => s.projects);
+  const projects = useOrgProjects();
   const others = projects.filter((p) => p.id !== item.projectId);
   if (others.length === 0) return null;
   return (

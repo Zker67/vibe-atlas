@@ -10,7 +10,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/app/dialogs";
-import { ModuleDialog, ProjectDialog } from "@/components/app/project-dialog";
+import { ModuleDialog, OrgDialog, ProjectDialog } from "@/components/app/project-dialog";
 import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
 import { PageMenu } from "@/components/app/page-menu";
@@ -122,6 +122,7 @@ export function MainApp() {
       )}
       <ProjectDialog />
       <ModuleDialog />
+      <OrgDialog />
       <ConfirmDialog />
       <ImmersiveNote />
       <SettingsDialog />
@@ -153,6 +154,8 @@ function QueueLayout({ project }: { project: Project }) {
 }
 
 function Welcome() {
+  // Projects in other organizations: this one is new.
+  const org = useAtlas((s) => (s.projects.length > 0 ? s.orgs.find((o) => o.id === s.orgId) : undefined));
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 p-8 text-center">
       <span className="relative isolate">
@@ -167,7 +170,7 @@ function Welcome() {
           className="size-20 rounded-[22%] shadow-[0_18px_40px_-16px_oklch(0_0_0/60%)] ring-1 ring-foreground/10"
         />
       </span>
-      <h1 className="text-xl font-semibold tracking-tight">故事从第一个项目开始</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{org ? `「${org.name}」还没有项目` : "故事从第一个项目开始"}</h1>
       <Button autoFocus variant="outline" onClick={newProject}>
         <Plus />
         新建项目

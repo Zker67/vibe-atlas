@@ -4,16 +4,16 @@ import { run } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAtlas } from "@/state/atlas";
 import { toggleSidebar, useSidebar } from "@/state/sidebar";
-import appIcon from "@/assets/app-icon.png";
 import { IconButton } from "./icon-button";
+import { OrgSwitcher } from "./org-switcher";
 
 /**
  * The main window's one bar at the top: the window's title bar (the
  * window hides its own, keeping the window buttons, which sit over the
- * right end): the app's icon and name over the sidebar, the button that
- * folds the sidebar at its edge, and the appearance. The open project's
- * controls are atop the queue column. Its empty parts drag the window; a
- * double click maximizes it.
+ * right end): the organization open, which switches to another, over the
+ * sidebar, the button that folds the sidebar at its edge, and the
+ * appearance. The open project's controls are atop the queue column. Its
+ * empty parts drag the window; a double click maximizes it.
  */
 export function TitleBar() {
   const collapsed = useSidebar((s) => s.collapsed);
@@ -25,8 +25,7 @@ export function TitleBar() {
           collapsed ? "w-14 justify-center px-0" : "w-60 px-3",
         )}
       >
-        <img src={appIcon} alt="" draggable={false} className="size-6 shrink-0" />
-        {!collapsed && <span className="font-semibold tracking-tight">Vibe Atlas</span>}
+        <OrgSwitcher />
         {/* Open, the button sits at the sidebar's right end; folded, just past the rail. */}
         {!collapsed && <SidebarButton className="-mr-1.5 ml-auto" />}
       </div>

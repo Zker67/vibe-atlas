@@ -247,6 +247,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	switched, err := a.smokeOrgs(main)
+	report["orgs"] = switched
+	if err != nil {
+		finish(err, "switch organizations")
+		return
+	}
+
 	selected, err := a.smokeSelect(main)
 	report["select"] = selected
 	if err != nil {

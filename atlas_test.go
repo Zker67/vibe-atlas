@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/Zker67/vibe-atlas/internal/store"
@@ -216,4 +217,68 @@ func TestItemLinkComesFromAbove(t *testing.T) {
 	if got, _ := itemLink(db, top, true); got != "https://claude.ai/chat/top" {
 		t.Errorf("parent link = %q", got)
 	}
+}
+
+func TestCaptureStartsInTheCurrentOrg(t *testing.T) {
+	db := openStore(t)
+	a := &Atlas{}
+	a.setStore(db)
+	must := func(p store.Project, err error) store.Project {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	want := func(org, project int64) {
+		t.Helper()
+		if got := a.captureState(); got.OrgID != org || got.ProjectID != project {
+			t.Fatalf("capture state = %+v, want org %d, project %d", got, org, project)
+		}
+	}
+	mine := must(db.CreateProject("规则恐怖"))
+	work, err := db.CreateOrg(store.OrgDraft{Name: "IndieArk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	site := must(db.AddProject(store.ProjectDraft{Name: "官网", OrgID: work.ID}, ""))
+	admin := must(db.AddProject(store.ProjectDraft{Name: "后台", OrgID: work.ID}, ""))
+	want(store.PersonalOrg, mine.ID)
+
+	// The project open is in another organization: the first of this one.
+	if err := a.SetCurrentProject(mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetCurrentOrg(work.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.currentOrg(db); got != work.ID {
+		t.Fatalf("current org = %d", got)
+	}
+	want(work.ID, site.ID)
+	if err := db.SetSetting(keyLastCapture, strconv.FormatInt(admin.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	want(work.ID, admin.ID)
+	if err := a.SetCurrentProject(site.ID); err != nil {
+		t.Fatal(err)
+	}
+	want(work.ID, site.ID)
+
+	// An organization without projects, then gone: back to 个人.
+	empty, err := db.CreateOrg(store.OrgDraft{Name: "空的"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetCurrentOrg(empty.ID); err != nil {
+		t.Fatal(err)
+	}
+	want(empty.ID, 0)
+	if _, err := db.DeleteOrg(empty.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetCurrentProject(mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	want(store.PersonalOrg, mine.ID)
 }

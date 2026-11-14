@@ -1,15 +1,16 @@
 package store
 
 // TextsWith returns every item note, those in the trash too, project
-// description and icon of a project or module that contains sub, for
-// example to find the pictures still referred to.
+// description and icon of a project, module or organization that contains
+// sub, for example to find the pictures still referred to.
 func (s *Store) TextsWith(sub string) ([]string, error) {
 	rows, err := s.db.Query(`SELECT note FROM items WHERE instr(note, ?1) > 0
 		UNION ALL SELECT note FROM trash WHERE instr(note, ?1) > 0
 		UNION ALL SELECT description FROM projects WHERE instr(description, ?1) > 0
 		UNION ALL SELECT icon FROM projects WHERE instr(icon, ?1) > 0
 		UNION ALL SELECT detected_icon FROM projects WHERE instr(detected_icon, ?1) > 0
-		UNION ALL SELECT icon FROM modules WHERE instr(icon, ?1) > 0`, sub)
+		UNION ALL SELECT icon FROM modules WHERE instr(icon, ?1) > 0
+		UNION ALL SELECT icon FROM orgs WHERE instr(icon, ?1) > 0`, sub)
 	if err != nil {
 		return nil, err
 	}

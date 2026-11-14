@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { toast } from "sonner";
 import {
   Atlas,
@@ -8,6 +9,8 @@ import {
   type ItemStatus,
   type ItemType,
   type Module,
+  type Org,
+  type OrgDraft,
   type Overview,
   type Place,
   type Project,
@@ -40,8 +43,13 @@ export type StatusFilter = ItemStatus | "all";
 interface AtlasState {
   ready: boolean;
   loadError: string;
+  /** Every organization, 个人 first. */
+  orgs: Org[];
+  /** The organization open: the sidebar lists its projects (useOrgProjects). */
+  orgId: number;
+  /** The projects of every organization, in the user's order. */
   projects: Project[];
-  /** The project open, 0 when there is none. */
+  /** The project open, one of the organization's; 0 when there is none. */
   projectId: number;
   modules: Module[];
   /** The project's items: doing, to do in the user's order, then done. */
@@ -80,6 +88,7 @@ interface AtlasState {
 
 const COLLAPSED_KEY = "vibe-atlas-collapsed";
 const SECTIONS_KEY = "vibe-atlas-sections";
+const ORG_PROJECTS_KEY = "vibe-atlas-org-projects";
 
 function loadSectionOpen(): Record<ItemStatus, boolean> {
   const open = { doing: true, todo: true, done: false };
@@ -109,6 +118,8 @@ function loadCollapsed(): Set<number> {
 export const useAtlas = create<AtlasState>(() => ({
   ready: false,
   loadError: "",
+  orgs: [],
+  orgId: 0,
   projects: [],
   projectId: 0,
   modules: [],
@@ -206,12 +217,16 @@ export function refresh(): Promise<void> {
 
 async function load() {
   const requested = get().projectId;
-  const [projects, trashCount, trash] = await Promise.all([
+  const wantedOrg = get().orgId;
+  const [orgs, projects, trashCount, trash] = await Promise.all([
+    Atlas.orgs(),
     Atlas.projects(),
     Atlas.trashCount(),
     get().view === "trash" ? Atlas.trash() : null,
   ]);
-  const projectId = projects.some((p) => p.id === requested) ? requested : (projects[0]?.id ?? 0);
+  const orgId = orgs.some((o) => o.id === wantedOrg) ? wantedOrg : ((orgs.find((o) => o.personal) ?? orgs[0])?.id ?? 0);
+  // The project open is one of the organization's: one moved to another gives way.
+  const projectId = projects.some((p) => p.id === requested && p.orgId === orgId) ? requested : projectToOpen(projects, orgId);
   let modules: Module[] = [];
   let items: Item[] = [];
   let deps: Dep[] = [];
@@ -220,16 +235,18 @@ async function load() {
     [modules, items, deps] = await Promise.all([Atlas.modules(projectId), Atlas.items(projectId), Atlas.deps(projectId)]);
     if (get().view === "overview") overview = await Atlas.overview(projectId);
   }
-  if (get().projectId !== requested) {
-    // The user opened another project meanwhile: fetch that one.
+  if (get().projectId !== requested || get().orgId !== wantedOrg) {
+    // The user opened another project or organization meanwhile: fetch that one.
     again = true;
-    set({ projects, trashCount, ...(trash ? { trash } : {}) });
+    set({ orgs, projects, trashCount, ...(trash ? { trash } : {}) });
     return;
   }
   const present = new Set(items.map((i) => i.id));
   set((s) => ({
     ready: true,
     loadError: "",
+    orgs,
+    orgId,
     projects,
     trashCount,
     ...(trash ? { trash } : {}),
@@ -244,7 +261,9 @@ async function load() {
         ? s.moduleFilter
         : "all",
   }));
+  if (orgId !== wantedOrg) void Atlas.setCurrentOrg(orgId);
   if (projectId !== requested) void Atlas.setCurrentProject(projectId);
+  rememberProject(orgId, projectId);
 }
 
 let started = false;
@@ -260,7 +279,7 @@ export async function init() {
   events.settingsChanged.on((settings) => set({ settings }));
   try {
     const settings = await Atlas.settings();
-    set({ settings, projectId: settings.currentProjectId });
+    set({ settings, orgId: settings.currentOrgId, projectId: settings.currentProjectId });
   } catch (e) {
     set({ loadError: errorMessage(e), ready: true });
     return;
@@ -270,12 +289,65 @@ export async function init() {
 
 // ---- Navigation ----
 
+/** Opens a project; one of another organization, as one restored from the trash, opens that organization too. */
 export function openProject(id: number) {
   leaveTrash();
+  const org = get().projects.find((p) => p.id === id)?.orgId;
+  if (org && org !== get().orgId) {
+    set({ orgId: org });
+    void Atlas.setCurrentOrg(org);
+  }
   if (id === get().projectId) return;
+  rememberProject(get().orgId, id);
   set({ projectId: id, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [], deps: [] });
   void Atlas.setCurrentProject(id);
   void refresh();
+}
+
+/** Leaves no project open, as in an organization without projects. */
+function closeProject() {
+  set({ projectId: 0, ...only(0), typeFilter: "all", moduleFilter: "all", statusFilter: "all", overview: null, modules: [], items: [], deps: [] });
+  void Atlas.setCurrentProject(0);
+  void refresh();
+}
+
+/** The project last open in each organization, by its id, kept on this machine. */
+function lastProjects(): Record<string, unknown> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(ORG_PROJECTS_KEY) ?? "{}");
+    return saved && typeof saved === "object" ? (saved as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberProject(orgId: number, projectId: number) {
+  const last = lastProjects();
+  if (!orgId || !projectId || last[orgId] === projectId) return;
+  localStorage.setItem(ORG_PROJECTS_KEY, JSON.stringify({ ...last, [orgId]: projectId }));
+}
+
+/** The project to open in an organization: the one last open there, else its first; 0 when it has none. */
+function projectToOpen(projects: Project[], orgId: number): number {
+  const mine = projects.filter((p) => p.orgId === orgId);
+  const last = lastProjects()[orgId];
+  return (mine.find((p) => p.id === last) ?? mine[0])?.id ?? 0;
+}
+
+/** The open organization's projects, in the user's order. */
+export function useOrgProjects(): Project[] {
+  return useAtlas(useShallow((s) => s.projects.filter((p) => p.orgId === s.orgId)));
+}
+
+/** Opens an organization, at the project last open there. */
+export function switchOrg(id: number) {
+  leaveTrash();
+  if (id === get().orgId) return;
+  set({ orgId: id });
+  void Atlas.setCurrentOrg(id);
+  const next = projectToOpen(get().projects, id);
+  if (next) openProject(next);
+  else closeProject();
 }
 
 export function setView(view: View) {
@@ -475,17 +547,18 @@ export async function createProject(name: string): Promise<Project> {
   return p;
 }
 
-/** Adds a project as the project dialog fills it in, and opens it. Throws its error, for the dialog to show. */
-export async function addProject(draft: ProjectDraft): Promise<Project> {
-  const p = await Atlas.addProject(draft);
+/** Adds a project to the organization open, as the project dialog fills it in, and opens it. Throws its error, for the dialog to show. */
+export async function addProject(draft: Omit<ProjectDraft, "orgId">): Promise<Project> {
+  const p = await Atlas.addProject({ ...draft, orgId: get().orgId });
   set((s) => ({ projects: [...s.projects, p] }));
   openProject(p.id);
   return p;
 }
 
 /** Saves the name, folder and icon of a project. Throws its error, for the dialog to show. */
-export async function editProject(id: number, draft: ProjectDraft): Promise<Project> {
-  const p = await Atlas.editProject(id, draft);
+export async function editProject(id: number, draft: Omit<ProjectDraft, "orgId">): Promise<Project> {
+  // Editing leaves the organization alone; moveProjectToOrg changes it.
+  const p = await Atlas.editProject(id, { ...draft, orgId: 0 });
   mergeProject(p);
   return p;
 }
@@ -537,6 +610,53 @@ export async function deleteProject(id: number) {
     }
     void refresh();
   }
+}
+
+/** Moves a project to another organization; the project open, it gives way to another of the organization open. */
+export async function moveProjectToOrg(id: number, orgId: number) {
+  const p = await run(Atlas.setProjectOrg(id, orgId));
+  if (!p) return;
+  mergeProject(p);
+  if (get().projectId === id) {
+    const next = projectToOpen(get().projects, get().orgId);
+    if (next) openProject(next);
+    else closeProject();
+  }
+  const org = get().orgs.find((o) => o.id === orgId);
+  toast.success(`已把「${p.name}」移到「${org?.name ?? "另一个组织"}」`, {
+    action: { label: "切换过去", onClick: () => openProject(p.id) },
+  });
+}
+
+// ---- Organizations ----
+
+/** Adds an organization and opens it. Throws its error, for the dialog to show. */
+export async function createOrg(draft: OrgDraft): Promise<Org> {
+  const o = await Atlas.createOrg(draft);
+  set((s) => ({ orgs: [...s.orgs, o] }));
+  switchOrg(o.id);
+  return o;
+}
+
+/** Saves the name and icon of an organization. Throws its error, for the dialog to show. */
+export async function editOrg(id: number, draft: OrgDraft): Promise<Org> {
+  const o = await Atlas.editOrg(id, draft);
+  set((s) => ({ orgs: s.orgs.map((x) => (x.id === id ? o : x)) }));
+  return o;
+}
+
+/** Deletes an organization; its projects move to 个人, which opens in its place, keeping the project open. */
+export async function deleteOrg(id: number) {
+  const moved = await run(Atlas.deleteOrg(id));
+  if (moved === undefined) return;
+  const personal = get().orgs.find((o) => o.personal);
+  if (get().orgId === id && personal) {
+    set({ orgId: personal.id });
+    void Atlas.setCurrentOrg(personal.id);
+  }
+  set((s) => ({ orgs: s.orgs.filter((o) => o.id !== id) }));
+  void refresh();
+  toast.success(moved > 0 ? `已删除，${moved} 个项目移到了「${personal?.name ?? "个人"}」` : "已删除");
 }
 
 /** Moves a project before or after another, as dragged in the sidebar. */

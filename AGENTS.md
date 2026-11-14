@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-Vibe Atlas 是个人开发者所有 vibe 项目的本地管理中枢（桌面软件）。按「项目 → 模块 → 改进点」组织，由人手动记录、手动发送、手动打勾。产品概念和规则以 [docs/product.md](./docs/product.md) 为准，第一期范围以 [plans/2026-11-07-prototype/](./plans/2026-11-07-prototype/00-overview.md) 为准。
+Vibe Atlas 是个人开发者所有 vibe 项目的本地管理中枢（桌面软件）。按「组织 → 项目 → 模块 → 改进点」整理，由人手动记录、手动发送、手动打勾。产品概念和规则以 [docs/product.md](./docs/product.md) 为准，第一期范围以 [plans/2026-11-07-prototype/](./plans/2026-11-07-prototype/00-overview.md) 为准。
 
 第一期原型已经实现，等待用户验收。技术选型和实测结果见 [docs/architecture/tech-stack.md](./docs/architecture/tech-stack.md)，目录职责见 [docs/architecture/project-structure.md](./docs/architecture/project-structure.md)。
 

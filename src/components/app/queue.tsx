@@ -103,6 +103,7 @@ import {
   trashItems,
   useAtlas,
   useLinkSource,
+  useOrgProjects,
   type Drop as ItemDrop,
 } from "@/state/atlas";
 import { PURGE_KEY, purgeKeyDown, usePurgeKey } from "@/lib/purge-key";
@@ -1490,7 +1491,7 @@ export function statusActions(item: Item): StatusAction[] {
 
 /** What the right-click menu of a row offers. It mounts only while the menu is open. */
 function ItemMenuItems({ item }: { item: Item }) {
-  const projects = useAtlas((s) => s.projects);
+  const projects = useOrgProjects();
   const modules = useAtlas((s) => s.modules);
   const others = projects.filter((p) => p.id !== item.projectId);
   const linked = useLinkSource(item.id) !== null;
@@ -1566,7 +1567,7 @@ function ItemMenuItems({ item }: { item: Item }) {
 function SelectionMenuItems() {
   const items = useAtlas((s) => s.items);
   const selectedIds = useAtlas((s) => s.selectedIds);
-  const projects = useAtlas((s) => s.projects);
+  const projects = useOrgProjects();
   const projectId = useAtlas((s) => s.projectId);
   const modules = useAtlas((s) => s.modules);
   const ids = useMemo(() => inQueueOrder(items, selectedIds), [items, selectedIds]);

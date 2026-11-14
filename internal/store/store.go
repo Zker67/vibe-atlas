@@ -122,7 +122,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 6
+const schemaVersion = 7
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -236,6 +236,21 @@ CREATE TABLE item_canvas (
 ALTER TABLE trash ADD COLUMN deps TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE trash ADD COLUMN canvas_x REAL;
 ALTER TABLE trash ADD COLUMN canvas_y REAL;`,
+	// Organizations: the projects of one source each, such as the user's
+	// own or a company's. 个人 (PersonalOrg) is always there, and the
+	// projects so far go to it. org_id has no REFERENCES: with foreign keys
+	// on, SQLite adds such a column only with a NULL default; orgs.go keeps
+	// it pointing at an organization.
+	6: `
+CREATE TABLE orgs (
+	id         INTEGER PRIMARY KEY,
+	name       TEXT    NOT NULL COLLATE NOCASE UNIQUE,
+	icon       TEXT    NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL
+);
+INSERT INTO orgs (id, name, created_at) VALUES (1, '个人', CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+ALTER TABLE projects ADD COLUMN org_id INTEGER NOT NULL DEFAULT 1;
+CREATE INDEX projects_by_org ON projects (org_id);`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction

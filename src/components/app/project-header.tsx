@@ -1,5 +1,19 @@
 import { useMemo, useState } from "react";
-import { ChartPie, ChevronDown, Folder, FolderOpen, FolderPlus, FolderX, ListTodo, SquarePen, Trash2, TriangleAlert, Workflow, X } from "lucide-react";
+import {
+  ArrowRightLeft,
+  ChartPie,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  FolderX,
+  ListTodo,
+  SquarePen,
+  Trash2,
+  TriangleAlert,
+  Workflow,
+  X,
+} from "lucide-react";
 import type { Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { statusInfo, TYPES } from "@/lib/labels";
@@ -9,6 +23,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -17,6 +34,7 @@ import {
   chooseProjectFolder,
   clearFilters,
   clearProjectFolder,
+  moveProjectToOrg,
   openProjectFolder,
   sections,
   setStatusFilter,
@@ -28,7 +46,7 @@ import {
   type View,
 } from "@/state/atlas";
 import { askProject } from "@/state/dialogs";
-import { ProjectIcon } from "./entity-icon";
+import { OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { confirmDeleteProject } from "./sidebar";
 
@@ -98,6 +116,8 @@ function FolderButton({ project }: { project: Project }) {
 /** The open project's first row, atop the queue column, the flow chart or the overview. */
 export function ProjectBar({ project }: { project: Project }) {
   const view = useAtlas((s) => s.view);
+  const orgs = useAtlas((s) => s.orgs);
+  const otherOrgs = orgs.filter((o) => o.id !== project.orgId);
 
   return (
     <div className="@container flex h-12 shrink-0 items-center gap-1 border-b px-2">
@@ -123,6 +143,22 @@ export function ProjectBar({ project }: { project: Project }) {
               <FolderX />
               解除绑定
             </DropdownMenuItem>
+          )}
+          {otherOrgs.length > 0 && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ArrowRightLeft />
+                移到组织
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-80 w-48 overflow-y-auto">
+                {otherOrgs.map((o) => (
+                  <DropdownMenuItem key={o.id} onSelect={() => void moveProjectToOrg(project.id, o.id)}>
+                    <OrgIcon org={o} />
+                    <span className="truncate">{o.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => confirmDeleteProject(project)}>
