@@ -3,7 +3,7 @@ import { defineConfig } from "mygo-cli";
 export default defineConfig({
   name: "Vibe Atlas",
   identifier: "io.github.zker67.vibeatlas",
-  version: "0.6.0",
+  version: "0.6.1",
   // Signed updates from this repository's GitHub releases. The secret key
   // stays out of the repository: give it to `mygo build` in
   // MYGO_UPDATER_PRIVATE_KEY (docs/operations.md).
