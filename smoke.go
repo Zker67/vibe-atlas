@@ -240,6 +240,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	folded, err := a.smokeSidebar(main)
+	report["sidebar"] = folded
+	if err != nil {
+		finish(err, "fold the sidebar")
+		return
+	}
+
 	selected, err := a.smokeSelect(main)
 	report["select"] = selected
 	if err != nil {

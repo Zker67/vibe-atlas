@@ -39,6 +39,27 @@ export interface Change {
   projectId: number;
 }
 
+/**
+ * ClipboardContent is what is on the clipboard, for the page's own 粘贴:
+ * the page may not read the clipboard without asking the user.
+ */
+export interface ClipboardContent {
+  text: string;
+  html: string;
+  /**
+   * Images are the pictures on the clipboard: a picture copied, as PNG,
+   * or else the picture files copied, as a paste in the page has them.
+   */
+  images: ClipboardImage[];
+}
+
+/** ClipboardImage is a picture on the clipboard. */
+export interface ClipboardImage {
+  /** Type is its MIME type, such as "image/png". */
+  type: string;
+  data: string;
+}
+
 /** Counts are how many items are in each status. */
 export interface Counts {
   todo: number;
@@ -547,6 +568,13 @@ export const Atlas = {
     return call("Atlas.ClearWallpaper");
   },
   /**
+   * CopyImage puts a picture of the notes on the clipboard, as imageClipboard
+   * has it.
+   */
+  copyImage(name: string): Promise<void> {
+    return call("Atlas.CopyImage", name);
+  },
+  /**
    * CopyItem copies an item's title and notes, with the items under it, as
    * Markdown, to paste to an AI.
    */
@@ -744,6 +772,13 @@ export const Atlas = {
   /** PurgeTrash deletes the trash entries ids for good. */
   purgeTrash(ids: number[]): Promise<void> {
     return call("Atlas.PurgeTrash", ids);
+  },
+  /**
+   * ReadClipboard reads the clipboard for the page's own right-click menu,
+   * whose 粘贴 hands it to the field as a paste would.
+   */
+  readClipboard(): Promise<ClipboardContent> {
+    return call("Atlas.ReadClipboard");
   },
   /** RemoveDep makes the item toID no longer wait for the item fromID. */
   removeDep(fromID: number, toID: number): Promise<void> {
@@ -974,6 +1009,13 @@ export const Atlas = {
   /** Settings returns the user's preferences. */
   settings(): Promise<Settings> {
     return call("Atlas.Settings");
+  },
+  /**
+   * ShowImageInFolder shows a picture of the notes in the file manager, in
+   * the images folder, selected.
+   */
+  showImageInFolder(name: string): Promise<void> {
+    return call("Atlas.ShowImageInFolder", name);
   },
   /**
    * ShowMain brings the main window to the front, as from quick capture

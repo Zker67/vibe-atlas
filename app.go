@@ -183,8 +183,8 @@ func (a *app) start() {
 			capture.Hide()
 		}
 	})
-	guardPage(main)
-	guardPage(capture)
+	guardPage(main, a.dataDir)
+	guardPage(capture, a.dataDir)
 
 	shortcut, ok, _ := db.Setting(keyShortcut)
 	if !ok || shortcut == "" {
@@ -207,7 +207,7 @@ func (a *app) start() {
 
 // guardPage keeps a window on the app's own pages: links open in the apps
 // the system has for them, and the web view's menu loses its page items.
-func guardPage(w *mygo.Window) {
+func guardPage(w *mygo.Window, dataDir string) {
 	p := w.Page()
 	p.OnWillNavigate(func(e *mygo.NavigateEvent) {
 		if sameOrigin(e.URL, p.URL()) {
@@ -224,16 +224,79 @@ func guardPage(w *mygo.Window) {
 		}
 		return nil
 	})
+	// The main window shows menus of its own for text and pictures
+	// (page-menu.tsx); this one is quick capture's, whose small window
+	// would cut off a menu its page draws, and that of fields in popovers,
+	// which close as the keyboard leaves them for a menu of the page.
 	p.OnContextMenu(func(e *mygo.ContextMenuEvent) {
-		if !e.Editable && e.SelectionText == "" && !mygo.IsDev() {
+		picture := strings.HasPrefix(e.ImageURL, imageBase())
+		if !e.Editable && e.SelectionText == "" && !picture && !mygo.IsDev() {
 			e.PreventDefault() // the page shows menus of its own where it has any
 			return
 		}
-		e.Menu.Remove(mygo.ContextMenuBack, mygo.ContextMenuForward, mygo.ContextMenuReload,
-			mygo.ContextMenuStop, mygo.ContextMenuPrint, mygo.ContextMenuOpenLinkInNewWindow,
-			mygo.ContextMenuDownloadLink, mygo.ContextMenuOpenImageInNewWindow, mygo.ContextMenuDownloadImage,
-			mygo.ContextMenuOpenFrameInNewWindow, mygo.ContextMenuShare)
+		items := editItems(e.Menu)
+		if picture {
+			name := strings.TrimPrefix(e.ImageURL, imageBase())
+			items = append(items, mygo.Separator(),
+				&mygo.MenuItem{Label: "用默认应用打开", Click: func(*mygo.MenuItem, *mygo.Window) {
+					if path, err := imagePath(dataDir, name); err == nil {
+						go mygo.Shell.OpenPath(path)
+					}
+				}},
+				&mygo.MenuItem{Label: "打开文件夹位置", Click: func(*mygo.MenuItem, *mygo.Window) {
+					if path, err := imagePath(dataDir, name); err == nil {
+						mygo.Shell.ShowItemInFolder(path)
+					}
+				}})
+		}
+		if mygo.IsDev() {
+			if inspect := e.Menu.ItemByID(mygo.ContextMenuInspect); inspect != nil {
+				items = append(items, mygo.Separator(), inspect)
+			}
+		}
+		if len(items) == 0 {
+			e.PreventDefault()
+			return
+		}
+		e.Menu = mygo.NewMenu(items)
 	})
+}
+
+// editLabels are the web view's editing items kept in the menu, in order,
+// with their names.
+var editLabels = []struct{ id, label string }{
+	{mygo.ContextMenuUndo, "撤销"},
+	{mygo.ContextMenuRedo, "重做"},
+	{"", ""},
+	{mygo.ContextMenuCut, "剪切"},
+	{mygo.ContextMenuCopy, "复制"},
+	{mygo.ContextMenuPaste, "粘贴"},
+	{"", ""},
+	{mygo.ContextMenuSelectAll, "全选"},
+}
+
+// editItems are the editing items of the web view's menu m that it has,
+// named in Chinese, apart by separators.
+func editItems(m *mygo.Menu) []*mygo.MenuItem {
+	var items []*mygo.MenuItem
+	gap := false
+	for _, l := range editLabels {
+		if l.id == "" {
+			gap = len(items) > 0
+			continue
+		}
+		it := m.ItemByID(l.id)
+		if it == nil || it.Hidden {
+			continue
+		}
+		if gap {
+			items = append(items, mygo.Separator())
+			gap = false
+		}
+		it.Label = l.label
+		items = append(items, it)
+	}
+	return items
 }
 
 func sameOrigin(a, b string) bool {

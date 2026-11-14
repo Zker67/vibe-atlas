@@ -1,5 +1,5 @@
 import { BookOpen, Boxes, CornerDownRight, FolderKanban, Inbox, LayoutList, Plus, Settings, SquarePen, Trash2, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type { Module, Project } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { run } from "@/lib/api";
@@ -14,6 +14,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Scroller } from "@/components/ui/scroller";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   deleteModule,
   deleteProject,
@@ -31,6 +32,7 @@ import {
   type ModuleFilter,
 } from "@/state/atlas";
 import { askConfirm, askModule, askProject, openHelp, openSettings } from "@/state/dialogs";
+import { useSidebar } from "@/state/sidebar";
 import { ModuleIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { IconPopover } from "./icon-picker";
@@ -57,8 +59,15 @@ export function confirmDeleteProject(project: Project) {
 }
 
 export function Sidebar() {
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
-    <aside className="app-frame flex w-60 shrink-0 flex-col text-sidebar-foreground">
+    <aside
+      data-collapsed={collapsed ? "" : undefined}
+      className={cn(
+        "app-frame flex shrink-0 flex-col overflow-hidden whitespace-nowrap text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none",
+        collapsed ? "w-14" : "w-60",
+      )}
+    >
       <Projects />
       <Modules />
       <div className="mt-auto flex shrink-0 flex-col gap-0.5 border-t p-2">
@@ -70,45 +79,84 @@ export function Sidebar() {
   );
 }
 
+/** In the rail of icons, what a row is, shown beside it as the pointer rests on it. */
+function RailTip({ show, tip, children }: { show: boolean; tip: ReactNode; children: ReactElement }) {
+  if (!show) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** A number beside a name in a tooltip. */
+const tipMeta = (text: string | number) => <span className="meta-mono opacity-60">{text}</span>;
+
 /** 回收站: opens the trash in the panel, or goes back to the queue; its icon bounces as items come in. */
 function TrashButton() {
   const count = useAtlas((s) => s.trashCount);
   const active = useAtlas((s) => s.view === "trash");
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={() => setView(active ? "queue" : "trash")}
-      className={cn(
-        "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
-        active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-      )}
-    >
-      <Trash2 key={count} className={cn("size-4 shrink-0", count > 0 && "animate-in duration-300 zoom-in-50")} />
-      <span className="flex-1">回收站</span>
-      {count > 0 && <span className="meta-mono opacity-70">{count}</span>}
-    </button>
+    <RailTip show={collapsed} tip={<>回收站{count > 0 && tipMeta(count)}</>}>
+      <button
+        type="button"
+        aria-pressed={active}
+        aria-label={collapsed ? "回收站" : undefined}
+        onClick={() => setView(active ? "queue" : "trash")}
+        className={cn(
+          "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150",
+          collapsed && "justify-center px-0",
+          active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+        )}
+      >
+        <span className="relative flex shrink-0">
+          <Trash2 key={count} className={cn("size-4 shrink-0", count > 0 && "animate-in duration-300 zoom-in-50")} />
+          {collapsed && count > 0 && (
+            <span className="meta-mono absolute -top-1.5 left-2.5 rounded-full bg-sidebar-accent px-1 text-[10px] leading-3.5 text-foreground">
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
+        </span>
+        {!collapsed && <span className="flex-1">回收站</span>}
+        {!collapsed && count > 0 && <span className="meta-mono opacity-70">{count}</span>}
+      </button>
+    </RailTip>
   );
 }
 
 function FooterButton({ icon: Icon, label, shortcut, onClick }: { icon: LucideIcon; label: string; shortcut: string; onClick(): void }) {
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
-    >
-      <Icon className="size-4 shrink-0" />
-      <span className="flex-1">{label}</span>
-      <span className="meta-mono opacity-70">{shortcut}</span>
-    </button>
+    <RailTip show={collapsed} tip={<>{label}{tipMeta(shortcut)}</>}>
+      <button
+        type="button"
+        aria-label={collapsed ? label : undefined}
+        onClick={onClick}
+        className={cn(
+          "signal-row flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Icon className="size-4 shrink-0" />
+        {!collapsed && <span className="flex-1">{label}</span>}
+        {!collapsed && <span className="meta-mono opacity-70">{shortcut}</span>}
+      </button>
+    </RailTip>
   );
 }
 
 function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd(): void; addLabel: string }) {
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
-    <div className="flex h-8 shrink-0 items-center justify-between px-3 pt-2 text-xs font-medium text-muted-foreground">
-      <span>{title}</span>
+    <div
+      className={cn(
+        "flex h-8 shrink-0 items-center justify-between px-3 pt-2 text-xs font-medium text-muted-foreground",
+        collapsed && "justify-center px-0",
+      )}
+    >
+      {!collapsed && <span>{title}</span>}
       <IconButton label={addLabel} size="icon-xs" onClick={onAdd}>
         <Plus />
       </IconButton>
@@ -140,8 +188,35 @@ const SIDEBAR_GLIDE = { className: "bg-sidebar-accent in-[.dragging-rows]:invisi
 const rowIcon = (active: boolean) => cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground");
 
 function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDoubleClick, editor, dropModule }: RowProps) {
+  const collapsed = useSidebar((s) => s.collapsed);
   const Tag = editor ? "div" : "button";
   const dropOver = useModuleDropOver(dropModule ?? -1);
+  const icon = iconNode ?? <Icon className={rowIcon(active)} />;
+  // The rail: the icon alone, its name and count beside it on hover; no
+  // room for a field, so no renaming there.
+  if (collapsed) {
+    return (
+      <RailTip show tip={<>{label}{count !== undefined && count > 0 && tipMeta(count)}</>}>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          data-module-drop={dropModule}
+          data-active={active}
+          className={cn(
+            "signal-row relative flex h-8 w-full items-center justify-center rounded-md transition-colors duration-150",
+            active ? "text-sidebar-accent-foreground in-[.dragging-rows]:bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+            dropOver > 0 && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
+          )}
+        >
+          <span className="relative flex">
+            {icon}
+            {doing && <span className="signal-dot absolute -top-0.5 -right-1 size-1.5 rounded-full" aria-label="有进行中的改进点" />}
+          </span>
+        </button>
+      </RailTip>
+    );
+  }
   return (
     <Tag
       type={editor ? undefined : "button"}
@@ -156,7 +231,7 @@ function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDou
         dropOver > 0 && "bg-primary/10 shadow-[inset_0_0_0_1.5px_var(--primary)] hover:bg-primary/10",
       )}
     >
-      {iconNode ?? <Icon className={rowIcon(active)} />}
+      {icon}
       {editor ?? <span className="min-w-0 flex-1 truncate">{label}</span>}
       {doing && <span className="signal-dot size-1.5 shrink-0 rounded-full" aria-label="有进行中的改进点" />}
       {dropOver > 0 ? (
@@ -193,6 +268,8 @@ function Projects() {
 /** A project in the sidebar: dragged into another order, double-clicked to rename. */
 function ProjectRow({ project: p, active }: { project: Project; active: boolean }) {
   const [renaming, setRenaming] = useState(false);
+  // In the rail a click on the icon opens the project; the picker is in 编辑项目.
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
     <SortableRow id={p.id}>
       <ContextMenu>
@@ -200,7 +277,9 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
           <div>
             <Row
               icon={FolderKanban}
-              iconNode={<ProjectIconSpot project={p} active={active} />}
+              iconNode={
+                collapsed ? <ProjectIcon project={p} className={rowIcon(active)} /> : <ProjectIconSpot project={p} active={active} />
+              }
               label={p.name}
               count={p.counts.todo + p.counts.doing}
               doing={p.counts.doing > 0}
@@ -349,6 +428,7 @@ function Modules() {
 /** A module in the sidebar: dragged into another order, double-clicked to rename. */
 function ModuleRow({ module: m, active, onClick }: { module: Module; active: boolean; onClick(): void }) {
   const [renaming, setRenaming] = useState(false);
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
     <SortableRow id={m.id}>
       <ContextMenu>
@@ -356,7 +436,7 @@ function ModuleRow({ module: m, active, onClick }: { module: Module; active: boo
           <div>
             <Row
               icon={Boxes}
-              iconNode={<ModuleIconSpot module={m} active={active} />}
+              iconNode={collapsed ? <ModuleIcon module={m} className={rowIcon(active)} /> : <ModuleIconSpot module={m} active={active} />}
               label={m.name}
               count={m.counts.todo + m.counts.doing}
               doing={m.counts.doing > 0}

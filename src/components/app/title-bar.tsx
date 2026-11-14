@@ -1,25 +1,37 @@
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
 import { Atlas, type Theme } from "@/mygo";
 import { run } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useAtlas } from "@/state/atlas";
+import { toggleSidebar, useSidebar } from "@/state/sidebar";
 import appIcon from "@/assets/app-icon.png";
 import { IconButton } from "./icon-button";
 
 /**
  * The main window's one bar at the top: the window's title bar (the
  * window hides its own, keeping the window buttons, which sit over the
- * right end): the app's icon and name over the sidebar, and the
- * appearance. The open project's controls are atop the queue column.
- * Its empty parts drag the window; a double click maximizes it.
+ * right end): the app's icon and name over the sidebar, the button that
+ * folds the sidebar at its edge, and the appearance. The open project's
+ * controls are atop the queue column. Its empty parts drag the window; a
+ * double click maximizes it.
  */
 export function TitleBar() {
+  const collapsed = useSidebar((s) => s.collapsed);
   return (
     <header data-titlebar className="titlebar app-frame flex shrink-0 items-center text-sidebar-foreground">
-      <div className="flex w-60 shrink-0 items-center gap-2 self-stretch px-3">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2 self-stretch overflow-hidden whitespace-nowrap transition-[width,padding] duration-200 ease-out motion-reduce:transition-none",
+          collapsed ? "w-14 justify-center px-0" : "w-60 px-3",
+        )}
+      >
         <img src={appIcon} alt="" draggable={false} className="size-6 shrink-0" />
-        <span className="font-semibold tracking-tight">Vibe Atlas</span>
+        {!collapsed && <span className="font-semibold tracking-tight">Vibe Atlas</span>}
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end px-2">
+      <div className="flex min-w-0 flex-1 items-center justify-between px-2">
+        <IconButton label={collapsed ? "展开侧栏" : "收起侧栏"} shortcut="Ctrl+\" onClick={toggleSidebar}>
+          {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+        </IconButton>
         <ThemeButton />
       </div>
     </header>

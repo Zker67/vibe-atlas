@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"io/fs"
 	"log"
@@ -19,6 +22,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
@@ -323,17 +327,87 @@ func (a *Atlas) ImageBase() string {
 	return imageBase()
 }
 
+// imagePath is the file of the picture name in the images folder, which
+// must be there.
+func imagePath(dataDir, name string) (string, error) {
+	if !imageFile.MatchString(name) {
+		return "", errors.New("找不到这张图片")
+	}
+	path := filepath.Join(imageDir(dataDir), name)
+	if _, err := os.Stat(path); err != nil {
+		return "", errors.New("找不到这张图片，它可能已经被清理")
+	}
+	return path, nil
+}
+
 // OpenImage opens a picture of the notes in the system's viewer.
 func (a *Atlas) OpenImage(name string) error {
-	if !imageFile.MatchString(name) {
-		return errors.New("找不到这张图片")
-	}
-	path := filepath.Join(imageDir(a.app.dataDir), name)
-	if _, err := os.Stat(path); err != nil {
-		return errors.New("找不到这张图片，它可能已经被清理")
+	path, err := imagePath(a.app.dataDir, name)
+	if err != nil {
+		return err
 	}
 	if err := mygo.Shell.OpenPath(path); err != nil {
 		return fmt.Errorf("打不开这张图片：%w", err)
 	}
 	return nil
+}
+
+// ShowImageInFolder shows a picture of the notes in the file manager, in
+// the images folder, selected.
+func (a *Atlas) ShowImageInFolder(name string) error {
+	path, err := imagePath(a.app.dataDir, name)
+	if err != nil {
+		return err
+	}
+	mygo.Shell.ShowItemInFolder(path)
+	return nil
+}
+
+// CopyImage puts a picture of the notes on the clipboard, as imageClipboard
+// has it.
+func (a *Atlas) CopyImage(name string) error {
+	path, err := imagePath(a.app.dataDir, name)
+	if err != nil {
+		return err
+	}
+	data, err := imageClipboard(path)
+	if err != nil {
+		return err
+	}
+	if err := mygo.Clipboard.Write(data); err != nil {
+		return fmt.Errorf("复制不了图片：%w", err)
+	}
+	return nil
+}
+
+// imageClipboard is what copying the picture at path puts on the
+// clipboard: the picture as PNG, which apps paste as a picture, when it is
+// one image.Decode reads (PNG, JPG, GIF), and the file itself, which the
+// others (WebP, BMP) paste as.
+func imageClipboard(path string) (transfer.Data, error) {
+	data, err := readImageFile(path)
+	if err != nil {
+		return transfer.Data{}, err
+	}
+	var reps []transfer.Representation
+	if http.DetectContentType(data) == "image/png" {
+		reps = append(reps, transfer.Bytes(transfer.PNG, data))
+	} else if img, _, err := image.Decode(bytes.NewReader(data)); err == nil {
+		var buf bytes.Buffer
+		if png.Encode(&buf, img) == nil {
+			reps = append(reps, transfer.Bytes(transfer.PNG, buf.Bytes()))
+		}
+	}
+	file, err := transfer.FileData(path)
+	if err != nil {
+		return transfer.Data{}, fmt.Errorf("复制不了图片：%w", err)
+	}
+	for _, f := range []transfer.Format{transfer.FileList, transfer.URIList} {
+		b, err := file.Read(f)
+		if err != nil {
+			return transfer.Data{}, fmt.Errorf("复制不了图片：%w", err)
+		}
+		reps = append(reps, transfer.Bytes(f, b))
+	}
+	return transfer.New(transfer.NewItem(reps...)), nil
 }

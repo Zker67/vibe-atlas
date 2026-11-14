@@ -16,8 +16,10 @@ import {
 import { createRoot } from "react-dom/client";
 import { ChevronLeft, ChevronRight, ExternalLink, type LucideIcon, Maximize2, Minimize2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { run } from "@/lib/api";
+import { pageMenuOpen } from "@/lib/page-menu";
 import { cn } from "@/lib/utils";
 import { Atlas } from "@/mygo";
+import { showPictureMenu } from "./picture-menu";
 
 let opened = false;
 
@@ -124,6 +126,8 @@ function ImageViewer({ names, start, base, onClosed }: { names: string[]; start:
   // Keys go to the viewer alone while it is open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The picture's right-click menu takes the keys while it is open.
+      if (pageMenuOpen()) return;
       e.stopPropagation();
       switch (e.key) {
         case "Escape":
@@ -238,6 +242,7 @@ function ImageViewer({ names, start, base, onClosed }: { names: string[]; start:
             transform: `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
             transition: view.smooth ? "transform 260ms var(--spring-pop)" : "none",
           }}
+          onContextMenu={(e) => showPictureMenu(e.nativeEvent, name, { restore: () => rootRef.current?.focus() })}
           onLoad={(e) => {
             // It starts fitted, in the same render that shows it.
             const w = e.currentTarget.naturalWidth;

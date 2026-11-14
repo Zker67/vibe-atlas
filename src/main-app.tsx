@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/app/dialogs";
 import { ModuleDialog, ProjectDialog } from "@/components/app/project-dialog";
 import { HelpDialog } from "@/components/app/help-dialog";
 import { ItemDetail } from "@/components/app/item-detail";
+import { PageMenu } from "@/components/app/page-menu";
 import { Overview } from "@/components/app/overview";
 import { ProjectBar, QueueFilters } from "@/components/app/project-header";
 import {
@@ -53,6 +54,7 @@ import {
   useAtlas,
 } from "@/state/atlas";
 import { openHelp, openSettings } from "@/state/dialogs";
+import { toggleSidebar } from "@/state/sidebar";
 import type { Project } from "@/mygo";
 
 // The effects load only once there is something behind the window: a
@@ -124,6 +126,7 @@ export function MainApp() {
       <ImmersiveNote />
       <SettingsDialog />
       <HelpDialog />
+      <PageMenu />
       {/* Bottom right: clear of the field that adds items. */}
       <Toaster position="bottom-right" />
       <UpdateToast />
@@ -251,6 +254,11 @@ function useShortcuts() {
       if (key === "F1" && !mod && !e.shiftKey) {
         e.preventDefault();
         openHelp();
+        return;
+      }
+      if (mod && !e.shiftKey && key === "\\") {
+        e.preventDefault();
+        toggleSidebar();
         return;
       }
       const focus = document.activeElement;

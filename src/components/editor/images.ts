@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/api";
 import { Atlas } from "@/mygo";
 import { hasPictures, htmlToMarkdown, placeholderPattern } from "./paste-html";
+import { showPictureMenu } from "./picture-menu";
 
 const maxBytes = 20 << 20;
 const types = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"]);
@@ -178,6 +179,10 @@ function card(view: EditorView, box: HTMLElement, name: string, index: number): 
     // Keep the focus and the cursor where they are.
     e.preventDefault();
   });
+  const viewLarge = () => {
+    const names = picturesIn(view.state);
+    void import("./image-viewer").then((m) => m.openImageViewer(names, Math.max(0, names.indexOf(name)), base));
+  };
   el.addEventListener("click", (e) => {
     if (e.button !== 0) return;
     if ((e.target as Element).closest(".cm-md-picture-remove")) {
@@ -185,8 +190,16 @@ function card(view: EditorView, box: HTMLElement, name: string, index: number): 
       return;
     }
     if (el.dataset.missing !== undefined) return;
-    const names = picturesIn(view.state);
-    void import("./image-viewer").then((m) => m.openImageViewer(names, Math.max(0, names.indexOf(name)), base));
+    viewLarge();
+  });
+  // The picture's menu, not the text's around it.
+  el.dataset.ownMenu = "";
+  el.addEventListener("contextmenu", (e) => {
+    showPictureMenu(e, name, {
+      missing: el.dataset.missing !== undefined,
+      view: viewLarge,
+      remove: () => box.isConnected && removePicture(view, box, index),
+    });
   });
   return el;
 }

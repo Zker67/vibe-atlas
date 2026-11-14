@@ -1,20 +1,35 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"image"
+	"image/png"
+	"strconv"
 
 	"github.com/egoist/mygo"
 )
 
 // menuChecks are the checks of smokeMenu, each true when it passed.
-var menuChecks = []string{"rowMenuOpens", "rowPressKept", "rowItemActs", "rowMenuCloses", "projectMenuOpens", "projectPressKept", "projectItemActs"}
+var menuChecks = []string{"rowMenuOpens", "rowPressKept", "rowItemActs", "rowMenuCloses", "projectMenuOpens", "projectPressKept", "projectItemActs",
+	"textMenuOpens", "textMenuItems", "textPastes", "pictureMenuOpens", "pictureMenuItems", "pictureMenuCloses"}
 
 // smokeMenu checks the right-click menus with the events the mouse sends:
 // a row of the queue opens its menu; pressing 开始进行 is left to the menu
 // (nothing under it cancels the press or drops the selection), and the
 // click starts the item and closes the menu; a project in the sidebar opens
-// its menu, and a click on 编辑项目 opens the dialog that edits it.
+// its menu, and a click on 编辑项目 opens the dialog that edits it. The
+// page's own menus: a note opens the text menu, whose 粘贴 puts in what is
+// on the clipboard (which this sets); a picture in a note opens the
+// picture menu, with 打开文件夹位置, and Esc closes it.
 func (a *app) smokeMenu(main *mygo.Window) (map[string]any, error) {
+	var pic bytes.Buffer
+	if err := png.Encode(&pic, image.NewGray(image.Rect(0, 0, 12, 8))); err != nil {
+		return nil, err
+	}
+	const pasted = "右键粘贴的文字"
+	mygo.Clipboard.WriteText(pasted)
 	result, err := mygo.EvalAs[map[string]any](main.Page(), `
 		const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		const until = async (check, ms = 3000) => {
@@ -87,6 +102,41 @@ func (a *app) smokeMenu(main *mygo.Window) (map[string]any, error) {
 		out.projectItemActs = await until(() => [...document.querySelectorAll('[role="dialog"]')].some((d) => d.textContent.includes("编辑项目")));
 		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 		await until(() => !document.querySelector('[role="dialog"]'));
+
+		// The page's own menu for text, in the note of the item selected.
+		const select = (title) => {
+			press(row(title));
+			release(row(title));
+		};
+		select(title);
+		await sleep(300);
+		const note = () => document.querySelector('[aria-label="备注"] .cm-content');
+		if (!(await until(() => note()))) return { error: "no note in the details", ...out };
+		rightClick(note());
+		out.textMenuOpens = await until(() => menuItem("粘贴"));
+		if (!out.textMenuOpens) return out;
+		const labels = () => [...menu().querySelectorAll('[role="menuitem"]')].map((el) => el.textContent.replace(/Ctrl.*$/, ""));
+		out.textMenuItems = labels().join() === "剪切,复制,粘贴,全选" && menuItem("剪切").hasAttribute("data-disabled");
+		await sleep(150);
+		press(menuItem("粘贴"));
+		release(menuItem("粘贴"));
+		out.textPastes = await until(() => note()?.textContent.includes(` + strconv.Quote(pasted) + `));
+
+		// The picture's menu, on its card in a note.
+		const name = await mygo.call("Atlas.SaveImage", ` + strconv.Quote(base64.StdEncoding.EncodeToString(pic.Bytes())) + `);
+		const picTitle = "右键菜单图片";
+		await mygo.call("Atlas.CreateItem", { projectId: project.id, moduleId: 0, type: "improve", title: picTitle, note: "![](image:" + name + ")" });
+		if (!(await until(() => row(picTitle)))) return { error: "the picture's row did not show", ...out };
+		select(picTitle);
+		const card = () => note()?.querySelector(".cm-md-picture img");
+		if (!(await until(() => card()?.complete && card().naturalWidth === 12))) return { error: "no picture card", ...out };
+		rightClick(card());
+		out.pictureMenuOpens = await until(() => menuItem("打开文件夹位置"));
+		if (!out.pictureMenuOpens) return out;
+		out.pictureMenuItems = labels().join() === "查看大图,复制图片,用默认应用打开,打开文件夹位置,删除图片";
+		await sleep(150);
+		menu().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		out.pictureMenuCloses = await until(() => !menu());
 		return out;
 	`)
 	if err != nil {

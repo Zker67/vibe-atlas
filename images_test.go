@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/transfer"
+
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
 
@@ -349,5 +351,75 @@ func TestSaveImageFiles(t *testing.T) {
 	}
 	if _, err := saveImageFiles(dataDir, []string{notPic, filepath.Join(dir, "none.png")}); err == nil || !strings.Contains(err.Error(), "readme.png") {
 		t.Errorf("none could be kept: %v", err)
+	}
+}
+
+func TestImagePath(t *testing.T) {
+	dataDir := t.TempDir()
+	name, err := saveImage(dataDir, pngBytes(t, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path, err := imagePath(dataDir, name); err != nil || path != filepath.Join(imageDir(dataDir), name) {
+		t.Errorf("saved picture: %q, %v", path, err)
+	}
+	for _, bad := range []string{"0123456789abcdef.png", "../images/" + name, "x.png", ""} {
+		if _, err := imagePath(dataDir, bad); err == nil {
+			t.Errorf("%q: want an error", bad)
+		}
+	}
+}
+
+func TestImageClipboard(t *testing.T) {
+	dataDir := t.TempDir()
+	var gifBuf bytes.Buffer
+	pal := image.NewPaletted(image.Rect(0, 0, 5, 3), color.Palette{color.Black, color.White})
+	if err := gif.Encode(&gifBuf, pal, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		data []byte
+		ext  string
+	}{{pngBytes(t, 4), ".png"}, {gifBuf.Bytes(), ".gif"}} {
+		name, err := saveImage(dataDir, c.data)
+		if err != nil || !strings.HasSuffix(name, c.ext) {
+			t.Fatalf("save %s: %q, %v", c.ext, name, err)
+		}
+		path := filepath.Join(imageDir(dataDir), name)
+		d, err := imageClipboard(path)
+		if err != nil {
+			t.Fatalf("%s: %v", c.ext, err)
+		}
+		if len(d.Items()) != 1 {
+			t.Errorf("%s: %d items, want one picture", c.ext, len(d.Items()))
+		}
+		pic, err := d.Read(transfer.PNG)
+		if err != nil {
+			t.Fatalf("%s: no PNG: %v", c.ext, err)
+		}
+		img, err := png.Decode(bytes.NewReader(pic))
+		if err != nil || img.Bounds().Dx() != map[string]int{".png": 6, ".gif": 5}[c.ext] {
+			t.Errorf("%s: PNG on the clipboard: %v", c.ext, err)
+		}
+		files, err := d.Files()
+		if err != nil || len(files) != 1 || !strings.EqualFold(filepath.Clean(files[0]), filepath.Clean(path)) {
+			t.Errorf("%s: files %v, %v; want %s", c.ext, files, err, path)
+		}
+	}
+
+	// A picture image.Decode cannot read goes as its file alone.
+	bmp := filepath.Join(imageDir(dataDir), "00000000000000aa.bmp")
+	if err := os.WriteFile(bmp, append([]byte("BM"), make([]byte, 64)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d, err := imageClipboard(bmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Read(transfer.PNG); err == nil {
+		t.Error("BMP: want no PNG")
+	}
+	if files, err := d.Files(); err != nil || len(files) != 1 {
+		t.Errorf("BMP: files %v, %v", files, err)
 	}
 }

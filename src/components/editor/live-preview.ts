@@ -37,7 +37,7 @@ class RuleWidget extends WidgetType {
 }
 
 /** Copies text from a click, falling back on the old way where the page may not use the clipboard. */
-async function copyText(text: string): Promise<void> {
+export async function copyText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
