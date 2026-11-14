@@ -1,4 +1,4 @@
-import { Flame, Trash2 } from "lucide-react";
+import { ArchiveX, Trash2 } from "lucide-react";
 import { PURGE_KEY, purgeHeld, usePurgeKey } from "@/lib/purge-key";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./icon-button";
@@ -20,7 +20,7 @@ export function DeleteButton({ onDelete }: { onDelete(purge: boolean): void }) {
       onClick={(e) => onDelete(purgeHeld(e))}
     >
       {purge ? (
-        <Flame key="purge" className="animate-in duration-150 zoom-in-75 fade-in-0" />
+        <ArchiveX key="purge" className="animate-in duration-150 zoom-in-75 fade-in-0" />
       ) : (
         <Trash2 key="trash" className="animate-in duration-150 zoom-in-75 fade-in-0" />
       )}

@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useSensor, useSensors, type DragStartEvent } from "@dnd-kit/core";
 import {
+  ArchiveX,
   ArrowRightLeft,
   Boxes,
   ChevronRight,
@@ -25,7 +26,6 @@ import {
   CornerLeftUp,
   ExternalLink,
   FileText,
-  Flame,
   Hourglass,
   Inbox,
   Link2,
@@ -393,7 +393,7 @@ function DeleteMenuItem({ onDelete, count }: { onDelete(purge: boolean): void; c
       onSelect={() => onDelete(purgeKeyDown())}
       className={cn(purge && "bg-destructive/10")}
     >
-      {purge ? <Flame /> : <Trash2 />}
+      {purge ? <ArchiveX /> : <Trash2 />}
       {purge ? `彻底删除${n}` : `删除${n}`}
       <ContextMenuShortcut>{purge ? `${PURGE_KEY}+Delete` : "Delete"}</ContextMenuShortcut>
     </ContextMenuItem>
