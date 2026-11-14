@@ -8,9 +8,9 @@ export interface Spot {
   y: number;
 }
 
-/** A step on the chart: cards moved (from before to after), a line drawn, a line taken away. */
+/** A step on the chart: cards moved (from before to after, label saying how), a line drawn, a line taken away. */
 export type FlowStep =
-  | { kind: "place"; before: Spot[]; after: Spot[] }
+  | { kind: "place"; before: Spot[]; after: Spot[]; label?: string }
   | { kind: "link"; fromId: number; toId: number }
   | { kind: "unlink"; fromId: number; toId: number };
 
@@ -41,11 +41,23 @@ export function record(h: FlowHistory, step: FlowStep, at: number): FlowHistory 
 export function inverse(step: FlowStep): FlowStep {
   switch (step.kind) {
     case "place":
-      return { kind: "place", before: step.after, after: step.before };
+      return { kind: "place", before: step.after, after: step.before, ...(step.label ? { label: step.label } : {}) };
     case "link":
       return { kind: "unlink", fromId: step.fromId, toId: step.toId };
     case "unlink":
       return { kind: "link", fromId: step.fromId, toId: step.toId };
+  }
+}
+
+/** What a step is called in the menus: 「撤回「移动」」. */
+export function stepLabel(step: FlowStep): string {
+  switch (step.kind) {
+    case "place":
+      return step.label ?? "移动";
+    case "link":
+      return "连线";
+    case "unlink":
+      return "删除连线";
   }
 }
 

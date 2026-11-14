@@ -433,7 +433,13 @@ html[data-effects] .signal-dot {
 .flow-edge {
   stroke-width: 1.75;
   stroke-linecap: round;
-  transition: stroke 150ms ease-out;
+  transition:
+    stroke 150ms ease-out,
+    stroke-width 150ms ease-out;
+}
+/* The lines of the card under the pointer, or of an item selected. */
+.flow-edge-lit {
+  stroke-width: 2.25;
 }
 .flow-edge-waiting {
   stroke-dasharray: 6 5;

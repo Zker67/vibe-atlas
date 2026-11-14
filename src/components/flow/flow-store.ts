@@ -18,9 +18,12 @@ interface FlowState {
   history: FlowHistory;
   /** Whether the chart shows done items without lines too; those with lines always show. */
   showDone: boolean;
+  /** Whether the chart's panel of keys and mouse moves is open. */
+  hintsOpen: boolean;
 }
 
 const SHOW_DONE_KEY = "vibe-atlas-flow-done";
+const HINTS_KEY = "vibe-atlas-flow-hints";
 const VIEWPORTS_KEY = "vibe-atlas-flow-viewports";
 
 export const useFlow = create<FlowState>(() => ({
@@ -29,11 +32,17 @@ export const useFlow = create<FlowState>(() => ({
   loaded: false,
   history: EMPTY_HISTORY,
   showDone: localStorage.getItem(SHOW_DONE_KEY) === "1",
+  hintsOpen: localStorage.getItem(HINTS_KEY) !== "0",
 }));
 
 export function setShowDone(showDone: boolean) {
   useFlow.setState({ showDone });
   localStorage.setItem(SHOW_DONE_KEY, showDone ? "1" : "0");
+}
+
+export function setHintsOpen(hintsOpen: boolean) {
+  useFlow.setState({ hintsOpen });
+  localStorage.setItem(HINTS_KEY, hintsOpen ? "1" : "0");
 }
 
 export function setHistory(history: FlowHistory) {

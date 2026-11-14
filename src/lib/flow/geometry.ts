@@ -110,8 +110,24 @@ export function inPort(r: Rect): Point {
   return { x: r.x, y: r.y + r.height / 2 };
 }
 
-/** The handles of the curve from a to b: out to the right of a, in from the left of b, further apart the further they are. */
-function handles(a: Point, b: Point): [Point, Point] {
+/** Whether p is within r, its edges included. */
+export function contains(r: Rect, p: Point): boolean {
+  return p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
+}
+
+/**
+ * The handles of the curve from a to b: out to the right of a, in from the
+ * left of b, further apart the further they are. A line back into the same
+ * card (back) leaves and comes in on its right side: both handles go right.
+ */
+function handles(a: Point, b: Point, back: boolean): [Point, Point] {
+  if (back) {
+    const reach = 28 + Math.min(80, Math.abs(b.y - a.y) / 3);
+    return [
+      { x: a.x + reach, y: a.y },
+      { x: b.x + reach, y: b.y },
+    ];
+  }
   const reach = Math.max(36, Math.abs(b.x - a.x) / 2, Math.min(120, Math.abs(b.y - a.y) / 2));
   return [
     { x: a.x + reach, y: a.y },
@@ -119,15 +135,95 @@ function handles(a: Point, b: Point): [Point, Point] {
   ];
 }
 
-/** The SVG path of the line from a to b, an S-shaped cubic curve. */
-export function curvePath(a: Point, b: Point): string {
-  const [c1, c2] = handles(a, b);
+/** The SVG path of the line from a to b, an S-shaped cubic curve; back, an arc out to the right and back. */
+export function curvePath(a: Point, b: Point, back = false): string {
+  const [c1, c2] = handles(a, b, back);
   return `M ${a.x} ${a.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${b.x} ${b.y}`;
 }
 
 /** The middle of the line from a to b, where its button to delete it shows. */
-export function curveMiddle(a: Point, b: Point): Point {
-  const [c1, c2] = handles(a, b);
+export function curveMiddle(a: Point, b: Point, back = false): Point {
+  const [c1, c2] = handles(a, b, back);
   // The cubic at t = 1/2.
   return { x: (a.x + 3 * c1.x + 3 * c2.x + b.x) / 8, y: (a.y + 3 * c1.y + 3 * c2.y + b.y) / 8 };
+}
+
+/** A side, the middle and the other side of something from start, size long. */
+const lines = (start: number, size: number) => [start, start + size / 2, start + size];
+
+/** Where a dragged card goes, and the lines it lines up with (null for none). */
+export interface GuideSnap {
+  x: number;
+  y: number;
+  guideX: number | null;
+  guideY: number | null;
+}
+
+/**
+ * Lines up a card being dragged to moving with the others: when its left,
+ * middle or right is within distance of another's left, middle or right, it
+ * goes there and that line shows; the same for top, middle and bottom. A
+ * way that lines up with none snaps to the grid.
+ */
+export function snapToGuides(moving: Rect, others: readonly Rect[], distance: number, grid: number): GuideSnap {
+  const best = (own: number[], targets: number[][]) => {
+    let found: { offset: number; line: number } | null = null;
+    for (const target of targets.flat()) {
+      for (const value of own) {
+        const d = Math.abs(target - value);
+        if (d <= distance && (!found || d < Math.abs(found.offset))) found = { offset: target - value, line: target };
+      }
+    }
+    return found;
+  };
+  const sx = best(
+    lines(moving.x, moving.width),
+    others.map((o) => lines(o.x, o.width)),
+  );
+  const sy = best(
+    lines(moving.y, moving.height),
+    others.map((o) => lines(o.y, o.height)),
+  );
+  return {
+    x: sx ? moving.x + sx.offset : snap(moving.x, grid),
+    y: sy ? moving.y + sy.offset : snap(moving.y, grid),
+    guideX: sx?.line ?? null,
+    guideY: sy?.line ?? null,
+  };
+}
+
+/** Where a line being drawn can end: an item's row on a card, at its handle; ok when it can take the line. */
+export interface Port {
+  id: number;
+  card: Rect;
+  at: Point;
+  ok: boolean;
+}
+
+/**
+ * The port a line being drawn to at ends on: over a card, the row of it
+ * nearest in height, able to take the line or not (to say why not); else
+ * the nearest port within radius that can take it; else none.
+ */
+export function nearestPort(ports: readonly Port[], at: Point, radius: number): Port | null {
+  let over: Port | null = null;
+  let overBy = Infinity;
+  let near: Port | null = null;
+  let nearBy = radius;
+  for (const p of ports) {
+    if (contains(p.card, at)) {
+      const d = Math.abs(at.y - p.at.y);
+      if (d < overBy) {
+        over = p;
+        overBy = d;
+      }
+    } else if (p.ok) {
+      const d = Math.hypot(at.x - p.at.x, at.y - p.at.y);
+      if (d <= nearBy) {
+        near = p;
+        nearBy = d;
+      }
+    }
+  }
+  return over ?? near;
 }

@@ -8,19 +8,23 @@ import (
 
 // flowChecks are the checks of smokeFlow, each true when it passed.
 var flowChecks = []string{
-	"detailAddsDep", "queueShowsWait", "flowLoads", "lineShows",
-	"lineDrawn", "lineDeleted", "undoBringsBack", "dragSaves",
+	"detailAddsDep", "queueShowsWait", "flowLoads", "childInCard",
+	"toolbarWords", "lineShows", "lineDrawn", "lineDeleted",
+	"undoBringsBack", "lineToRow", "dragSaves", "paneMenu",
 	"doubleClickCreates", "overviewReady", "backToQueue",
 }
 
 // smokeFlow checks prerequisites and the flow chart in the main window,
 // with the events the pointer and the keys send: 添加前置 in the detail
 // makes one, and the queue marks the item waiting; the flow chart loads
-// on demand and shows the cards and the line; a line drawn from a card's
-// handle to another saves a prerequisite, a line clicked and Delete takes
-// it away, Ctrl+Z brings it back; dragging a card saves where it is; a
-// double click on empty chart names a new item there; the overview lists
-// an item whose prerequisites are done under 可以开始.
+// on demand and shows the cards and the line, a child as a row on its
+// parent's card, and a toolbar of words without the kind filter; a line
+// drawn from a card's handle to another saves a prerequisite, a line
+// clicked and Delete takes it away, Ctrl+Z brings it back; a line drawn to
+// a row saves one with the child; dragging a card saves where it is; a
+// right click on empty chart opens the board's menu; a double click there
+// names a new item; the overview lists an item whose prerequisites are
+// done under 可以开始.
 func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 	result, err := mygo.EvalAs[map[string]any](main.Page(), `
 		const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,6 +41,7 @@ func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 		const first = await add("前置测试甲");
 		const second = await add("前置测试乙");
 		const third = await add("前置测试丙");
+		const child = await mygo.call("Atlas.CreateItem", { projectId: project.id, parentId: first.id, moduleId: 0, type: "feature", title: "前置测试甲的子项" });
 		const deps = () => mygo.call("Atlas.Deps", project.id);
 		const has = async (from, to) => (await deps()).some((d) => d.fromId === from && d.toId === to);
 		const rows = () => [...document.querySelectorAll("[data-queue-row]")];
@@ -78,6 +83,10 @@ func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 		click(viewButton("流程图"));
 		const node = (id) => document.querySelector('[data-flow-node][data-id="' + id + '"]');
 		out.flowLoads = await until(() => !!node(first.id) && !!node(second.id) && !!node(third.id), 8000);
+		const flowRow = (id) => document.querySelector('[data-flow-item][data-id="' + id + '"]');
+		out.childInCard = await until(() => !!flowRow(child.id) && !node(child.id) && node(first.id).contains(flowRow(child.id)));
+		const buttonNamed = (text) => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === text);
+		out.toolbarWords = ["新建", "一键整理", "撤回", "重做"].every(buttonNamed) && !document.querySelector('[aria-label="按类型筛选"]');
 		const edge = (from, to) => document.querySelector('[data-flow-edge="' + from + ">" + to + '"]');
 		out.lineShows = await until(() => !!edge(first.id, second.id));
 		const board = document.querySelector(".flow-board");
@@ -104,6 +113,16 @@ func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 		key("z", { ctrlKey: true });
 		out.undoBringsBack = await until(() => has(third.id, second.id));
 
+		// From the right handle of 丙 to the row of 甲's child.
+		await sleep(100);
+		const from = node(third.id).querySelector('[data-flow-port="out"]');
+		const toRow = center(flowRow(child.id));
+		pointer("pointerdown", from, center(from));
+		pointer("pointermove", window, { x: toRow.x - 20, y: toRow.y });
+		pointer("pointermove", window, toRow);
+		pointer("pointerup", window, toRow);
+		out.lineToRow = await until(() => has(third.id, child.id));
+
 		// Drag 甲 by 96 pixels to the right.
 		const before = center(node(first.id));
 		const title = node(first.id).querySelector(".line-clamp-2");
@@ -118,11 +137,21 @@ func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 			return !!at && spots.some((s) => s.itemId === second.id) && Math.abs(center(node(first.id)).x - before.x - 96) < 12;
 		});
 
-		// A double click on empty chart, near the top left corner.
+		// A right click, then a double click, on empty chart near a corner.
 		const r = board.getBoundingClientRect();
 		const spot = [{ x: r.left + 12, y: r.top + 12 }, { x: r.left + 12, y: r.bottom - 12 }, { x: r.right - 200, y: r.top + 12 }]
 			.find((p) => document.elementFromPoint(p.x, p.y) === board);
 		if (spot) {
+			pointer("pointerdown", board, spot, { button: 2, buttons: 2 });
+			pointer("pointerup", window, spot, { button: 2 });
+			board.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: spot.x, clientY: spot.y }));
+			const menu = () => document.querySelector('[role="menu"]');
+			out.paneMenu = await until(() => !!menu() && menu().textContent.includes("在这里新建一条") && menu().textContent.includes("一键整理"));
+			for (let i = 0; i < 3 && overlay(); i++) {
+				overlay().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+				await until(() => !overlay(), 600);
+			}
+			await sleep(100);
 			board.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: spot.x, clientY: spot.y }));
 			const field = () => document.querySelector('input[aria-label="新改进点的标题"]');
 			if (await until(() => !!field())) {
@@ -139,6 +168,7 @@ func (a *app) smokeFlow(main *mygo.Window) (map[string]any, error) {
 				});
 			}
 		} else {
+			out.paneMenu = "no empty spot";
 			out.doubleClickCreates = "no empty spot";
 		}
 

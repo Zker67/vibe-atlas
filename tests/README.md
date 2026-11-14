@@ -6,7 +6,7 @@
 |---|---|
 | `editor-input.test.ts` | Markdown 编辑器的输入辅助：自动配对（`autopair.ts`）、斜杠命令对文本的改动和筛选（`slash-commands.ts`）、沉浸式编辑的大纲和字数（`immersive.ts`） |
 | `deps.test.ts` | 前置（`src/lib/deps.ts`）：等待中、绕圈、为什么不能连、详情里可选的候选、移到其他项目会断开几条 |
-| `flow.test.ts` | 流程图的纯计算（`src/lib/flow/`）：视口换算和缩放、显示全部、矩形、连线曲线、分层排布和交叉、存过与没存过的位置、撤回 / 重做 |
+| `flow.test.ts` | 流程图的纯计算（`src/lib/flow/`）：视口换算和缩放、显示全部、矩形、连线曲线（含卡片内绕回的）、合成卡片（隐藏的上级、绕圈）、卡片之间的连线、分层排布和交叉、不同高度的卡片不重叠、存过与没存过的位置、对齐参考线、拉线吸附、撤回 / 重做和步骤名 |
 | `editor-format.test.ts` | Markdown 编辑器的格式命令（`src/components/editor/format.ts`）：粗体、斜体、删除线、行内代码、链接的加上与取消，标题级别，列表、任务、引用、代码块；在真实的 CodeMirror 状态和 Markdown 解析器上运行 |
 
 ## 运行

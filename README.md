@@ -36,7 +36,7 @@
 | **快速记录** | 在任何软件上按 `Ctrl+Alt+Space` 呼出小窗，输入一行回车就存进项目；`Shift+Enter` 展开 Markdown 备注和链接。见 [capture-app.tsx](src/capture-app.tsx) |
 | **项目 → 模块 → 改进点** | 改进点分改进、bug、新需求三种，可以挂在模块下，也可以有任意层子改进点；拖动排序、改层级、合并。见 [queue.tsx](src/components/app/queue.tsx)、[数据层](internal/store/README.md) |
 | **状态全靠手点** | 待办、进行中、完成随时切换，进行中不限条数，自动记录开始和完成时间；`Ctrl` / `Shift` 多选后批量操作。规则见 [product.md](docs/product.md#规则) |
-| **前置与流程图** | 改进点之间可以设先后（B 等 A 做完），队列里标出还在等的；「流程图」视图是自己写的画布：拖动、框选、从圆点拉线、拉到空白处新建、一键整理、撤回重做。只提示，不改状态。见 [flow/](src/components/flow/)、[deps.go](internal/store/deps.go) |
+| **前置与流程图** | 改进点之间可以设先后（B 等 A 做完），队列里标出还在等的；「流程图」视图是自己写的画布：上级和子改进点合成一张卡片，拖动对齐、框选、从圆点拉线（靠近自动吸附）、拉到空白处新建、右键菜单、一键整理、撤回重做。只提示，不改状态。见 [flow/](src/components/flow/)、[deps.go](internal/store/deps.go) |
 | **复制给 AI** | 把标题、备注连同子改进点清单复制成一段 Markdown，自己粘贴发送；备注里的图片换成本机路径，AI 能直接读图。见 [atlas.go](atlas.go)、[images.go](images.go) |
 | **链接到会话** | 每条改进点可以绑定一个 deeplink；设置了会话来源时，能直接从 Claude Code、Codex、codeg 的本机会话里挑一个。见 [claude_session.go](claude_session.go)、[session-picker.tsx](src/components/app/session-picker.tsx) |
 | **Markdown 备注** | 边写边渲染；划词浮出格式工具栏，`/` 斜杠命令插入，`Ctrl+F` 查找替换；粘贴截图或图文混排内容，图片存进数据目录，点开能缩放拖动。见 [editor/](src/components/editor/) |

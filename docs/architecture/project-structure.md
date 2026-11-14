@@ -78,7 +78,7 @@
 | `smoke_select.go` | 冒烟测试里驱动队列多选：点选、连选、批量完成、框选、整组拖动、`Tab` |
 | `smoke_icons.go` | 冒烟测试里检查图标：只给文件夹新建项目时取文件夹名和检测到的图标，侧栏经 `image` 协议加载，换成 emoji 后跟着变 |
 | `smoke_trash.go` | 冒烟测试里驱动回收站：`Delete` 进回收站、撤销、`Shift` 彻底删除先确认、回收站视图里恢复 |
-| `smoke_flow.go` | 冒烟测试里驱动前置和流程图：详情里添加前置、队列的等待标记、流程图加载、拉线、删线、撤回、拖动、双击新建、总览「可以开始」 |
+| `smoke_flow.go` | 冒烟测试里驱动前置和流程图：详情里添加前置、队列的等待标记、流程图加载、子改进点在上级卡片里、工具栏、拉线、删线、撤回、拉线到子改进点、拖动、右键菜单、双击新建、总览「可以开始」 |
 | `internal/store/` | 数据层：SQLite 读写、迁移、规则校验、链接格式、总览汇总，以及集成测试。见 [README](../../internal/store/README.md) |
 | `internal/sessions/` | 只读本机的 Claude Code、Codex、codeg 会话，会话链接的格式。见 [README](../../internal/sessions/README.md) |
 | `resources/` | 程序图标和托盘图标 |
@@ -93,7 +93,7 @@
 | `src/mygo.ts` | MyGo 生成的 TypeScript 客户端，不要手改 |
 | `src/state/` | Zustand 状态：数据加载与修改、对话框、会话链接对应的会话名、检查更新 |
 | `src/components/app/` | 业务组件：顶栏、侧栏、项目头部、队列、详情（含前置 / 后续）、总览、设置、对话框、项目弹窗和图标选择、选择会话、agent 图标、新版本提示 |
-| `src/components/flow/` | 流程图：自建画布（视口、方块、连线、手势、撤回），按需加载 |
+| `src/components/flow/` | 流程图：自建画布（视口、卡片、连线、手势、右键菜单、操作说明、撤回），按需加载 |
 | `src/components/effects/` | 主窗口背后的背景图片和动态背景，打开其中之一后才加载 |
 | `src/components/react-bits/` | React Bits 组件源码（上游原样，带许可证） |
 | `src/components/editor/` | Markdown 即时预览编辑器（CodeMirror 6）：划词格式工具栏、图片卡片和大图预览 |

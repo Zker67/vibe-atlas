@@ -1,12 +1,16 @@
 import { snap, type Point } from "./geometry";
 
-// Laying out the flow chart: the cards of items with prerequisites in
+// Laying out the flow chart: an item with the items under it is one card,
+// its head and a row for each of them; the cards with prerequisites in
 // columns, those done first on the left; the others in rows under them.
-// Pure, for the tests. Every card has the same size.
+// Pure, for the tests. Every card is as wide; heights grow with the rows.
 
-/** The size of a card on the chart. */
+/** The size of a card on the chart: its head, the whole card when it has no rows. */
 export const NODE_WIDTH = 224;
 export const NODE_HEIGHT = 72;
+/** A row under a card's head, and the room above the first and under the last. */
+export const ROW_HEIGHT = 28;
+export const ROWS_PAD = 4;
 /** The chart's dot grid: cards snap to it. */
 export const GRID = 8;
 /** Between the columns, and between the cards of a column. */
@@ -17,6 +21,119 @@ export const ROW_GAP = 24;
 export interface Edge {
   fromId: number;
   toId: number;
+}
+
+/** How tall a card is: its head, and its rows under. */
+export function cardHeight(rows: number): number {
+  return rows > 0 ? NODE_HEIGHT + ROWS_PAD * 2 + rows * ROW_HEIGHT : NODE_HEIGHT;
+}
+
+/** How far down a card the middle of its row index is, where its handles are: -1 for its head. */
+export function rowMiddle(index: number): number {
+  return index < 0 ? NODE_HEIGHT / 2 : NODE_HEIGHT + ROWS_PAD + index * ROW_HEIGHT + ROW_HEIGHT / 2;
+}
+
+const fixedHeight = () => NODE_HEIGHT;
+
+/** v, up to the next step of the grid: stacked cards of any height stay on it. */
+const upToGrid = (v: number) => Math.ceil(v / GRID) * GRID;
+
+/** A row under a card's head: the item, and how deep it sits (1 right under the head). */
+export interface CardRow {
+  id: number;
+  depth: number;
+}
+
+/** The items shown, as cards. */
+export interface Cards {
+  /** The items heading a card, in the order of ids. */
+  roots: number[];
+  /** The card each item shows on, by its head: its own id for a head. */
+  rootOf: Map<number, number>;
+  /** The rows under each card's head, in the order of ids. */
+  rows: Map<number, CardRow[]>;
+  /** Where each item's row is on its card: -1 for a head. */
+  index: Map<number, number>;
+}
+
+/**
+ * Makes the items ids into cards: an item goes on the card of the nearest
+ * item above it that shows (parentOf gives the item an item sits under, 0
+ * for none), a row deeper for each shown item between; an item with none
+ * above it shown heads its own card. ids should list the items above
+ * before those under them, as the queue does.
+ */
+export function cardsOf(ids: readonly number[], parentOf: (id: number) => number): Cards {
+  const shown = new Set(ids);
+  // The nearest shown item above each, or 0.
+  const up = new Map<number, number>();
+  for (const id of ids) {
+    const seen = new Set([id]);
+    let p = parentOf(id);
+    while (p && !shown.has(p) && !seen.has(p)) {
+      seen.add(p);
+      p = parentOf(p);
+    }
+    up.set(id, p && shown.has(p) && !seen.has(p) ? p : 0);
+  }
+  const rootOf = new Map<number, number>();
+  const depth = new Map<number, number>();
+  for (const id of ids) {
+    const chain: number[] = [];
+    const onChain = new Set<number>();
+    let at = id;
+    while (!rootOf.has(at)) {
+      const above = up.get(at) ?? 0;
+      if (!above || onChain.has(at)) {
+        // At the top, or round a loop (Go refuses those): it heads a card.
+        rootOf.set(at, at);
+        depth.set(at, 0);
+        break;
+      }
+      onChain.add(at);
+      chain.push(at);
+      at = above;
+    }
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const c = chain[i]!;
+      if (rootOf.has(c)) continue;
+      const above = up.get(c)!;
+      rootOf.set(c, rootOf.get(above)!);
+      depth.set(c, depth.get(above)! + 1);
+    }
+  }
+  const roots: number[] = [];
+  const rows = new Map<number, CardRow[]>();
+  const index = new Map<number, number>();
+  for (const id of ids) {
+    const root = rootOf.get(id)!;
+    if (root === id) {
+      roots.push(id);
+      index.set(id, -1);
+      continue;
+    }
+    const list = rows.get(root) ?? [];
+    index.set(id, list.length);
+    list.push({ id, depth: depth.get(id)! });
+    rows.set(root, list);
+  }
+  return { roots, rootOf, rows, index };
+}
+
+/** The lines between cards, from those between their items: one for any between two cards, none within one. */
+export function cardEdges(edges: readonly Edge[], rootOf: ReadonlyMap<number, number>): Edge[] {
+  const seen = new Set<string>();
+  const out: Edge[] = [];
+  for (const e of edges) {
+    const fromId = rootOf.get(e.fromId);
+    const toId = rootOf.get(e.toId);
+    if (fromId === undefined || toId === undefined || fromId === toId) continue;
+    const key = `${fromId}>${toId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ fromId, toId });
+  }
+  return out;
 }
 
 /** The edges between ids only, without loops onto one card. */
@@ -74,9 +191,14 @@ export function groupsOf(ids: readonly number[], edges: readonly Edge[]): number
  * One group joined by lines, laid out from origin: a column per
  * columnsOf, the cards of each ordered to cross as few lines as a few
  * sweeps of averages find (the order of ids breaks ties). Returns the
- * places and the height it takes.
+ * places and the room it takes.
  */
-function layOutGroup(ids: readonly number[], edges: readonly Edge[], origin: Point): { places: Map<number, Point>; width: number; height: number } {
+function layOutGroup(
+  ids: readonly number[],
+  edges: readonly Edge[],
+  origin: Point,
+  heightOf: (id: number) => number,
+): { places: Map<number, Point>; width: number; height: number } {
   const column = columnsOf(ids, edges);
   const among = edgesAmong(new Set(ids), edges);
   const count = Math.max(...column.values()) + 1;
@@ -105,16 +227,16 @@ function layOutGroup(ids: readonly number[], edges: readonly Edge[], origin: Poi
     for (let c = 1; c < count; c++) sortBy(cols[c]!, before);
     for (let c = count - 2; c >= 0; c--) sortBy(cols[c]!, after);
   }
-  const tallest = Math.max(...cols.map((col) => col.length));
-  const height = tallest * NODE_HEIGHT + (tallest - 1) * ROW_GAP;
+  const columnHeight = (col: number[]) => col.reduce((sum, id, i) => (i ? upToGrid(sum + ROW_GAP) : sum) + heightOf(id), 0);
+  const height = Math.max(...cols.map(columnHeight));
   const places = new Map<number, Point>();
   cols.forEach((col, c) => {
-    const own = col.length * NODE_HEIGHT + (col.length - 1) * ROW_GAP;
     // Shorter columns sit in the middle of the tallest.
-    const top = origin.y + snap((height - own) / 2, GRID);
-    col.forEach((id, i) => {
-      places.set(id, { x: origin.x + c * (NODE_WIDTH + COLUMN_GAP), y: top + i * (NODE_HEIGHT + ROW_GAP) });
-    });
+    let y = origin.y + snap((height - columnHeight(col)) / 2, GRID);
+    for (const id of col) {
+      places.set(id, { x: origin.x + c * (NODE_WIDTH + COLUMN_GAP), y });
+      y = upToGrid(y + heightOf(id) + ROW_GAP);
+    }
   });
   return { places, width: count * NODE_WIDTH + (count - 1) * COLUMN_GAP, height };
 }
@@ -123,9 +245,14 @@ function layOutGroup(ids: readonly number[], edges: readonly Edge[], origin: Poi
  * Where tidying puts the cards ids, from origin: the groups joined by
  * lines one under the other, then those without lines in rows under them,
  * at least four a row and as wide as the groups. The order of ids comes
- * first among equals.
+ * first among equals; heightOf gives how tall each card is.
  */
-export function tidyPlaces(ids: readonly number[], edges: readonly Edge[], origin: Point): Map<number, Point> {
+export function tidyPlaces(
+  ids: readonly number[],
+  edges: readonly Edge[],
+  origin: Point,
+  heightOf: (id: number) => number = fixedHeight,
+): Map<number, Point> {
   const places = new Map<number, Point>();
   const set = new Set(ids);
   const linked = new Set(edgesAmong(set, edges).flatMap((e) => [e.fromId, e.toId]));
@@ -135,19 +262,19 @@ export function tidyPlaces(ids: readonly number[], edges: readonly Edge[], origi
     ids.filter((id) => linked.has(id)),
     edges,
   )) {
-    const laid = layOutGroup(group, edges, { x: origin.x, y });
+    const laid = layOutGroup(group, edges, { x: origin.x, y }, heightOf);
     for (const [id, p] of laid.places) places.set(id, p);
-    y += laid.height + ROW_GAP * 2;
+    y = upToGrid(y + laid.height + ROW_GAP * 2);
     width = Math.max(width, laid.width);
   }
   const loose = ids.filter((id) => !linked.has(id));
   const perRow = Math.max(4, Math.floor((width + COLUMN_GAP / 2) / (NODE_WIDTH + COLUMN_GAP / 2)));
-  loose.forEach((id, i) => {
-    places.set(id, {
-      x: origin.x + (i % perRow) * (NODE_WIDTH + COLUMN_GAP / 2),
-      y: y + Math.floor(i / perRow) * (NODE_HEIGHT + ROW_GAP),
-    });
-  });
+  for (let start = 0; start < loose.length; start += perRow) {
+    const row = loose.slice(start, start + perRow);
+    row.forEach((id, i) => places.set(id, { x: origin.x + i * (NODE_WIDTH + COLUMN_GAP / 2), y }));
+    // Each row as tall as its tallest card.
+    y = upToGrid(y + Math.max(...row.map(heightOf)) + ROW_GAP);
+  }
   return places;
 }
 
@@ -156,7 +283,12 @@ export function tidyPlaces(ids: readonly number[], edges: readonly Edge[], origi
  * as tidyPlaces lays them out, from the chart's origin when none is saved,
  * else under the saved ones, so that none covers another.
  */
-export function placesOf(ids: readonly number[], saved: ReadonlyMap<number, Point>, edges: readonly Edge[]): Map<number, Point> {
+export function placesOf(
+  ids: readonly number[],
+  saved: ReadonlyMap<number, Point>,
+  edges: readonly Edge[],
+  heightOf: (id: number) => number = fixedHeight,
+): Map<number, Point> {
   const places = new Map<number, Point>();
   const unsaved: number[] = [];
   let left = Infinity;
@@ -166,13 +298,13 @@ export function placesOf(ids: readonly number[], saved: ReadonlyMap<number, Poin
     if (p) {
       places.set(id, p);
       left = Math.min(left, p.x);
-      bottom = Math.max(bottom, p.y + NODE_HEIGHT);
+      bottom = Math.max(bottom, p.y + heightOf(id));
     } else {
       unsaved.push(id);
     }
   }
   if (unsaved.length === 0) return places;
   const origin = places.size ? { x: snap(left, GRID), y: snap(bottom + ROW_GAP * 3, GRID) } : { x: 0, y: 0 };
-  for (const [id, p] of tidyPlaces(unsaved, edges, origin)) places.set(id, p);
+  for (const [id, p] of tidyPlaces(unsaved, edges, origin, heightOf)) places.set(id, p);
   return places;
 }
