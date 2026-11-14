@@ -9,7 +9,7 @@ import (
 // selectChecks are the checks of smokeSelect, each true when it passed.
 var selectChecks = []string{
 	"one", "ctrlAdds", "shiftRange", "ctrlShiftAdds",
-	"spaceDone", "spaceReopens", "stillSelected",
+	"doneKey", "reopenKey", "stillSelected",
 	"escapeClears", "ctrlASelectsAll", "boxSelects",
 	"dropLine", "groupDrags", "tabIndents", "shiftTabOutdents", "shiftArrow",
 }
@@ -17,7 +17,7 @@ var selectChecks = []string{
 // smokeSelect checks selecting several rows of the queue in the main
 // window, with the events the mouse and the keys send: a click selects one
 // and the detail shows it, Ctrl adds one, Shift and Ctrl+Shift select from
-// the anchor, and the detail says how many; Space marks them all done, then
+// the anchor, and the detail says how many; D marks them all done, then
 // reopens them; Escape selects none, Ctrl+A every row; a box drawn from the
 // blank ground selects the rows it spans; dragging one of the selection
 // moves them all, in their order; Tab puts them a level in, Shift+Tab
@@ -82,10 +82,10 @@ func (a *app) smokeSelect(main *mygo.Window) (map[string]any, error) {
 			const by = await items();
 			return ["甲条", "甲的子条", "乙条", "丙条"].map((t) => by[t].status).join(",");
 		};
-		key(" ");
-		out.spaceDone = await until(async () => (await statuses()) === "done,done,done,done");
-		key(" ");
-		out.spaceReopens = await until(async () => (await statuses()) === "todo,todo,todo,todo");
+		key("d");
+		out.doneKey = await until(async () => (await statuses()) === "done,done,done,done");
+		key("d");
+		out.reopenKey = await until(async () => (await statuses()) === "todo,todo,todo,todo");
 		out.stillSelected = shown(4);
 
 		key("Escape");

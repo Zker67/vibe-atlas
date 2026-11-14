@@ -175,6 +175,10 @@ export function FlowBoard() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [panning, setPanning] = useState(false);
   const [menu, setMenu] = useState<BoardMenu | null>(null);
+  /** Space is held: a left press moves the chart, as the right and middle buttons do. */
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const spaceRef = useRef(false);
+  const pointerIn = useRef(false);
   /** Where the right button went down, to tell a menu from a pan. */
   const rightDown = useRef<Point | null>(null);
   /** What a menu item does once the menu is gone (its focus going back would close a field it opens). */
@@ -687,7 +691,7 @@ export function FlowBoard() {
     if (e.button === 2) rightDown.current = { x: e.clientX, y: e.clientY };
     const node = target.closest<HTMLElement>("[data-flow-node]");
     const row = target.closest<HTMLElement>("[data-flow-item]");
-    if (e.button === 1 || (e.button === 2 && !node)) {
+    if (e.button === 1 || (e.button === 2 && !node) || (e.button === 0 && spaceRef.current)) {
       startPan(e);
       return;
     }
@@ -735,6 +739,37 @@ export function FlowBoard() {
   };
 
   // ---- Keys: before the window's own (main-app.tsx), which skip what these take ----
+
+  // Space held over the chart (or with the keyboard in it): a left drag moves the chart.
+  useEffect(() => {
+    const hold = (on: boolean) => {
+      if (spaceRef.current === on) return;
+      spaceRef.current = on;
+      setSpaceHeld(on);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey || isComposing(e)) return;
+      if (overlayOpen() || isTypingTarget(document.activeElement)) return;
+      if (!pointerIn.current && !box.current?.contains(document.activeElement)) return;
+      // Nor a scroll, nor a click on the button that has the keyboard.
+      e.preventDefault();
+      hold(true);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key !== " " || !spaceRef.current) return;
+      e.preventDefault();
+      hold(false);
+    };
+    const onBlur = () => hold(false);
+    window.addEventListener("keydown", onDown, true);
+    window.addEventListener("keyup", onUp, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown, true);
+      window.removeEventListener("keyup", onUp, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -892,7 +927,13 @@ export function FlowBoard() {
               const card = (e.target as Element).closest<HTMLElement>("[data-flow-node]");
               setHoverCard(card ? Number(card.dataset.id) : 0);
             }}
-            onPointerLeave={() => setHoverCard(0)}
+            onPointerEnter={() => {
+              pointerIn.current = true;
+            }}
+            onPointerLeave={() => {
+              pointerIn.current = false;
+              setHoverCard(0);
+            }}
             // Hidden overflow still scrolls to show what takes the focus: the chart moves by its viewport only.
             onScroll={(e) => {
               e.currentTarget.scrollLeft = 0;
@@ -913,7 +954,8 @@ export function FlowBoard() {
             }}
             className={cn(
               "flow-board @container/board relative min-h-0 flex-1 overflow-hidden outline-none",
-              panning && "cursor-grabbing",
+              spaceHeld && !panning && "cursor-grab **:cursor-grab!",
+              panning && "cursor-grabbing **:cursor-grabbing!",
               linking && "cursor-crosshair",
             )}
             style={v ? { backgroundSize: `${dot}px ${dot}px`, backgroundPosition: `${v.x}px ${v.y}px` } : undefined}
@@ -1286,6 +1328,7 @@ const keyCap = "h-5 min-w-5 gap-0.5 border border-b-2 bg-background px-1 text-[1
 const HINTS: { id: string; keys: { label: string; glyph?: ReactNode }[]; text: string }[] = [
   { id: "select", keys: [{ label: "左键拖空白处", glyph: [<MouseGlyph key="m" part="left" />, dragGlyph] }], text: "框选" },
   { id: "add", keys: [{ label: "Ctrl" }, { label: "左键", glyph: <MouseGlyph part="left" /> }], text: "加选" },
+  { id: "space", keys: [{ label: "Space" }, { label: "左键拖动", glyph: [<MouseGlyph key="m" part="left" />, dragGlyph] }], text: "平移" },
   { id: "pan", keys: [{ label: "右键拖动", glyph: [<MouseGlyph key="m" part="right" />, dragGlyph] }], text: "平移" },
   { id: "menu", keys: [{ label: "右键", glyph: <MouseGlyph part="right" /> }], text: "菜单" },
   { id: "zoom", keys: [{ label: "滚轮", glyph: <MouseGlyph part="wheel" /> }], text: "缩放" },
@@ -1295,6 +1338,7 @@ const HINTS: { id: string; keys: { label: string; glyph?: ReactNode }[]; text: s
     text: "连线",
   },
   { id: "new", keys: [{ label: "N" }], text: "新建" },
+  { id: "done", keys: [{ label: "D" }], text: "完成" },
   { id: "delete", keys: [{ label: "Delete", glyph: "Del" }], text: "删除" },
   { id: "undo", keys: [{ label: "Ctrl" }, { label: "Z" }], text: "撤回" },
   { id: "redo", keys: [{ label: "Ctrl" }, { label: "Y" }], text: "重做" },

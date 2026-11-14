@@ -205,7 +205,7 @@ function useEffects(): boolean {
 
 // ---- Keys ----
 
-/** Whether the focus is on a control that Space and Enter press. */
+/** Whether the focus is on a control, which Enter presses and Tab moves on from. */
 function onControl(el: Element | null): boolean {
   return !!el?.closest(
     'button, a[href], [role="button"], [role="radio"], [role="tab"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"]',
@@ -339,8 +339,7 @@ function useShortcuts() {
           e.preventDefault();
           expandOrDown();
           break;
-        case " ":
-          if (onControl(focus)) return;
+        case "d":
           e.preventDefault();
           if (many) toggleItemsDone(ids);
           else toggleItemDone(item);

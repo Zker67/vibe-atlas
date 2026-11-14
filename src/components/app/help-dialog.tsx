@@ -189,7 +189,7 @@ function StartSection() {
           选中一条按 <K>C</K> 复制，粘贴到 AI 对话中。
         </Step>
         <Step n={4} title="标记进度">
-          开始时按 <K>S</K>，完成后按 <K>Space</K>。
+          开始时按 <K>S</K>，完成后按 <K>D</K>。
         </Step>
       </ol>
     </Section>
@@ -362,7 +362,7 @@ function FlowSection() {
       </div>
       <Points>
         <li>拖动卡片移动位置，位置会记住；选中几条一起拖，只拖一张时会和别的卡片对齐。拖空白处框选，按住 <K>Ctrl</K> 加选。</li>
-        <li>右键或中键拖动画布，右键单击空白处或连线弹出菜单；滚轮缩放（<K>Shift</K>+滚轮左右移动）；右下角可以回到 100% 或显示全部，左下角是操作说明。</li>
+        <li>按住 <K>Space</K> 用左键拖动画布，右键或中键拖动也可以；右键单击空白处或连线弹出菜单；滚轮缩放（<K>Shift</K>+滚轮左右移动）；右下角可以回到 100% 或显示全部，左下角是操作说明。</li>
         <li>从一行右侧的圆点拉到另一条：那条等这条；从左侧圆点拉出：这条等那条。靠近就会吸过去，指针旁边写着松手后会怎样；拉到空白处松手，就在那里新建一条并自动连上；<K>Esc</K> 取消。</li>
         <li>双击空白处或按 <K>N</K> 在那里新建；<K>Shift+Enter</K> 保存后接着写下一条，自动排在它后面。</li>
         <li>点一下连线选中它，按 <K>Delete</K> 删除，悬停时中间也有删除按钮；删除后提示里可以撤回。</li>
@@ -467,7 +467,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
     icon: MousePointerClick,
     title: "选中的改进点",
     rows: [
-      ["完成 / 重新打开", ["Space"]],
+      ["完成 / 重新打开", ["D"]],
       ["开始 / 退回待办", ["S"]],
       ["复制给 AI", ["C", "Ctrl+C"]],
       ["打开链接", ["O"]],
@@ -487,6 +487,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["在画布中间新建", ["N"]],
       ["选中全部改进点", ["Ctrl+A"]],
       ["删除选中的连线", ["Delete"]],
+      ["按住拖动画布（配合左键）", ["Space"]],
       ["取消正在拉的线", ["Esc"]],
       ["撤回 / 重做", ["Ctrl+Z", "Ctrl+Y"]],
       ["保存新建的一条 / 保存并接着写下一条", ["Enter", "Shift+Enter"]],

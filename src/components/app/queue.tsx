@@ -1336,14 +1336,24 @@ export function WaitMark({ titles, className }: { titles: string; className?: st
           {list.length > 1 && <span className="meta-mono">{list.length}</span>}
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-80">
-        <span className="block opacity-70">在等 {list.length} 条前置完成：</span>
-        {list.map((t, i) => (
-          <span key={i} className="block truncate">
-            · {t}
+      {list.length === 1 ? (
+        <TooltipContent className="max-w-80">
+          <span className="min-w-0 truncate">在等「{list[0]}」做完</span>
+        </TooltipContent>
+      ) : (
+        // The tooltip lays out in a row: the list is a column of its own.
+        <TooltipContent className="max-w-80 py-2">
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="opacity-70">在等这 {list.length} 条做完：</span>
+            {list.map((t, i) => (
+              <span key={i} className="flex min-w-0 items-center gap-1.5">
+                <Hourglass className="size-3 shrink-0 opacity-70" />
+                <span className="truncate">{t}</span>
+              </span>
+            ))}
           </span>
-        ))}
-      </TooltipContent>
+        </TooltipContent>
+      )}
     </Tooltip>
   );
 }
@@ -1419,7 +1429,7 @@ function RowActions({ item, shown }: { item: Item; shown: boolean }) {
       )}
       <IconButton
         label="标为完成"
-        shortcut="Space"
+        shortcut="D"
         size="icon-xs"
         onClick={(e) => {
           e.stopPropagation();
@@ -1458,21 +1468,21 @@ export function statusActions(item: Item): StatusAction[] {
     case "todo":
       return [
         { label: "开始进行", status: "doing", icon: Play, shortcut: "S" },
-        { label: "标为完成", status: "done", icon: CircleCheck, shortcut: "Space" },
+        { label: "标为完成", status: "done", icon: CircleCheck, shortcut: "D" },
       ];
     case "doing":
       return [
-        { label: "标为完成", status: "done", icon: CircleCheck, shortcut: "Space" },
+        { label: "标为完成", status: "done", icon: CircleCheck, shortcut: "D" },
         { label: "退回待办", status: "todo", icon: Pause, shortcut: "S" },
       ];
     case "done":
       return reopenStatus(item) === "doing"
         ? [
-            { label: "重新打开", status: "doing", icon: RotateCcw, shortcut: "Space", reopen: true },
+            { label: "重新打开", status: "doing", icon: RotateCcw, shortcut: "D", reopen: true },
             { label: "改为待办", status: "todo", icon: Pause, shortcut: "" },
           ]
         : [
-            { label: "重新打开", status: "todo", icon: RotateCcw, shortcut: "Space", reopen: true },
+            { label: "重新打开", status: "todo", icon: RotateCcw, shortcut: "D", reopen: true },
             { label: "重新开始进行", status: "doing", icon: Play, shortcut: "" },
           ];
   }
@@ -1576,7 +1586,7 @@ function SelectionMenuItems() {
         <ContextMenuItem onSelect={() => void reopenItems(ids)}>
           <RotateCcw />
           重新打开
-          <ContextMenuShortcut>Space</ContextMenuShortcut>
+          <ContextMenuShortcut>D</ContextMenuShortcut>
         </ContextMenuItem>
       )}
       {!all("doing") && (
@@ -1590,7 +1600,7 @@ function SelectionMenuItems() {
         <ContextMenuItem onSelect={() => void setItemsStatus(ids, "done")}>
           <CircleCheck />
           标为完成
-          <ContextMenuShortcut>Space</ContextMenuShortcut>
+          <ContextMenuShortcut>D</ContextMenuShortcut>
         </ContextMenuItem>
       )}
       {!all("todo") && (

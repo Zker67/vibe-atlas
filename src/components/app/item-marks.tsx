@@ -49,7 +49,7 @@ export function StatusButton({ item, onToggle }: { item: Item; onToggle(): void 
       </TooltipTrigger>
       <TooltipContent>
         {label}
-        <span className="ml-1.5 opacity-60">Space</span>
+        <span className="ml-1.5 opacity-60">D</span>
       </TooltipContent>
     </Tooltip>
   );
