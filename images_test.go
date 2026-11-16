@@ -204,7 +204,7 @@ func TestCopyPutsImagePaths(t *testing.T) {
 func TestCleanImages(t *testing.T) {
 	db := openStore(t)
 	dataDir := t.TempDir()
-	if n, err := cleanImages(db, dataDir, imageGrace); err != nil || n != 0 {
+	if n, err := cleanOnce(db, dataDir, orphanGrace); err != nil || n != 0 {
 		t.Fatalf("without a folder: %d, %v", n, err)
 	}
 	save := func(shade uint8) string {
@@ -244,11 +244,11 @@ func TestCleanImages(t *testing.T) {
 		}
 	}
 	for _, name := range []string{inNote, inChild, inProject, orphan, deletedItem, savingPrefix + "123", "notes.txt"} {
-		age(t, dataDir, name, 2*imageGrace)
+		age(t, dataDir, name, 2*orphanGrace)
 	}
-	age(t, dataDir, fresh, imageGrace/2)
+	age(t, dataDir, fresh, orphanGrace/2)
 
-	n, err := cleanImages(db, dataDir, imageGrace)
+	n, err := cleanOnce(db, dataDir, orphanGrace)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -205,6 +205,13 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 		return
 	}
 
+	storage, err := a.smokeStorage(main)
+	report["storage"] = storage
+	if err != nil {
+		finish(err, "storage")
+		return
+	}
+
 	icons, err := a.smokeIcons(main)
 	report["icons"] = icons
 	if err != nil {
@@ -216,6 +223,27 @@ func (a *app) smokeTest(main, capture *mygo.Window) {
 	report["paste"] = pasted
 	if err != nil {
 		finish(err, "paste into a note")
+		return
+	}
+
+	attached, err := a.smokeFiles(main)
+	report["files"] = attached
+	if err != nil {
+		finish(err, "files in a note")
+		return
+	}
+
+	web, err := a.smokeWebPictures(main)
+	report["webPictures"] = web
+	if err != nil {
+		finish(err, "pictures on the web")
+		return
+	}
+
+	tabled, err := a.smokeTables(main)
+	report["tables"] = tabled
+	if err != nil {
+		finish(err, "tables in a note")
 		return
 	}
 

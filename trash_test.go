@@ -52,13 +52,13 @@ func TestCleanImagesKeepsThoseOfTheTrash(t *testing.T) {
 	if _, err := db.TrashItems([]int64{it.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := cleanImages(db, dataDir, imageGrace); err != nil || n != 0 {
-		t.Fatalf("cleanImages = %d, %v; want the picture of the trash kept", n, err)
+	if n, err := cleanOnce(db, dataDir, orphanGrace); err != nil || n != 0 {
+		t.Fatalf("cleanOnce = %d, %v; want the picture of the trash kept", n, err)
 	}
 	if _, err := db.EmptyTrash(); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := cleanImages(db, dataDir, imageGrace); err != nil || n != 1 {
-		t.Fatalf("cleanImages after emptying the trash = %d, %v; want 1", n, err)
+	if n, err := cleanOnce(db, dataDir, orphanGrace); err != nil || n != 1 {
+		t.Fatalf("cleanOnce after emptying the trash = %d, %v; want 1", n, err)
 	}
 }

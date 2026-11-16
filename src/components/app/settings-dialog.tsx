@@ -11,7 +11,9 @@ import {
   ExternalLink,
   FolderOpen,
   Globe,
+  HardDrive,
   Keyboard,
+  Link2,
   ListTree,
   Monitor,
   Moon,
@@ -25,7 +27,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { Atlas, type Settings, type Source, type Theme, type UpdateCheck } from "@/mygo";
+import { Atlas, type AttachMode, type Settings, type Source, type Theme, type UpdateCheck } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
 import { SOURCE_NAMES } from "@/lib/session-link";
@@ -42,6 +44,7 @@ import { checkForUpdates, installUpdate, RELEASES_URL, useUpdates } from "@/stat
 import { AgentIcon } from "./agent-icon";
 import { LookSettings } from "./look-settings";
 import { SettingCard } from "./setting-card";
+import { StorageCard } from "./storage-card";
 import { NAV_ITEM, NavColumn, NavIndicator } from "./side-nav";
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -75,7 +78,7 @@ export function SettingsDialog() {
           <NavColumn>
             <DialogHeader className="px-2.5 pt-1">
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription className="sr-only">开机自动启动、全局快捷键（快速记录、老板键）、外观（主题、背景、毛玻璃、透明度）、子改进点的链接、会话来源、数据位置和回收站保留天数、版本和自动检查更新</DialogDescription>
+              <DialogDescription className="sr-only">开机自动启动、全局快捷键（快速记录、老板键）、外观（主题、背景、毛玻璃、透明度）、子改进点的链接、会话来源、存储空间和清理、粘贴的文件另存还是原地引用、数据位置和回收站保留天数、版本和自动检查更新</DialogDescription>
             </DialogHeader>
             <Tabs.List aria-label="设置分类" className="relative flex flex-col gap-0.5">
               <NavIndicator index={at} />
@@ -258,6 +261,31 @@ const TRASH_DAYS: { value: number; label: string }[] = [
 function DataPanel({ settings }: { settings: Settings }) {
   return (
     <>
+      <StorageCard />
+      <SettingCard
+        title="粘贴和拖入的文件"
+        description="另存到软件：复制一份到数据文件夹，原文件移走或删掉也不受影响；超过 20 MB 的文件和文件夹仍然原地引用。原地引用：只记下文件的位置，不占软件的空间。插入以后可以在文件卡片的右键菜单里改。图片总是另存。"
+      >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          value={settings.attachMode}
+          onValueChange={(v) => {
+            if (v) void run(Atlas.setAttachMode(v as AttachMode)).then((s) => s && useAtlas.setState({ settings: s }));
+          }}
+        >
+          <ToggleGroupItem value="copy">
+            <HardDrive />
+            另存到软件
+          </ToggleGroupItem>
+          <ToggleGroupItem value="link">
+            <Link2 />
+            原地引用
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </SettingCard>
       <SettingCard title="数据文件夹">
         <p className="selectable rounded-md bg-muted px-2.5 py-2 font-mono text-xs break-all">{settings.dataDir}</p>
         <div>

@@ -113,7 +113,7 @@ func (a *app) smokeImages(main *mygo.Window) (map[string]any, error) {
 	if err := a.atlas.DeleteItem(int64(id)); err != nil {
 		return result, err
 	}
-	if n, err := cleanImages(db, a.dataDir, 0); err != nil || n != 1 {
+	if n, err := cleanOnce(db, a.dataDir, 0); err != nil || n != 1 {
 		return result, errors.Join(err, errors.New("images: the cleanup deleted "+strconv.Itoa(n)+", want 1"))
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -273,7 +273,8 @@ func (a *app) smokeImmersive(main *mygo.Window) (map[string]any, error) {
 		result.rowShown = await until(() => !!row());
 		row()?.click();
 		const open = () => document.querySelector('[aria-label="沉浸式编辑"]');
-		result.buttonShown = await until(() => !!open());
+		// The details of this item, not of the one a check before deleted.
+		result.buttonShown = await until(() => !!open() && document.querySelector("[data-item-title]")?.value === "冒烟沉浸条目");
 		open()?.click();
 		const dialog = () => document.querySelector('[role="dialog"]');
 		result.dialogShown = await until(() => !!dialog()?.querySelector(".immersive-editor .cm-content"));

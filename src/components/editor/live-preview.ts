@@ -7,7 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { onPictureLine } from "./images";
+import { isCardPicture, onPictureLine } from "./images";
 
 const hidden = Decoration.replace({});
 const markClass = (cls: string) => Decoration.mark({ class: cls });
@@ -143,6 +143,12 @@ function bareHref(text: string): string {
   return text;
 }
 
+/** The URL of a link, out of the angle brackets that let it hold spaces. */
+function urlText(state: EditorState, url: SyntaxNode): string {
+  const text = state.sliceDoc(url.from, url.to);
+  return text.startsWith("<") && text.endsWith(">") ? text.slice(1, -1) : text;
+}
+
 /** Hides a mark and the space after it, as "# " or "> ". */
 function hideWithSpace(state: EditorState, out: Range<Decoration>[], node: SyntaxNode) {
   let end = node.to;
@@ -213,7 +219,7 @@ function build(view: EditorView): DecorationSet {
           const close = marks[1];
           const url = node.getChild("URL");
           if (open && close && open.to <= close.from) {
-            link(open.to, close.from, url ? state.sliceDoc(url.from, url.to) : "", render);
+            link(open.to, close.from, url ? urlText(state, url) : "", render);
             if (render) {
               out.push(hidden.range(open.from, open.to));
               out.push(hidden.range(close.from, ref.to));
@@ -225,10 +231,10 @@ function build(view: EditorView): DecorationSet {
           return false;
         }
         case "Image": {
-          // Pictures of the app show as cards (images.ts), which take a
-          // line of pictures whole; others show as written.
+          // Pictures of the app and on the web show as cards (images.ts),
+          // which take a line of pictures whole; others show as written.
           const url = node.getChild("URL");
-          if (url && state.sliceDoc(url.from, url.to).startsWith("image:")) {
+          if (url && isCardPicture(state.sliceDoc(url.from, url.to))) {
             if (!render) out.push(dim.range(ref.from, ref.to));
             else if (!onPictureLine(state, ref.from)) out.push(hidden.range(ref.from, ref.to));
           }
@@ -342,7 +348,7 @@ export function linkAt(state: EditorState, pos: number): string {
   for (; node; node = node.parent) {
     if (node.name === "Link") {
       const url = node.getChild("URL");
-      return url ? state.sliceDoc(url.from, url.to) : "";
+      return url ? urlText(state, url) : "";
     }
     if (node.name === "URL") return bareHref(state.sliceDoc(node.from, node.to));
   }

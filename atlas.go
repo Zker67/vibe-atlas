@@ -116,6 +116,10 @@ type Settings struct {
 	// Claude Code, Codex or codeg, one of them; "" (out of the box) for
 	// none.
 	SessionSource sessions.Source `json:"sessionSource"`
+	// AttachMode is how files pasted or dropped in a note are taken: kept
+	// in the app (out of the box; larger than 20 MB and folders are
+	// referred to where they are), or referred to where they are.
+	AttachMode AttachMode `json:"attachMode"`
 	// TrashDays is how many days items stay in the trash before they are
 	// deleted for good, or 0 to keep them until the user empties it. 30 out
 	// of the box.
@@ -823,7 +827,7 @@ func (a *Atlas) CopyItem(id int64) error {
 	if err != nil {
 		return err
 	}
-	mygo.Clipboard.WriteText(withImagePaths(ItemText(it, descendants), a.app.dataDir))
+	mygo.Clipboard.WriteText(withLocalPaths(ItemText(it, descendants), a.app.dataDir))
 	return nil
 }
 
@@ -876,7 +880,7 @@ func (a *Atlas) CopyItems(ids []int64) error {
 	if err != nil {
 		return err
 	}
-	mygo.Clipboard.WriteText(withImagePaths(text, a.app.dataDir))
+	mygo.Clipboard.WriteText(withLocalPaths(text, a.app.dataDir))
 	return nil
 }
 
@@ -918,6 +922,10 @@ func itemLink(db *store.Store, it store.Item, shared bool) (string, error) {
 
 // OpenLink opens a link of the notes with the app the system has for it.
 func (a *Atlas) OpenLink(link string) error {
+	// A file kept in the app, linked in a note's text.
+	if strings.HasPrefix(link, "attachment:") {
+		return a.OpenAttachment(link)
+	}
 	return openLink(link)
 }
 
@@ -1007,6 +1015,7 @@ func (a *Atlas) Settings() (Settings, error) {
 		ShareLinks:      shareLinks(db),
 		SessionSource:   sessionSource(db),
 		TrashDays:       trashDays(db),
+		AttachMode:      attachMode(db),
 		UpdateCheck:     updateCheck(db),
 		UpdateInterval:  updateInterval(db),
 		OpenAtLogin:     canOpenAtLogin() && mygo.App.OpenAtLogin(),

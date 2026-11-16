@@ -13,7 +13,8 @@ type ClipboardContent struct {
 	Text string `json:"text"`
 	HTML string `json:"html"`
 	// Images are the pictures on the clipboard: a picture copied, as PNG,
-	// or else the picture files copied, as a paste in the page has them.
+	// or else the picture files copied, as a paste in the page has them;
+	// none when other files are copied with them.
 	Images []ClipboardImage `json:"images"`
 }
 
@@ -38,7 +39,11 @@ func (a *Atlas) ReadClipboard() ClipboardContent {
 	}
 	if data, err := mygo.Clipboard.Read(transfer.FileList); err == nil {
 		paths, _ := data.Files()
-		c.Images = append(c.Images, imageFilesOf(paths)...)
+		// Other files among them: the page's paste takes them all from
+		// here, pictures too (AttachClipboardFiles).
+		if pics := imageFilesOf(paths); len(pics) == len(paths) {
+			c.Images = append(c.Images, pics...)
+		}
 	}
 	return c
 }

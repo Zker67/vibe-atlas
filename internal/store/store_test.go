@@ -207,3 +207,51 @@ func TestHelperWriter(t *testing.T) {
 		fmt.Println("saved")
 	}
 }
+
+// dbFilesSize is the size of the database at path with its write-ahead log.
+func dbFilesSize(t *testing.T, path string) int64 {
+	t.Helper()
+	var total int64
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		if info, err := os.Stat(p); err == nil {
+			total += info.Size()
+		}
+	}
+	return total
+}
+
+func TestCompactShrinksAfterDeleting(t *testing.T) {
+	s, path := newStore(t)
+	if free := must(s.FreeBytes()); free != 0 {
+		t.Fatalf("a new database has %d free bytes", free)
+	}
+	p := must(s.CreateProject("压缩"))
+	note := strings.Repeat("很长的备注 ", 2000)
+	for i := 0; i < 60; i++ {
+		must(s.CreateItem(NewItem{ProjectID: p.ID, Title: "条目", Note: note}))
+	}
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The deleted rows leave free pages once the log is in the database.
+	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		t.Fatal(err)
+	}
+	free := must(s.FreeBytes())
+	if free < 500_000 {
+		t.Fatalf("free bytes after deleting %d, want the deleted notes' size", free)
+	}
+	before := dbFilesSize(t, path)
+	if err := s.Compact(); err != nil {
+		t.Fatal(err)
+	}
+	after := dbFilesSize(t, path)
+	if after >= before-free/2 {
+		t.Errorf("files %d bytes before, %d after: want about %d smaller", before, after, free)
+	}
+	if left := must(s.FreeBytes()); left != 0 {
+		t.Errorf("%d free bytes left", left)
+	}
+	// Still works.
+	must(s.CreateProject("之后"))
+}

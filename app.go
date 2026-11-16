@@ -69,6 +69,8 @@ type app struct {
 	shortcutM sync.Mutex
 
 	upd updates // updating the app to newer versions (updates.go)
+
+	sweeper *sweeper // cleans the files no text refers to (storage.go)
 }
 
 func (a *app) setQuitting() {
@@ -91,7 +93,7 @@ func (a *app) windows() (main, capture *mygo.Window) {
 
 // start opens the database and shows the app, once MyGo is ready.
 func (a *app) start() {
-	db, err := store.Open(filepath.Join(a.dataDir, "vibe-atlas.db"))
+	db, err := store.Open(filepath.Join(a.dataDir, dbName))
 	if err != nil {
 		go func() {
 			mygo.Dialog.Error("Vibe Atlas 打不开数据文件", err.Error())
@@ -116,7 +118,7 @@ func (a *app) start() {
 	// cleanup after it.
 	a.atlas.purgeTrashLater(db)
 	a.atlas.detectIconsLater(db)
-	a.cleanImagesLater(db)
+	a.cleanStorageLater(db)
 
 	throttling := mygo.ThrottlingOn
 	if a.smokeReport != "" {

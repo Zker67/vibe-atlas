@@ -172,7 +172,9 @@ bun test tests
 vibe-atlas/
 ├─ main.go / app.go          # 入口、窗口、托盘、全局快捷键
 ├─ atlas.go                  # 绑定给前端的服务
-├─ images.go                 # 备注图片：保存、加载、复制换路径、清理
+├─ images.go                 # 备注图片：保存、加载、复制换路径
+├─ attachments.go            # 备注里的文件附件：另存或原地引用
+├─ storage.go                # 存储空间统计、空间回收、压缩数据库
 ├─ claude_session.go         # 读取本机 AI 会话
 ├─ smoke*.go                 # 打包后冒烟测试
 ├─ internal/store/           # 数据层（SQLite）和集成测试

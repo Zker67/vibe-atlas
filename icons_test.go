@@ -338,9 +338,9 @@ func TestCleanImagesKeepsIcons(t *testing.T) {
 	for _, icon := range []string{detected, chosen, ofModule, unused, unusedSVG} {
 		os.Chtimes(filepath.Join(imageDir(dataDir), strings.TrimPrefix(icon, "image:")), old, old)
 	}
-	n, err := cleanImages(db, dataDir, imageGrace)
+	n, err := cleanOnce(db, dataDir, orphanGrace)
 	if err != nil || n != 2 {
-		t.Fatalf("cleanImages = %d, %v; want only the two unused", n, err)
+		t.Fatalf("cleanOnce = %d, %v; want only the two unused", n, err)
 	}
 	for _, icon := range []string{detected, chosen, ofModule} {
 		if _, err := os.Stat(filepath.Join(imageDir(dataDir), strings.TrimPrefix(icon, "image:"))); err != nil {

@@ -21,6 +21,7 @@ import {
   MousePointerClick,
   Network,
   NotebookPen,
+  Paperclip,
   PanelRight,
   PenLine,
   Repeat,
@@ -28,6 +29,7 @@ import {
   Settings,
   Smile,
   SquareCheck,
+  Table,
   TextCursorInput,
   TextSelect,
   Workflow,
@@ -494,7 +496,16 @@ function MarkdownSection() {
       </Feature>
       <Feature icon={Images} title="图片">
         <K>Ctrl+V</K> 粘贴截图，或把图片文件拖进来；一次放几张会并排显示。从网页、Word 复制带图片的内容粘贴进来，格式和图片都会保留。点图片看大图：滚轮缩放、拖动平移、双击切换原始大小、<K>←</K>
-        <K>→</K> 换一张。右键图片可以复制图片、打开文件夹位置。图片存在数据文件夹里；复制给 AI 时，图片换成本机路径。
+        <K>→</K> 换一张。右键图片可以复制图片、打开文件夹位置。图片存在数据文件夹里；复制给 AI 时，图片换成本机路径。设置 → 数据 能看到用了多少空间，没人用的图片和文件 1 小时后自动清理。
+      </Feature>
+      <Feature icon={Paperclip} title="文件">
+        在资源管理器里复制文件后 <K>Ctrl+V</K>，或把文件、文件夹拖进来，显示成文件卡片，点一下用默认应用打开。卡片上写着「已另存」（复制进了软件，原文件删了也不影响）或「原地」（只记位置）；默认另存，超过 20 MB 的文件和文件夹原地引用，设置 → 数据 可以改，右键卡片也能单独切换。
+      </Feature>
+      <Feature icon={Globe} title="网络图片">
+        写成 <Code>![](https://…)</Code> 的网络图片先显示占位，不自动联网；点「加载」才显示，「保存到本地」下载进软件。
+      </Feature>
+      <Feature icon={Table} title="表格">
+        光标不在表格里时显示成表格，点一格回到源码。在表格里 <K>Tab</K> <K>Shift+Tab</K> 跳到下一格、上一格并对齐列宽，行末 <K>Enter</K> 加一行，在空的最后一行再按 <K>Enter</K> 离开表格。
       </Feature>
       <Feature icon={Maximize2} title="沉浸式编辑">
         点详情里「备注」右边的展开按钮打开。顶栏可以直接改标题、状态、类型，复制给 AI，<K>Alt+PageUp</K> <K>Alt+PageDown</K> 切换上一条、下一条；左侧是大纲，点标题跳过去；标题旁的箭头收起一节；底部显示字数、行数和是否已保存。「排版」里调行宽、字号，打开专注模式（只突出正在写的段落）和打字机滚动（正在写的行保持在中间）；<K>F11</K> 铺满窗口。这些选择会记住。

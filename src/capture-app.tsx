@@ -74,6 +74,15 @@ export function CaptureApp() {
   useEffect(() => {
     draft.current = { title, note, link };
   }, [title, note, link]);
+  // The cleanup of the data folder keeps the pictures and files of the
+  // note not saved yet, which it asks for (storage.go).
+  useEffect(() => {
+    const g = globalThis as { atlasDraftNote?: () => string };
+    g.atlasDraftNote = () => draft.current.note;
+    return () => {
+      delete g.atlasDraftNote;
+    };
+  }, []);
 
   /** Fetches the organization's projects, keeping the one picked when it still exists. */
   const loadProjects = useCallback(async (want?: number) => {

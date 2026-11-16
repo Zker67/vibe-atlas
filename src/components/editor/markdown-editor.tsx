@@ -10,11 +10,13 @@ import { tags } from "@lezer/highlight";
 import { cn } from "@/lib/utils";
 import { toggleInline, toggleLink } from "./format";
 import { formatToolbar } from "./format-toolbar";
+import { attachments } from "./attachments";
 import { autopair } from "./autopair";
 import { images } from "./images";
 import { type ImmersiveOptions, immersiveExtensions } from "./immersive";
 import { linkAt, livePreview } from "./live-preview";
 import { slashMenu } from "./slash";
+import { tables } from "./tables";
 
 /** Colors of code in fenced blocks, from the theme tokens. */
 const codeColors = HighlightStyle.define([
@@ -109,9 +111,11 @@ export function MarkdownEditor({
           syntaxHighlighting(codeColors),
           livePreview,
           images,
+          attachments,
           formatToolbar,
           placeholderText(placeholder ?? ""),
           slashMenu,
+          tables,
           autopair,
           search({ top: true }),
           searchPhrases,

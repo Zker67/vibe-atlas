@@ -291,6 +291,31 @@ func (s *Store) Version() (int, error) {
 	return v, err
 }
 
+// FreeBytes is about how much smaller Compact would make the database: its
+// free pages, which deleted data leaves behind.
+func (s *Store) FreeBytes() (int64, error) {
+	var pages, size int64
+	if err := s.db.QueryRow(`PRAGMA freelist_count`).Scan(&pages); err != nil {
+		return 0, err
+	}
+	if err := s.db.QueryRow(`PRAGMA page_size`).Scan(&size); err != nil {
+		return 0, err
+	}
+	return pages * size, nil
+}
+
+// Compact rebuilds the database without its free pages and empties the
+// write-ahead log into it, so that its files shrink.
+func (s *Store) Compact() error {
+	if _, err := s.db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("压缩数据库失败：%w", err)
+	}
+	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		return fmt.Errorf("压缩数据库失败：%w", err)
+	}
+	return nil
+}
+
 // inTx runs fn in a transaction, committed when fn returns nil.
 func (s *Store) inTx(fn func(tx *sql.Tx) error) error {
 	tx, err := s.db.Begin()

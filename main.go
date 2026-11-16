@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	a := &app{smokeReport: os.Getenv("VIBE_ATLAS_SMOKE_REPORT")}
+	a := &app{smokeReport: os.Getenv("VIBE_ATLAS_SMOKE_REPORT"), sweeper: newSweeper()}
 	a.atlas = &Atlas{app: a}
 	mygo.Bind(a.atlas)
 

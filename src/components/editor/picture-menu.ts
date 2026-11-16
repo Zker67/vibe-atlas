@@ -1,7 +1,9 @@
 // The right-click menu of a note's picture, on its card and in the large
-// view: 查看大图, 复制图片, 用默认应用打开, 打开文件夹位置, 删除图片.
+// view: 查看大图, 复制图片, 用默认应用打开, 打开文件夹位置, 删除图片; and that
+// of a picture on the web: 加载图片, 保存到本地, 在浏览器中打开, 复制图片地址,
+// 删除图片.
 
-import { Copy, ExternalLink, FolderOpen, Maximize2, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, FolderOpen, Globe, ImageDown, Maximize2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { run, runOk } from "@/lib/api";
 import { type MenuEntries, showPageMenu } from "@/lib/page-menu";
@@ -42,6 +44,33 @@ export function showPictureMenu(e: MouseEvent, name: string, opts: PictureMenu) 
   }
   if (entries.length === 0) return;
   if (showPageMenu({ x: e.clientX, y: e.clientY, entries, restore: opts.restore })) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}
+
+interface WebPictureMenu {
+  /** Shown already: no 加载图片. */
+  loaded: boolean;
+  load: () => void;
+  save: () => void;
+  open: () => void;
+  copy: () => void;
+  remove: () => void;
+}
+
+/** Shows the menu of a picture on the web for the right-click e, as showPictureMenu does. */
+export function showWebPictureMenu(e: MouseEvent, opts: WebPictureMenu) {
+  const entries: MenuEntries = [];
+  if (!opts.loaded) entries.push({ label: "加载图片", icon: ImageDown, run: opts.load });
+  entries.push(
+    { label: "保存到本地", icon: Download, run: opts.save },
+    { label: "在浏览器中打开", icon: Globe, run: opts.open },
+    { label: "复制图片地址", icon: Copy, run: opts.copy },
+    null,
+    { label: "删除图片", icon: Trash2, destructive: true, run: opts.remove },
+  );
+  if (showPageMenu({ x: e.clientX, y: e.clientY, entries })) {
     e.preventDefault();
     e.stopPropagation();
   }

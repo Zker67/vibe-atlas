@@ -4,6 +4,36 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/** AttachMode is how files pasted or dropped in a note are taken. */
+export type AttachMode = "copy" | "link";
+
+/** Attached is what taking files into a note did. */
+export interface Attached {
+  items: AttachedItem[];
+  /**
+   * Problems are the files that could not be taken, with why, for the
+   * user.
+   */
+  problems: string[];
+}
+
+/** AttachedItem is a file taken into a note. */
+export interface AttachedItem {
+  /**
+   * Image is the name of the picture, when the file was one and was
+   * saved as the pictures of the notes are; the other fields are empty.
+   */
+  image: string;
+  /** Name is the file's name, for the text of the link. */
+  name: string;
+  /**
+   * Link is attachment:<folder>/<name> for a file kept in the app, or the
+   * file: link of one where it is.
+   */
+  link: string;
+  stored: boolean;
+}
+
 /**
  * Background is the moving background of the main window while the
  * effects are on.
@@ -45,6 +75,21 @@ export interface Change {
   projectId: number;
 }
 
+/** CleanResult is what a cleanup did. */
+export interface CleanResult {
+  /** At is when it ran, 0 when none ran yet since the app started. */
+  at: number;
+  deleted: number;
+  freed: number;
+  /** Manual is set when the user asked for it. */
+  manual: boolean;
+  /**
+   * Skipped is set when it deleted nothing because the draft of quick
+   * capture could not be read.
+   */
+  skipped: boolean;
+}
+
 /**
  * ClipboardContent is what is on the clipboard, for the page's own 粘贴:
  * the page may not read the clipboard without asking the user.
@@ -54,7 +99,8 @@ export interface ClipboardContent {
   html: string;
   /**
    * Images are the pictures on the clipboard: a picture copied, as PNG,
-   * or else the picture files copied, as a paste in the page has them.
+   * or else the picture files copied, as a paste in the page has them;
+   * none when other files are copied with them.
    */
   images: ClipboardImage[];
 }
@@ -84,6 +130,32 @@ export interface Dep {
   /** ToID is the item that waits for it. */
   toId: number;
   createdAt: number;
+}
+
+/** FileInfo is what a note's card of a file shows. */
+export interface FileInfo {
+  link: string;
+  /** Name is the file's name. */
+  name: string;
+  /** Path is where the file is on this machine. */
+  path: string;
+  /** Folder is the folder the file is in, for one referred to where it is. */
+  folder: string;
+  exists: boolean;
+  dir: boolean;
+  size: number;
+  /** Stored is set for a file kept in the app. */
+  stored: boolean;
+  /**
+   * CanUnstore is set for a file kept in the app whose origin is still
+   * there.
+   */
+  canUnstore: boolean;
+  /**
+   * CanStore is set for a file, not a folder, referred to where it is and
+   * small enough to keep.
+   */
+  canStore: boolean;
 }
 
 /** FolderChoice is a folder the user chose for a project. */
@@ -319,6 +391,20 @@ export interface ProjectDraft {
   orgId: number;
 }
 
+/** Reclaim is what the files no text refers to take. */
+export interface Reclaim {
+  count: number;
+  bytes: number;
+  /**
+   * ReadyCount and ReadyBytes are those the next cleanup deletes; the
+   * others went unused within the grace.
+   */
+  readyCount: number;
+  readyBytes: number;
+  /** NextAt is when the first of the others may go, 0 when there are none. */
+  nextAt: number;
+}
+
 /** Session is one conversation with an agent. */
 export interface Session {
   /**
@@ -390,6 +476,12 @@ export interface Settings {
    */
   sessionSource: Source;
   /**
+   * AttachMode is how files pasted or dropped in a note are taken: kept
+   * in the app (out of the box; larger than 20 MB and folders are
+   * referred to where they are), or referred to where they are.
+   */
+  attachMode: AttachMode;
+  /**
    * TrashDays is how many days items stay in the trash before they are
    * deleted for good, or 0 to keep them until the user empties it. 30 out
    * of the box.
@@ -432,6 +524,30 @@ export interface Settings {
 
 /** Source identifies a local session store; the picker selects one source. */
 export type Source = "" | "claude" | "codex" | "codeg";
+
+/** StorageKind is a part of the data folder. */
+export type StorageKind = "database" | "images" | "files" | "wallpapers" | "other";
+
+/** StoragePart is what a part of the data folder takes. */
+export interface StoragePart {
+  kind: StorageKind;
+  bytes: number;
+  /** Count is how many files it has: pictures, attached files. */
+  count: number;
+}
+
+/** StorageUsage is what the data folder holds. */
+export interface StorageUsage {
+  total: number;
+  parts: StoragePart[];
+  /** Reclaim is what the cleanup can take back. */
+  reclaim: Reclaim;
+  /** DatabaseFree is about how much compacting the database saves. */
+  databaseFree: number;
+  /** GraceMinutes is how long a file no text refers to is kept. */
+  graceMinutes: number;
+  lastClean: CleanResult;
+}
 
 /** Theme is the appearance the user chose. */
 export type Theme = "system" | "light" | "dark";
@@ -536,6 +652,21 @@ export const Atlas = {
     return call("Atlas.AddProject", draft);
   },
   /**
+   * AttachClipboardFiles takes the files copied to the clipboard into a note,
+   * as AttachFiles does; none when there are none.
+   */
+  attachClipboardFiles(): Promise<Attached> {
+    return call("Atlas.AttachClipboardFiles");
+  },
+  /**
+   * AttachFiles takes the files at paths, dropped on a note, into it: pictures
+   * as pictures, other files kept in the app or referred to where they are, as
+   * the setting says.
+   */
+  attachFiles(paths: string[]): Promise<Attached> {
+    return call("Atlas.AttachFiles", paths);
+  },
+  /**
    * Canvas returns where the items of a project sit on its flow chart; those
    * it leaves out have no place yet, and the chart lays them out itself.
    */
@@ -594,6 +725,13 @@ export const Atlas = {
     return call("Atlas.ChooseWallpaper");
   },
   /**
+   * CleanStorage deletes now the pictures and attachments no text has
+   * referred to for the grace, as the app does every hour.
+   */
+  cleanStorage(): Promise<CleanResult> {
+    return call("Atlas.CleanStorage");
+  },
+  /**
    * ClearCanvas forgets where the items ids of a project sit on its flow
    * chart, which lays them out itself again.
    */
@@ -607,6 +745,20 @@ export const Atlas = {
   /** ClearWallpaper removes the picture behind the main window. */
   clearWallpaper(): Promise<Settings> {
     return call("Atlas.ClearWallpaper");
+  },
+  /**
+   * CompactDatabase rebuilds the database without the room deleted data left
+   * and returns how many bytes its files shrank by.
+   */
+  compactDatabase(): Promise<number> {
+    return call("Atlas.CompactDatabase");
+  },
+  /**
+   * CopyAttachment puts the file of a card on the clipboard, which file
+   * managers and other apps paste as the file.
+   */
+  copyAttachment(link: string): Promise<void> {
+    return call("Atlas.CopyAttachment", link);
   },
   /**
    * CopyImage puts a picture of the notes on the clipboard, as imageClipboard
@@ -710,6 +862,10 @@ export const Atlas = {
   emptyTrash(): Promise<number> {
     return call("Atlas.EmptyTrash");
   },
+  /** FileInfo tells what the cards of the file links show. */
+  fileInfo(links: string[]): Promise<FileInfo[]> {
+    return call("Atlas.FileInfo", links);
+  },
   /** HideCapture hides the quick capture panel. */
   hideCapture(): Promise<void> {
     return call("Atlas.HideCapture");
@@ -778,6 +934,10 @@ export const Atlas = {
    */
   moveItemsToProject(ids: number[], projectID: number): Promise<Item[]> {
     return call("Atlas.MoveItemsToProject", ids, projectID);
+  },
+  /** OpenAttachment opens the file of a card in the app the system has for it. */
+  openAttachment(link: string): Promise<void> {
+    return call("Atlas.OpenAttachment", link);
   },
   /** OpenDataFolder opens the folder of the database in the file manager. */
   openDataFolder(): Promise<void> {
@@ -911,6 +1071,10 @@ export const Atlas = {
    */
   sessionsOf(links: string[]): Promise<Record<string, Session>> {
     return call("Atlas.SessionsOf", links);
+  },
+  /** SetAttachMode sets how files pasted or dropped in a note are taken. */
+  setAttachMode(mode: AttachMode): Promise<Settings> {
+    return call("Atlas.SetAttachMode", mode);
   },
   /** SetBackground picks the moving background the effects show. */
   setBackground(bg: Background): Promise<Settings> {
@@ -1090,6 +1254,10 @@ export const Atlas = {
   settings(): Promise<Settings> {
     return call("Atlas.Settings");
   },
+  /** ShowAttachmentInFolder shows the file of a card in the file manager. */
+  showAttachmentInFolder(link: string): Promise<void> {
+    return call("Atlas.ShowAttachmentInFolder", link);
+  },
   /**
    * ShowImageInFolder shows a picture of the notes in the file manager, in
    * the images folder, selected.
@@ -1103,6 +1271,20 @@ export const Atlas = {
    */
   showMain(): Promise<void> {
     return call("Atlas.ShowMain");
+  },
+  /**
+   * StorageUsage tells what the data folder holds: its parts, what the
+   * cleanup can take back and how much compacting the database saves.
+   */
+  storageUsage(): Promise<StorageUsage> {
+    return call("Atlas.StorageUsage");
+  },
+  /**
+   * StoreAttachment keeps in the app a copy of the file a file: link refers
+   * to, and returns the link to the copy.
+   */
+  storeAttachment(link: string): Promise<AttachedItem> {
+    return call("Atlas.StoreAttachment", link);
   },
   /**
    * Trash returns the items in the trash of every project, the last deleted
@@ -1123,6 +1305,13 @@ export const Atlas = {
    */
   trashItems(ids: number[]): Promise<number> {
     return call("Atlas.TrashItems", ids);
+  },
+  /**
+   * UnstoreAttachment refers to a file kept in the app where it came from,
+   * which must still be there, and returns the link to it there.
+   */
+  unstoreAttachment(link: string): Promise<AttachedItem> {
+    return call("Atlas.UnstoreAttachment", link);
   },
   /** UpdateState returns what there is to show of updating the app. */
   updateState(): Promise<UpdateState> {

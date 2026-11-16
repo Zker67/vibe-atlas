@@ -1164,6 +1164,298 @@ html.dragging-rows * {
   height: 1.25rem;
 }
 
+/* A picture on the web before the user loads it: where it is from, and the two ways to get it. */
+.cm-md-picture[data-placeholder] {
+  width: min(18rem, 100%);
+  height: 10rem;
+  background: var(--muted);
+  cursor: pointer;
+}
+.cm-md-pictures[data-count="many"] .cm-md-picture[data-placeholder] {
+  width: 14rem;
+  height: 9rem;
+}
+.cm-md-picture[data-web]:not([data-placeholder]):not([data-missing]) {
+  cursor: default;
+}
+.cm-md-picture-web {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.cm-md-picture-web-icon {
+  display: grid;
+  place-items: center;
+  margin-bottom: 0.25rem;
+  color: var(--foreground);
+  transition: transform 300ms var(--spring-pop);
+}
+.cm-md-picture[data-placeholder]:hover .cm-md-picture-web-icon {
+  transform: scale(1.08) rotate(-8deg);
+}
+.cm-md-picture-web-icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.cm-md-picture-web-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.cm-md-picture-web-host {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cm-md-picture-web-actions {
+  display: flex;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+.cm-md-picture-web-actions button {
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 200ms var(--spring-pop);
+}
+.cm-md-picture-web-actions button:hover {
+  background: color-mix(in oklch, var(--card), var(--foreground) 6%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 22%, transparent);
+  transform: translateY(-1px);
+}
+.cm-md-picture-web-actions button[data-act="load"] {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  box-shadow: none;
+}
+.cm-md-picture-web-actions button[data-act="load"]:hover {
+  background: color-mix(in oklch, var(--primary), var(--background) 12%);
+}
+
+/*
+ * Files in notes (attachments.ts): a card a file, its kind's icon, its
+ * name, and under it whether the app keeps it (已另存) or refers to it
+ * where it is (原地), its size and, for the latter, its folder.
+ */
+.cm-md-files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.25rem 0 0.375rem;
+}
+.cm-md-file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(30rem, 100%);
+  padding: 0.5rem 2.25rem 0.5rem 0.5rem;
+  border-radius: 0.75rem;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px oklch(0 0 0 / 5%), 0 10px 24px -20px oklch(0 0 0 / 40%);
+  cursor: pointer;
+  transition: transform 300ms var(--spring-pop), box-shadow 200ms ease, background-color 150ms ease;
+}
+.cm-md-file:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklch, var(--card), var(--foreground) 3%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 18%, transparent), 0 2px 4px oklch(0 0 0 / 6%),
+    0 14px 28px -18px oklch(0 0 0 / 45%);
+}
+.cm-md-file-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.6rem;
+  color: var(--foreground);
+  background: var(--muted);
+  transition: transform 300ms var(--spring-pop);
+}
+.cm-md-file:hover .cm-md-file-icon {
+  transform: scale(1.06);
+}
+.cm-md-file-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.cm-md-file-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+  line-height: 1.3;
+}
+.cm-md-file-name {
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cm-md-file-meta {
+  display: flex;
+  min-width: 0;
+  min-height: 1.125rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.cm-md-file[data-loading] .cm-md-file-meta {
+  width: 8rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(100deg, var(--muted) 30%, color-mix(in oklch, var(--foreground) 9%, transparent) 50%, var(--muted) 70%)
+    0 0 / 300% 100%;
+  animation: picture-shimmer 1.4s ease-in-out infinite;
+}
+.cm-md-file-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--secondary);
+}
+.cm-md-file:not([data-stored]) .cm-md-file-badge {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.cm-md-file-badge svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.cm-md-file-size {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.cm-md-file-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm-md-file-missing {
+  color: var(--destructive);
+}
+.cm-md-file[data-missing] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1.5px dashed var(--border);
+  outline-offset: -1.5px;
+  cursor: default;
+  transform: none;
+}
+.cm-md-file[data-missing] .cm-md-file-icon,
+.cm-md-file[data-missing] .cm-md-file-name {
+  opacity: 0.55;
+}
+.cm-md-file-remove {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: -0.75rem;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 160ms ease, transform 260ms var(--spring-pop), background-color 150ms ease, color 150ms ease;
+}
+.cm-md-file-remove svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.cm-md-file:hover .cm-md-file-remove {
+  opacity: 1;
+  transform: scale(1);
+}
+.cm-md-file-remove:hover {
+  color: oklch(0.98 0 0);
+  background: var(--destructive);
+}
+
+/*
+ * Tables in notes (tables.ts), while the cursor is out of them: rounded,
+ * the header on a tint, every other row lightly striped; wider than the
+ * note, they scroll sideways.
+ */
+.cm-md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.25rem 0 0.5rem;
+}
+.cm-md-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 12rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-radius: 0.625rem;
+  box-shadow: 0 0 0 1px var(--border);
+  overflow: hidden;
+  cursor: text;
+}
+.cm-md-table th,
+.cm-md-table td {
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: background-color 150ms ease;
+}
+.cm-md-table th:last-child,
+.cm-md-table td:last-child {
+  border-right: 0;
+}
+.cm-md-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.cm-md-table th {
+  font-weight: 600;
+  background: var(--muted);
+}
+.cm-md-table tbody tr:nth-child(even) td {
+  background: color-mix(in oklch, var(--muted) 55%, transparent);
+}
+.cm-md-table td:hover,
+.cm-md-table th:hover {
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+}
+.cm-md-table [data-align="center"] {
+  text-align: center;
+}
+.cm-md-table [data-align="right"] {
+  text-align: right;
+}
+.cm-md-table .cm-md-link {
+  cursor: pointer;
+}
+
 /*
  * The large view of pictures (image-viewer.tsx): dark in both themes, as
  * pictures are best seen; above the title bar, its controls at the bottom.

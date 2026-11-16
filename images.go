@@ -10,8 +10,6 @@ import (
 	"image"
 	"image/png"
 	"io"
-	"io/fs"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,10 +35,6 @@ const imageScheme = "image"
 
 // maxImageBytes is the largest picture taken.
 const maxImageBytes = 20 << 20
-
-// imageGrace is how long a picture no text refers to is kept: an undo, or
-// a note not saved yet, may still bring it back.
-const imageGrace = 24 * time.Hour
 
 // imageExts are the pictures taken, by the type of their content, and the
 // extension they are saved with.
@@ -126,6 +120,12 @@ func writeImage(dataDir string, data []byte, ext string) (string, error) {
 	return name, nil
 }
 
+// withLocalPaths puts the paths on this machine of the pictures and the
+// files kept in the app in place of their names in the Markdown text.
+func withLocalPaths(text, dataDir string) string {
+	return withAttachmentPaths(withImagePaths(text, dataDir), dataDir)
+}
+
 // withImagePaths puts the paths of the pictures on this machine in place
 // of their names in the Markdown text, for an AI to read them: copied out
 // of the app, image:<name> means nothing. The paths are in angle brackets,
@@ -134,58 +134,6 @@ func withImagePaths(text, dataDir string) string {
 	dir := imageDir(dataDir)
 	return imageLink.ReplaceAllStringFunc(text, func(m string) string {
 		return "(<" + filepath.Join(dir, strings.TrimPrefix(m, "(image:")) + ">"
-	})
-}
-
-// cleanImages deletes the pictures no item note or project description
-// refers to any more, but those saved or referred to anew within grace,
-// and pictures left half written. It returns how many it deleted.
-func cleanImages(db *store.Store, dataDir string, grace time.Duration) (int, error) {
-	dir := imageDir(dataDir)
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	texts, err := db.TextsWith("image:")
-	if err != nil {
-		return 0, err
-	}
-	used := map[string]bool{}
-	for _, t := range texts {
-		for _, m := range imageName.FindAllStringSubmatch(t, -1) {
-			used[m[1]] = true
-		}
-	}
-	cutoff := time.Now().Add(-grace)
-	deleted := 0
-	for _, e := range entries {
-		name := e.Name()
-		if used[name] || e.IsDir() || !imageFile.MatchString(name) && !strings.HasPrefix(name, savingPrefix) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil || info.ModTime().After(cutoff) {
-			continue
-		}
-		if os.Remove(filepath.Join(dir, name)) == nil {
-			deleted++
-		}
-	}
-	return deleted, nil
-}
-
-// cleanImagesLater runs cleanImages once the app has settled, off the
-// way of its windows.
-func (a *app) cleanImagesLater(db *store.Store) {
-	time.AfterFunc(10*time.Second, func() {
-		if n, err := cleanImages(db, a.dataDir, imageGrace); err != nil {
-			log.Println("cleaning images:", err)
-		} else if n > 0 {
-			log.Printf("cleaned %d images no note refers to", n)
-		}
 	})
 }
 

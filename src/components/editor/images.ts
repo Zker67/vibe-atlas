@@ -1,8 +1,11 @@
 // Pictures in notes: ![](image:<name>), a picture Go keeps in the data
 // folder (images.go). Pasted or dropped pictures are saved and put on a
-// line of their own; several at once share it and show side by side.
+// line of their own; several at once share it and show side by side. Other
+// files pasted or dropped go to attachments.ts.
 // A line of pictures shows as the pictures alone, and while the cursor is
 // on it as its Markdown with the pictures under it, so nothing jumps.
+// Pictures on the web, ![](https://…), show as cards too, but load only
+// once the user asks: opening a note goes on no network.
 
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Range, StateEffect, StateField, type Text, type Transaction } from "@codemirror/state";
@@ -11,19 +14,33 @@ import type { SyntaxNode } from "@lezer/common";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/api";
 import { Atlas } from "@/mygo";
+import { expectFileDrop, pasteFiles } from "./attachments";
 import { hasPictures, htmlToMarkdown, placeholderPattern } from "./paste-html";
-import { showPictureMenu } from "./picture-menu";
+import { copyText } from "./live-preview";
+import { showPictureMenu, showWebPictureMenu } from "./picture-menu";
 
 const maxBytes = 20 << 20;
 const types = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"]);
 
-/** A picture's Markdown, the name in group 2. */
-const refPattern = /!\[([^\]\n]*)\]\(image:([0-9a-f]{16}\.(?:png|jpg|webp|gif|bmp))\)/g;
+/**
+ * A picture's Markdown: the name of one of the app in group 2, or the
+ * address of one on the web, in angle brackets (3) or not (4).
+ */
+const refPattern =
+  /!\[([^\]\n]*)\]\((?:image:([0-9a-f]{16}\.(?:png|jpg|webp|gif|bmp))|<(https?:\/\/[^<>\n]+)>|(https?:\/\/[^\s()<>]+))\)/g;
 
 export interface ImageRef {
   from: number;
   to: number;
+  /** The name of a picture of the app, "" for one on the web. */
   name: string;
+  /** The address of a picture on the web, "" for one of the app. */
+  url: string;
+}
+
+/** Whether a picture's URL, as written, shows as a card: one of the app's, or one on the web. */
+export function isCardPicture(url: string): boolean {
+  return /^image:[0-9a-f]{16}\.(?:png|jpg|webp|gif|bmp)$/.test(url) || /^<?https?:\/\//i.test(url);
 }
 
 let base = "";
@@ -45,7 +62,8 @@ const sizes = new Map<string, { w: number; h: number }>();
 
 const codeNodes = new Set(["FencedCode", "CodeBlock", "InlineCode", "CodeText"]);
 
-function inCode(state: EditorState, pos: number): boolean {
+/** Whether pos is in code, where Markdown is text. */
+export function inCode(state: EditorState, pos: number): boolean {
   for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
     if (codeNodes.has(node.name)) return true;
   }
@@ -54,11 +72,11 @@ function inCode(state: EditorState, pos: number): boolean {
 
 /** The pictures on a line, outside code. */
 function refsIn(state: EditorState, from: number, text: string): ImageRef[] {
-  if (!text.includes("image:")) return [];
+  if (!text.includes("image:") && !text.includes("http")) return [];
   const out: ImageRef[] = [];
   for (const m of text.matchAll(refPattern)) {
     const at = from + m.index;
-    if (!inCode(state, at)) out.push({ from: at, to: at + m[0].length, name: m[2]! });
+    if (!inCode(state, at)) out.push({ from: at, to: at + m[0].length, name: m[2] ?? "", url: m[3] ?? m[4] ?? "" });
   }
   return out;
 }
@@ -80,7 +98,7 @@ export function picturesIn(state: EditorState): string[] {
   const names: string[] = [];
   for (let n = 1; n <= state.doc.lines; n++) {
     const line = state.doc.line(n);
-    for (const r of refsIn(state, line.from, line.text)) if (!names.includes(r.name)) names.push(r.name);
+    for (const r of refsIn(state, line.from, line.text)) if (r.name && !names.includes(r.name)) names.push(r.name);
   }
   return names;
 }
@@ -93,7 +111,8 @@ export function onPictureLine(state: EditorState, pos: number): boolean {
 
 const setFocused = StateEffect.define<boolean>();
 
-const focused = StateField.define<boolean>({
+/** Whether the editor has the focus, which the cards of a line wait for. */
+export const focused = StateField.define<boolean>({
   create: () => false,
   update(value, tr) {
     for (const e of tr.effects) if (e.is(setFocused)) value = e.value;
@@ -106,24 +125,30 @@ const xIcon =
 const missingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><path d="M13.5 13.5 6 21"/><path d="M18 12l3 3"/><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/></svg>';
 
-/** The pictures of one line, as cards side by side. */
+const globeIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>';
+
+/**
+ * The pictures of one line, as cards side by side: each the name of a
+ * picture of the app, or the address of one on the web.
+ */
 class PicturesWidget extends WidgetType {
-  constructor(readonly names: string[]) {
+  constructor(readonly srcs: string[]) {
     super();
   }
   eq(other: PicturesWidget) {
-    return other.names.join() === this.names.join();
+    return other.srcs.join() === this.srcs.join();
   }
   get estimatedHeight() {
-    const known = this.names.map((n) => sizes.get(n));
-    if (this.names.length === 1 && known[0]) return Math.min(known[0].h, 320) + 12;
-    return this.names.length === 1 ? 200 : 156;
+    const known = this.srcs.map((n) => sizes.get(n));
+    if (this.srcs.length === 1 && known[0]) return Math.min(known[0].h, 320) + 12;
+    return this.srcs.length === 1 ? 200 : 156;
   }
   toDOM(view: EditorView) {
     const box = document.createElement("div");
     box.className = "cm-md-pictures";
-    box.dataset.count = this.names.length > 1 ? "many" : "one";
-    this.names.forEach((name, i) => box.append(card(view, box, name, i)));
+    box.dataset.count = this.srcs.length > 1 ? "many" : "one";
+    this.srcs.forEach((src, i) => box.append(isWeb(src) ? webCard(view, box, src, i) : card(view, box, src, i)));
     return box;
   }
   ignoreEvent(e: Event) {
@@ -166,14 +191,7 @@ function card(view: EditorView, box: HTMLElement, name: string, index: number): 
   });
   load(img, name);
 
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "cm-md-picture-remove";
-  remove.setAttribute("aria-label", "删除图片");
-  remove.title = "删除图片";
-  remove.innerHTML = xIcon;
-
-  el.append(img, remove);
+  el.append(img, removeButton());
   el.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     // Keep the focus and the cursor where they are.
@@ -202,6 +220,181 @@ function card(view: EditorView, box: HTMLElement, name: string, index: number): 
     });
   });
   return el;
+}
+
+const isWeb = (src: string) => /^https?:/i.test(src);
+
+/** Pictures on the web loaded in this run: the user asked for them. */
+const loadedWeb = new Set<string>();
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function removeButton(): HTMLButtonElement {
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "cm-md-picture-remove";
+  remove.setAttribute("aria-label", "删除图片");
+  remove.title = "删除图片";
+  remove.innerHTML = xIcon;
+  return remove;
+}
+
+/** The card of a picture on the web: a placeholder until the user loads it. */
+function webCard(view: EditorView, box: HTMLElement, url: string, index: number): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "cm-md-picture";
+  el.dataset.web = "";
+  el.setAttribute("role", "button");
+  const remove = removeButton();
+
+  const show = () => {
+    loadedWeb.add(url);
+    delete el.dataset.placeholder;
+    el.querySelector(".cm-md-picture-web")?.remove();
+    el.dataset.loading = "";
+    el.setAttribute("aria-label", "网络图片");
+    const size = sizes.get(url);
+    if (size) el.style.setProperty("--ratio", `${size.w} / ${size.h}`);
+    const img = document.createElement("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.draggable = false;
+    // Hosts that turn away pictures shown on other sites often let those with no referrer through.
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("load", () => {
+      const first = !sizes.has(url);
+      sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight });
+      el.style.setProperty("--ratio", `${img.naturalWidth} / ${img.naturalHeight}`);
+      delete el.dataset.loading;
+      if (first) el.dataset.appear = "";
+      view.requestMeasure();
+    });
+    img.addEventListener("error", () => {
+      delete el.dataset.loading;
+      el.dataset.missing = "";
+      el.setAttribute("aria-label", "加载不了这张图片");
+      const note = document.createElement("span");
+      note.className = "cm-md-picture-missing";
+      note.innerHTML = missingIcon;
+      note.append("加载不了这张图片");
+      el.append(note);
+      view.requestMeasure();
+    });
+    img.src = url;
+    el.prepend(img);
+    view.requestMeasure();
+  };
+
+  if (loadedWeb.has(url)) {
+    show();
+  } else {
+    el.dataset.placeholder = "";
+    el.setAttribute("aria-label", "加载网络图片");
+    const ph = document.createElement("span");
+    ph.className = "cm-md-picture-web";
+    const icon = document.createElement("span");
+    icon.className = "cm-md-picture-web-icon";
+    icon.innerHTML = globeIcon;
+    const title = document.createElement("span");
+    title.className = "cm-md-picture-web-title";
+    title.textContent = "网络图片";
+    const host = document.createElement("span");
+    host.className = "cm-md-picture-web-host";
+    host.textContent = hostOf(url);
+    host.title = url;
+    const actions = document.createElement("span");
+    actions.className = "cm-md-picture-web-actions";
+    for (const [act, label] of [
+      ["load", "加载"],
+      ["save", "保存到本地"],
+    ] as const) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.act = act;
+      b.textContent = label;
+      actions.append(b);
+    }
+    ph.append(icon, title, host, actions);
+    el.append(ph);
+  }
+  el.append(remove);
+
+  el.addEventListener("mousedown", (e) => {
+    // Keep the focus and the cursor where they are.
+    if (e.button === 0) e.preventDefault();
+  });
+  el.addEventListener("click", (e) => {
+    if (e.button !== 0) return;
+    const target = e.target as Element;
+    if (target.closest(".cm-md-picture-remove")) {
+      removePicture(view, box, index);
+      return;
+    }
+    if (target.closest('[data-act="save"]')) {
+      void saveWebPicture(view, box, index, url);
+      return;
+    }
+    if (el.dataset.placeholder !== undefined) show();
+  });
+  el.dataset.ownMenu = "";
+  el.addEventListener("contextmenu", (e) => {
+    showWebPictureMenu(e, {
+      loaded: el.dataset.placeholder === undefined,
+      load: show,
+      save: () => void saveWebPicture(view, box, index, url),
+      open: () => void Atlas.openLink(url).catch((err: unknown) => toast.error(errorMessage(err))),
+      copy: () => void copyText(url).then(() => toast.success("已复制图片地址")),
+      remove: () => box.isConnected && removePicture(view, box, index),
+    });
+  });
+  return el;
+}
+
+/** The picture at url, the index-th of the line box shows, or else the first in the note. */
+function webRef(view: EditorView, box: HTMLElement, index: number, url: string): ImageRef | undefined {
+  const { state } = view;
+  if (box.isConnected) {
+    const line = state.doc.lineAt(view.posAtDOM(box));
+    const ref = refsIn(state, line.from, line.text)[index];
+    if (ref?.url === url) return ref;
+  }
+  for (let n = 1; n <= state.doc.lines; n++) {
+    const line = state.doc.line(n);
+    const ref = refsIn(state, line.from, line.text).find((r) => r.url === url);
+    if (ref) return ref;
+  }
+  return undefined;
+}
+
+/** Downloads the picture at url into the app and refers to it there instead. */
+async function saveWebPicture(view: EditorView, box: HTMLElement, index: number, url: string) {
+  let loading: string | number | undefined;
+  const slow = window.setTimeout(() => (loading = toast.loading("正在保存图片…")), 400);
+  let name: string;
+  try {
+    name = await Atlas.saveImageFrom(url);
+  } catch (e) {
+    toast.error(errorMessage(e));
+    return;
+  } finally {
+    window.clearTimeout(slow);
+    if (loading !== undefined) toast.dismiss(loading);
+  }
+  if (!view.dom.isConnected) return;
+  const ref = webRef(view, box, index, url);
+  if (!ref) {
+    toast.error("备注已经改动，没有替换图片");
+    return;
+  }
+  const alt = /^!\[([^\]\n]*)\]/.exec(view.state.sliceDoc(ref.from, ref.to))?.[1] ?? "";
+  view.dispatch({ changes: { from: ref.from, to: ref.to, insert: `![${alt}](image:${name})` }, userEvent: "input" });
+  toast.success("已保存到本地");
 }
 
 /** Deletes the index-th picture of the line box shows, and the line with it when nothing else is on it. */
@@ -241,7 +434,7 @@ function build(state: EditorState): DecorationSet {
     const line = doc.line(n);
     const refs = refsIn(state, line.from, line.text);
     if (refs.length === 0) continue;
-    const widget = new PicturesWidget(refs.map((r) => r.name));
+    const widget = new PicturesWidget(refs.map((r) => r.name || r.url));
     if (!active.has(n) && onlyPictures(line.text, refs, line.from)) {
       out.push(Decoration.replace({ widget, block: true }).range(line.from, line.to));
     } else {
@@ -305,6 +498,19 @@ async function insertPictures(view: EditorView, files: File[], at: { from: numbe
  * at the selection; there too when the text changed since before.
  */
 function placePictures(view: EditorView, names: string[], at: { from: number; to: number } | null, before: Text) {
+  placeBlock(
+    view,
+    names.map((n) => `![](image:${n})`).join(" "),
+    at,
+    before,
+  );
+}
+
+/**
+ * Puts block, lines of pictures or files, on lines of its own at from–to,
+ * or at the selection; there too when the text changed since before.
+ */
+export function placeBlock(view: EditorView, block: string, at: { from: number; to: number } | null, before: Text) {
   const { state } = view;
   const main = state.selection.main;
   // Typed on meanwhile: the pictures go where the cursor is now.
@@ -314,10 +520,9 @@ function placePictures(view: EditorView, names: string[], at: { from: number; to
   const endLine = doc.lineAt(range.to);
   const head = doc.sliceString(startLine.from, range.from);
   const tail = doc.sliceString(range.to, endLine.to);
-  const refs = names.map((n) => `![](image:${n})`).join(" ");
   const prefix = head.trim() ? "\n" : "";
   const newline = tail.trim() !== "" || range.to === doc.length;
-  const insert = prefix + refs + (newline ? "\n" : "");
+  const insert = prefix + block + (newline ? "\n" : "");
   // The cursor goes to the start of the next line, so that the pictures show at once.
   const cursor = newline ? range.from + insert.length : range.from + insert.length + tail.length + 1;
   view.dispatch({
@@ -406,6 +611,7 @@ const handlers = EditorView.domEventHandlers({
   paste(e, view) {
     const data = e.clipboardData;
     if (!data) return false;
+    const all = data.files?.length ?? 0;
     const files = imageFiles(data.files);
     // Content with pictures in it, as Markdown; into a code block, as text.
     const html = data.getData("text/html");
@@ -415,9 +621,12 @@ const handlers = EditorView.domEventHandlers({
       return true;
     }
     // Copied from a document, text comes with a picture of it: the text wins.
-    if (files.length === 0 || data.getData("text/plain").trim()) return false;
+    if (data.getData("text/plain").trim()) return false;
     e.preventDefault();
-    void insertPictures(view, files, null);
+    if (files.length > 0 && files.length === all) void insertPictures(view, files, null);
+    // Files that are not pictures, or nothing the page can read: the files
+    // copied in a file manager, which Go reads with their paths.
+    else void pasteFiles(view);
     return true;
   },
   drop(e, view) {
@@ -425,10 +634,10 @@ const handlers = EditorView.domEventHandlers({
     if (!all || all.length === 0) return false;
     e.preventDefault();
     const files = imageFiles(all);
-    if (files.length < all.length) toast.error("只能放入 PNG、JPG、WebP、GIF 或 BMP 图片");
-    if (files.length === 0) return true;
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
-    void insertPictures(view, files, { from: pos, to: pos });
+    // Other files: MyGo tells their paths just after (attachments.ts).
+    if (files.length < all.length) expectFileDrop(view, pos);
+    else void insertPictures(view, files, { from: pos, to: pos });
     return true;
   },
 });
