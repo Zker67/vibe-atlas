@@ -1008,12 +1008,36 @@ export async function dropItems(drops: Drop[]) {
 }
 
 /** Puts id and targetId under a new parent in the target's place, and selects the parent. */
+/** The merge Ctrl+Z takes back: the parent the last merge made, 0 for none. */
+let lastMerge = 0;
+/** When lastMerge was made, 0 for none. */
+let lastMergeAt = 0;
+
+/** Merges id with targetId under a new parent; a toast offers to undo. */
 export async function mergeItems(id: number, targetId: number): Promise<Item | undefined> {
   const parent = await run(Atlas.mergeItems(id, targetId));
   if (!parent) return;
+  lastMerge = parent.id;
+  lastMergeAt = Date.now();
   await refresh();
   set(only(parent.id));
+  toast(`已合并成「${clip(parent.title)}」`, {
+    id: "merged",
+    action: { label: "撤销", onClick: () => void unmergeItems(parent.id) },
+  });
   return parent;
+}
+
+/** Takes back the merge that made parentId: both go back where they were. */
+async function unmergeItems(parentId: number) {
+  if (parentId === lastMerge) lastMerge = 0;
+  toast.dismiss("merged");
+  const items = await run(Atlas.unmergeItems(parentId));
+  if (!items?.length) return;
+  await refresh();
+  const dragged = items.at(-1)!;
+  if (dragged.projectId === get().projectId) set(only(dragged.id));
+  toast.success("已撤销合并");
 }
 
 export async function moveItemToProject(id: number, projectId: number) {
@@ -1155,8 +1179,11 @@ let lastBatch = 0;
 /** When lastBatch went to the trash, 0 for none. */
 let lastBatchAt = 0;
 
-/** When the deletion Ctrl+Z undoes went to the trash, 0 for none: the flow chart undoes its own steps made since. */
-export const lastTrashAt = () => (lastBatch ? lastBatchAt : 0);
+/**
+ * When what the window's Ctrl+Z undoes was done, the last deletion or the
+ * last merge, 0 for none: the flow chart undoes its own steps made since.
+ */
+export const lastUndoAt = () => Math.max(lastBatch ? lastBatchAt : 0, lastMerge ? lastMergeAt : 0);
 
 /**
  * Moves the items ids to the trash, in the queue's order, with nothing to
@@ -1184,8 +1211,15 @@ export async function trashItems(ids: number[]) {
   });
 }
 
-/** Ctrl+Z: puts back what the last deletion moved to the trash; false when there is none to undo. */
-export function undoTrash(): boolean {
+/**
+ * Ctrl+Z: takes back the later of the last deletion, out of the trash, and
+ * the last merge; false when there is none to undo.
+ */
+export function undoLast(): boolean {
+  if (lastMerge && (!lastBatch || lastMergeAt >= lastBatchAt)) {
+    void unmergeItems(lastMerge);
+    return true;
+  }
   if (!lastBatch) return false;
   void restoreBatch(lastBatch);
   return true;

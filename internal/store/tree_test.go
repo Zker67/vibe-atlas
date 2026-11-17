@@ -290,3 +290,81 @@ func TestOpenUpgradesVersion1(t *testing.T) {
 		t.Fatalf("child = %+v", child)
 	}
 }
+
+func TestUnmergeItemsPutsThemBack(t *testing.T) {
+	s, _ := newStore(t)
+	p := must(s.CreateProject("撤回合并"))
+	add := func(title string, parent int64) Item {
+		return must(s.CreateItem(NewItem{ProjectID: p.ID, ParentID: parent, Title: title}))
+	}
+	a := add("A", 0)
+	add("B", 0)
+	c := add("C", 0)
+	add("X", c.ID)
+	y := add("Y", c.ID)
+	add("Z", c.ID)
+	start := tree(t, s, p.ID)
+	cTitle := must(s.Item(c.ID)).Title
+
+	// Y, from inside C, dropped on A: back where both were.
+	parent, undo, err := s.MergeItemsUndoable(y.ID, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTree(t, s, p.ID, fmt.Sprintf("%s[A,Y],B,C[X,Z]", parent.Title))
+	back := must(s.UnmergeItems(undo))
+	if len(back) != 2 || back[0].ID != a.ID || back[1].ID != y.ID {
+		t.Fatalf("UnmergeItems returned %+v", back)
+	}
+	wantTree(t, s, p.ID, start)
+	if _, err := s.Item(parent.ID); err != ErrNotFound {
+		t.Fatalf("the parent is still there: %v", err)
+	}
+	if got := must(s.Item(c.ID)).Title; got != cTitle {
+		t.Fatalf("C's title = %q, want %q", got, cTitle)
+	}
+
+	// Among the same siblings: C dropped on A, back in its order.
+	_, undo, err = s.MergeItemsUndoable(c.ID, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(s.UnmergeItems(undo))
+	wantTree(t, s, p.ID, start)
+	if _, err := s.UnmergeItems(undo); err == nil {
+		t.Fatal("took the same merge back twice")
+	}
+}
+
+func TestUnmergeItemsRefusesAChangedParent(t *testing.T) {
+	s, _ := newStore(t)
+	p := must(s.CreateProject("撤回合并"))
+	add := func(title string) Item { return must(s.CreateItem(NewItem{ProjectID: p.ID, Title: title})) }
+	a, b := add("A"), add("B")
+	for name, change := range map[string]func(parent Item){
+		"child":  func(parent Item) { must(s.CreateItem(NewItem{ProjectID: p.ID, ParentID: parent.ID, Title: "C"})) },
+		"note":   func(parent Item) { must(s.SetItemNote(parent.ID, "写了点东西")) },
+		"dep":    func(parent Item) { must(s.AddDep(add("D").ID, parent.ID)) },
+		"status": func(parent Item) { must(s.SetItemStatus(parent.ID, StatusDoing)) },
+	} {
+		parent, undo, err := s.MergeItemsUndoable(b.ID, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		change(parent)
+		if _, err := s.UnmergeItems(undo); err != errUnmergeChanged {
+			t.Fatalf("%s: UnmergeItems = %v", name, err)
+		}
+		// Still merged: take it apart by hand for the next case.
+		must(s.Item(parent.ID))
+		if err := s.MoveItem(a.ID, parent.ID, PlaceBefore); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MoveItem(b.ID, a.ID, PlaceAfter); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteItem(parent.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

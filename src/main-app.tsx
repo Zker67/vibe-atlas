@@ -50,7 +50,7 @@ import {
   toggleItemDone,
   toggleItemsDoing,
   toggleItemsDone,
-  undoTrash,
+  undoLast,
   useAtlas,
 } from "@/state/atlas";
 import { openHelp, openSettings } from "@/state/dialogs";
@@ -280,8 +280,8 @@ function useShortcuts() {
         extendSelection(key === "ArrowDown" ? 1 : -1);
         return;
       }
-      // Ctrl+Z: the last deletion comes back from the trash.
-      if (mod && !e.shiftKey && key === "z" && undoTrash()) {
+      // Ctrl+Z: the last deletion comes back from the trash, or the last merge is taken back.
+      if (mod && !e.shiftKey && key === "z" && undoLast()) {
         e.preventDefault();
         return;
       }

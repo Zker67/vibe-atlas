@@ -553,7 +553,29 @@ func (s *Store) MoveItem(id, anchorID int64, place Place) error {
 // do. Its title comes from autoTitle and follows its children until the
 // user renames it.
 func (s *Store) MergeItems(id, targetID int64) (Item, error) {
+	parent, _, err := s.MergeItemsUndoable(id, targetID)
+	return parent, err
+}
+
+// Unmerge is what UnmergeItems needs to take a merge back.
+type Unmerge struct {
+	// ParentID is the parent the merge made.
+	ParentID int64
+	// TargetID went first under it, in the parent's place.
+	TargetID int64
+	// ItemID, the item dragged, was under ItemParentID (0 at the top),
+	// among ItemSiblings, in their order, itself included.
+	ItemID       int64
+	ItemParentID int64
+	ItemSiblings []int64
+	// ParentStatus is the status the parent had.
+	ParentStatus ItemStatus
+}
+
+// MergeItemsUndoable is MergeItems, which also tells how to take it back.
+func (s *Store) MergeItemsUndoable(id, targetID int64) (Item, Unmerge, error) {
 	var parent Item
+	var undo Unmerge
 	err := s.inTx(func(tx *sql.Tx) error {
 		it, err := itemIn(tx, id)
 		if err != nil {
@@ -575,6 +597,10 @@ func (s *Store) MergeItems(id, targetID int64) (Item, error) {
 		}
 		if under {
 			return userErr("不能和自己的子改进点合并")
+		}
+		siblings, err := childIDs(tx, it.ProjectID, it.ParentID)
+		if err != nil {
+			return err
 		}
 		now := s.millis()
 		status, doneAt := StatusTodo, int64(0)
@@ -610,10 +636,102 @@ func (s *Store) MergeItems(id, targetID int64) (Item, error) {
 		if err := syncAutoTitles(tx, it.ParentID); err != nil {
 			return err
 		}
+		undo = Unmerge{ParentID: pid, TargetID: targetID, ItemID: id, ItemParentID: it.ParentID, ItemSiblings: siblings, ParentStatus: status}
 		parent, err = itemIn(tx, pid)
 		return err
 	})
-	return parent, err
+	return parent, undo, err
+}
+
+// errUnmergeChanged refuses to take back a merge whose parent was changed
+// since: undoing it would lose what was added.
+var errUnmergeChanged = userErr("合并后又改过这个父改进点，没法撤回了")
+
+// UnmergeItems takes back the merge u: the target goes back to the
+// parent's place, the item dragged to where it was among its siblings,
+// and the parent is deleted. It refuses when the parent has changed
+// since: other children, a note, a link, prerequisites or another status.
+// It returns the two items.
+func (s *Store) UnmergeItems(u Unmerge) ([]Item, error) {
+	var out []Item
+	err := s.inTx(func(tx *sql.Tx) error {
+		parent, err := itemIn(tx, u.ParentID)
+		if errors.Is(err, ErrNotFound) {
+			return userErr("合并出的父改进点已经不在了，没法撤回")
+		}
+		if err != nil {
+			return err
+		}
+		kids, err := childIDs(tx, parent.ProjectID, parent.ID)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(kids, []int64{u.TargetID, u.ItemID}) || parent.Note != "" || parent.Deeplink != "" || parent.Status != u.ParentStatus {
+			return errUnmergeChanged
+		}
+		var deps int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM item_deps WHERE from_id = ?1 OR to_id = ?1`, parent.ID).Scan(&deps); err != nil {
+			return err
+		}
+		if deps > 0 {
+			return errUnmergeChanged
+		}
+		if u.ItemParentID != 0 {
+			back, err := itemIn(tx, u.ItemParentID)
+			if errors.Is(err, ErrNotFound) || err == nil && back.ProjectID != parent.ProjectID {
+				return userErr("原来的上级已经不在了，没法撤回")
+			}
+			if err != nil {
+				return err
+			}
+		}
+		now := s.millis()
+		// The target takes the parent's place back.
+		ids, err := childIDs(tx, parent.ProjectID, parent.ParentID)
+		if err != nil {
+			return err
+		}
+		ids[slices.Index(ids, parent.ID)] = u.TargetID
+		if _, err := tx.Exec(`UPDATE items SET parent_id = ?, updated_at = ? WHERE id = ?`, nullable(parent.ParentID), now, u.TargetID); err != nil {
+			return err
+		}
+		if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, ids); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, parent.ID); err != nil {
+			return err
+		}
+		// The item dragged goes back among its siblings: in their order of
+		// then, those added since after them.
+		if _, err := tx.Exec(`UPDATE items SET parent_id = ?, updated_at = ? WHERE id = ?`, nullable(u.ItemParentID), now, u.ItemID); err != nil {
+			return err
+		}
+		current, err := childIDs(tx, parent.ProjectID, u.ItemParentID)
+		if err != nil {
+			return err
+		}
+		order := slices.DeleteFunc(slices.Clone(u.ItemSiblings), func(v int64) bool { return !slices.Contains(current, v) })
+		for _, v := range current {
+			if !slices.Contains(order, v) {
+				order = append(order, v)
+			}
+		}
+		if err := renumber(tx, `UPDATE items SET sort_order = ? WHERE id = ?`, order); err != nil {
+			return err
+		}
+		if err := syncAutoTitles(tx, parent.ParentID, u.ItemParentID); err != nil {
+			return err
+		}
+		for _, id := range []int64{u.TargetID, u.ItemID} {
+			it, err := itemIn(tx, id)
+			if err != nil {
+				return err
+			}
+			out = append(out, it)
+		}
+		return nil
+	})
+	return out, err
 }
 
 // autoTitleLen is how much of the first child's title a parent the app

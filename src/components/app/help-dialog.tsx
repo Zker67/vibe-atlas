@@ -393,7 +393,7 @@ function DropGuide() {
       </div>
       <span className="leading-relaxed text-muted-foreground">
         合并后会多出一个父改进点，两条都放到它下面。父改进点的名字是第一条标题的前六个字加上「等 N 个改进点」，比如「修复登录按钮等 2
-        个改进点」；子改进点有增减时数量会跟着变，自己改过名字后就不再自动改。
+        个改进点」；子改进点有增减时数量会跟着变，自己改过名字后就不再自动改。合并错了点提示里的「撤销」或按 <K>Ctrl+Z</K>，两条放回原处。
       </span>
     </div>
   );
@@ -544,7 +544,7 @@ const KEY_GROUPS: { icon: LucideIcon; title: string; hint?: string; rows: KeyRow
       ["连续多选", ["Shift+↑ ↓"]],
       ["全选", ["Ctrl+A"]],
       ["取消选择", ["Esc"]],
-      ["撤销上一次删除", ["Ctrl+Z"]],
+      ["撤销上一次删除或合并", ["Ctrl+Z"]],
       ["设置", ["Ctrl+,"]],
       ["使用说明", ["F1"]],
       ["收起 / 展开侧栏", ["Ctrl+\\"]],

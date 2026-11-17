@@ -29,6 +29,11 @@ type Atlas struct {
 	db *store.Store
 
 	sessions sessions.Reader
+
+	// lastMerge is how to take back the last merge, which UnmergeItems
+	// undoes; nil when there is none.
+	mergeMu   sync.Mutex
+	lastMerge *store.Unmerge
 }
 
 // Changed is broadcast to every window after projects, modules or items
@@ -181,6 +186,10 @@ func (a *Atlas) setStore(db *store.Store) {
 	a.mu.Lock()
 	a.db = db
 	a.mu.Unlock()
+	// A merge in another database is not one to take back here.
+	a.mergeMu.Lock()
+	a.lastMerge = nil
+	a.mergeMu.Unlock()
 }
 
 // changed tells every window that a project's modules or items changed,
@@ -508,7 +517,33 @@ func (a *Atlas) MoveItem(id, anchorID int64, place store.Place) error {
 // the target's place, and returns the parent. Its title is the first 6
 // characters of the target's and how many children it has.
 func (a *Atlas) MergeItems(id, targetID int64) (store.Item, error) {
-	return a.editItem(func(db *store.Store) (store.Item, error) { return db.MergeItems(id, targetID) })
+	return a.editItem(func(db *store.Store) (store.Item, error) {
+		parent, undo, err := db.MergeItemsUndoable(id, targetID)
+		if err == nil {
+			a.mergeMu.Lock()
+			a.lastMerge = &undo
+			a.mergeMu.Unlock()
+		}
+		return parent, err
+	})
+}
+
+// UnmergeItems takes back the last merge, the one that made parentID: the
+// two items go back where they were and the parent is deleted. It refuses
+// when the parent has changed since, or another merge came after. It
+// returns the two items.
+func (a *Atlas) UnmergeItems(parentID int64) ([]store.Item, error) {
+	a.mergeMu.Lock()
+	defer a.mergeMu.Unlock()
+	if a.lastMerge == nil || a.lastMerge.ParentID != parentID {
+		return nil, errors.New("只能撤回最近一次合并")
+	}
+	undo := *a.lastMerge
+	items, err := a.editItems(func(db *store.Store) ([]store.Item, error) { return db.UnmergeItems(undo) })
+	if err == nil {
+		a.lastMerge = nil
+	}
+	return items, err
 }
 
 // MoveItemToProject moves an item, with the items under it, to another

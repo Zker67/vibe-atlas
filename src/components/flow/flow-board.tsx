@@ -87,7 +87,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { IconButton } from "@/components/app/icon-button";
 import { TypeIcon } from "@/components/app/item-marks";
-import { addDep, createItem, lastTrashAt, matchesFilters, removeDep, select, setSelection, toggleSelected, useAtlas } from "@/state/atlas";
+import { addDep, createItem, lastUndoAt, matchesFilters, removeDep, select, setSelection, toggleSelected, useAtlas } from "@/state/atlas";
 import { FlowCard, titleLines, type FlowRowData, type LinkView } from "./flow-node";
 import { loadCanvas, saveSpots, savedViewport, saveViewport, setHintsOpen, setHistory, setShowDone, useFlow } from "./flow-store";
 
@@ -800,8 +800,8 @@ export function FlowBoard() {
       if (mod && (key === "z" || key === "y")) {
         const redo = key === "y" || e.shiftKey;
         const h = useFlow.getState().history;
-        // The deletion made since the chart's last step is undone first, by the window.
-        if (!redo && (lastAt(h) === 0 || lastTrashAt() > lastAt(h))) return;
+        // The deletion or merge made since the chart's last step is undone first, by the window.
+        if (!redo && (lastAt(h) === 0 || lastUndoAt() > lastAt(h))) return;
         if (redo && h.future.length === 0) return;
         take();
         void travel(!redo);

@@ -1316,6 +1316,15 @@ export const Atlas = {
     return call("Atlas.TrashItems", ids);
   },
   /**
+   * UnmergeItems takes back the last merge, the one that made parentID: the
+   * two items go back where they were and the parent is deleted. It refuses
+   * when the parent has changed since, or another merge came after. It
+   * returns the two items.
+   */
+  unmergeItems(parentID: number): Promise<Item[]> {
+    return call("Atlas.UnmergeItems", parentID);
+  },
+  /**
    * UnstoreAttachment refers to a file kept in the app where it came from,
    * which must still be there, and returns the link to it there.
    */
