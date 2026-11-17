@@ -694,19 +694,19 @@ function QueueDnd({ trees, children }: { trees: TreeRows[][]; children: ReactNod
  */
 function DragPreview({ item, under }: { item: Item; under: number }) {
   const landing = useDrag((s) => s.drop !== null);
-  const layer = "absolute inset-x-0 h-full rounded-md bg-popover ring-1 ring-foreground/10 shadow-md";
+  const layer = "absolute inset-x-0 h-full rounded-md bg-popover/85 ring-1 ring-foreground/10 shadow-md";
   return (
     <div
       className={cn(
         "relative animate-in fade-in-0 zoom-in-95 duration-200 ease-out transition-opacity",
-        !landing && "opacity-75",
+        landing ? "opacity-65" : "opacity-45",
       )}
     >
       {under > 1 && <div aria-hidden className={cn(layer, "top-2 scale-x-[0.92] opacity-50")} />}
       {under > 0 && <div aria-hidden className={cn(layer, "top-1 scale-x-[0.96] opacity-80")} />}
       <div
         className={cn(
-          "relative flex h-9 items-center gap-2 rounded-md bg-popover px-2 shadow-xl ring-1 transition-[box-shadow] duration-150",
+          "relative flex h-9 items-center gap-2 rounded-md bg-popover/85 px-2 shadow-xl ring-1 transition-[box-shadow] duration-150",
           landing ? "ring-primary/50" : "ring-foreground/10",
         )}
       >
