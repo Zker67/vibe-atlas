@@ -46,7 +46,7 @@ plans/
 
 | 计划 | 内容 | 状态 |
 |---|---|---|
-| [2026-11-17-undo-merge](./2026-11-17-undo-merge/00-overview.md) | 合并可以撤回：提示里的「撤销」和 `Ctrl+Z`，两条放回原处、删掉父改进点；父改进点合并后改过时拒绝 | `[partial]`：已实现，检查通过，等用户验收 |
+| [2026-11-17-undo-merge](./2026-11-17-undo-merge/00-overview.md) | 合并可以撤回：提示里的「撤销」和 `Ctrl+Z`，两条放回原处、删掉父改进点；父改进点合并后改过时拒绝 | `[partial]`：随 0.7.2 发布，检查通过，等用户验收 |
 | [2026-11-16-new-session-in-folder](./2026-11-16-new-session-in-folder/00-overview.md) | 项目栏文件夹按钮左边加「在这个文件夹新建会话」：按会话来源打开 `claude://code/new?folder=` 或 `codex://threads/new?path=`，停在输入框；codeg、不使用时不显示 | `[partial]`：随 0.7.1 发布，检查通过，等用户验收 |
 | [2026-11-16-storage-files](./2026-11-16-storage-files/00-overview.md) | 四个阶段：存储空间面板和更灵敏的回收（每小时、按不再引用的时间、立即清理、压缩数据库）→ 文件附件（粘贴 / 拖入任意文件成卡片，另存到软件或原地引用，可切换）→ 网络图片（占位卡片，点了才加载，可保存到本地）→ Markdown 表格（渲染、`Tab` 移动和对齐、`Enter` 加行） | `[partial]`：随 0.7.0 发布，检查通过，等用户验收 |
 | [2026-11-15-session-link-names](./2026-11-15-session-link-names/00-overview.md) | 已有和粘贴的会话链接按自身来源查名称，选择列表仍按设置 | `[partial]`：随 0.6.3 发布，检查通过，等用户验收 |
