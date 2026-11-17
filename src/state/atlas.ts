@@ -602,6 +602,11 @@ export function openProjectFolder(id: number) {
   void runOk(Atlas.openProjectFolder(id));
 }
 
+/** Opens a new session of the session source in the project's folder. */
+export function newSessionInFolder(id: number) {
+  void runOk(Atlas.newSessionInFolder(id));
+}
+
 export async function deleteProject(id: number) {
   if (await runOk(Atlas.deleteProject(id))) {
     set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));

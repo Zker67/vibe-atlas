@@ -35,6 +35,7 @@ import {
   clearFilters,
   clearProjectFolder,
   moveProjectToOrg,
+  newSessionInFolder,
   openProjectFolder,
   sections,
   setStatusFilter,
@@ -46,6 +47,7 @@ import {
   type View,
 } from "@/state/atlas";
 import { askProject } from "@/state/dialogs";
+import { AgentIcon } from "./agent-icon";
 import { OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { confirmDeleteProject } from "./sidebar";
@@ -113,6 +115,25 @@ function FolderButton({ project }: { project: Project }) {
   );
 }
 
+/** The session sources that can start a new session in a folder. */
+const NEW_SESSION_APPS: Partial<Record<string, string>> = { claude: "Claude Code", codex: "Codex" };
+
+/**
+ * Left of the folder: a new session of the session source, working in the
+ * project's folder and waiting for the first prompt. Only for a folder that
+ * is there, and a source with a link for it (not codeg).
+ */
+function NewSessionButton({ project }: { project: Project }) {
+  const source = useAtlas((s) => s.settings?.sessionSource ?? "");
+  const app = NEW_SESSION_APPS[source];
+  if (!app || !project.folderPath || !project.folderExists) return null;
+  return (
+    <IconButton label={`在这个文件夹新建 ${app} 会话`} className="text-muted-foreground" onClick={() => newSessionInFolder(project.id)}>
+      <AgentIcon agent={source} />
+    </IconButton>
+  );
+}
+
 /** The open project's first row, atop the queue column, the flow chart or the overview. */
 export function ProjectBar({ project }: { project: Project }) {
   const view = useAtlas((s) => s.view);
@@ -169,6 +190,7 @@ export function ProjectBar({ project }: { project: Project }) {
       </DropdownMenu>
       {/* On the right, before the views. */}
       <div className="ml-auto flex min-w-0 items-center">
+        <NewSessionButton project={project} />
         <FolderButton project={project} />
       </div>
 

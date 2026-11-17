@@ -2,10 +2,13 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/Zker67/vibe-atlas/internal/sessions"
 	"github.com/Zker67/vibe-atlas/internal/store"
 )
 
@@ -281,4 +284,55 @@ func TestCaptureStartsInTheCurrentOrg(t *testing.T) {
 		t.Fatal(err)
 	}
 	want(store.PersonalOrg, mine.ID)
+}
+
+func TestNewSessionLinkFollowsSourceAndFolder(t *testing.T) {
+	db := openStore(t)
+	p, err := db.CreateProject("新会话")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newSessionLink(db, p.ID); err == nil || !strings.Contains(err.Error(), "还没有绑定文件夹") {
+		t.Fatalf("no folder: %v", err)
+	}
+	dir := filepath.Join(t.TempDir(), "my repo")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SetProjectFolder(p.ID, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newSessionLink(db, p.ID); err == nil || !strings.Contains(err.Error(), "会话来源") {
+		t.Fatalf("no source: %v", err)
+	}
+	for src, prefix := range map[sessions.Source]string{
+		sessions.Claude: "claude://code/new?folder=",
+		sessions.Codex:  "codex://threads/new?path=",
+	} {
+		if err := setSessionSource(db, src); err != nil {
+			t.Fatal(err)
+		}
+		link, err := newSessionLink(db, p.ID)
+		if err != nil || link != sessions.NewSessionLink(src, dir) || !strings.HasPrefix(link, prefix) {
+			t.Fatalf("%s: %q, %v", src, link, err)
+		}
+	}
+	if err := setSessionSource(db, sessions.Codeg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newSessionLink(db, p.ID); err == nil || !strings.Contains(err.Error(), "codeg") {
+		t.Fatalf("codeg: %v", err)
+	}
+	if err := setSessionSource(db, sessions.Codex); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newSessionLink(db, p.ID); err == nil || !strings.Contains(err.Error(), "文件夹不存在") {
+		t.Fatalf("folder gone: %v", err)
+	}
+	if _, err := newSessionLink(db, 9999); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing project: %v", err)
+	}
 }

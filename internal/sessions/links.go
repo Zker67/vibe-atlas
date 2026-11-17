@@ -71,3 +71,22 @@ func IsClaudeLink(link string) bool {
 	link = strings.TrimSpace(link)
 	return len(link) >= len(claudePrefix) && strings.EqualFold(link[:len(claudePrefix)], claudePrefix)
 }
+
+// NewSessionLink returns the link that opens a new session of src working
+// in folder, waiting for the user's first prompt, or "" when src has none:
+//
+//   - Claude Code: claude://code/new?folder=<folder>, in Claude Desktop,
+//     which asks the user to confirm the folder;
+//   - Codex: codex://threads/new?path=<folder>, as codex app <folder> does;
+//   - codeg has no link to start a session in a folder.
+func NewSessionLink(src Source, folder string) string {
+	// Spaces as %20, which every reader takes; "+" may stay a plus.
+	q := strings.ReplaceAll(url.QueryEscape(folder), "+", "%20")
+	switch src {
+	case Claude:
+		return "claude://code/new?folder=" + q
+	case Codex:
+		return "codex://threads/new?path=" + q
+	}
+	return ""
+}

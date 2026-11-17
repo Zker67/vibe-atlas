@@ -281,20 +281,64 @@ func (a *Atlas) OpenProjectFolder(id int64) error {
 	if err != nil {
 		return err
 	}
-	p, err := db.Project(id)
+	folder, err := projectFolder(db, id)
 	if err != nil {
 		return err
 	}
-	if p.FolderPath == "" {
-		return errors.New("这个项目还没有绑定文件夹")
-	}
-	if !p.FolderExists {
-		return fmt.Errorf("文件夹不存在：%s", p.FolderPath)
-	}
-	if err := mygo.Shell.OpenPath(p.FolderPath); err != nil {
+	if err := mygo.Shell.OpenPath(folder); err != nil {
 		return fmt.Errorf("打不开文件夹：%w", err)
 	}
 	return nil
+}
+
+// NewSessionInFolder opens a new session of the session source the user
+// set, working in the project's folder and waiting for the first prompt:
+// in Claude Desktop for Claude Code, in the Codex app for Codex. codeg has
+// no link for it.
+func (a *Atlas) NewSessionInFolder(id int64) error {
+	db, err := a.store()
+	if err != nil {
+		return err
+	}
+	link, err := newSessionLink(db, id)
+	if err != nil {
+		return err
+	}
+	if err := mygo.Shell.OpenExternal(link); err != nil {
+		return fmt.Errorf("打不开新会话，可能没有安装对应的桌面版：%w", err)
+	}
+	return nil
+}
+
+// newSessionLink is the link NewSessionInFolder opens for project id.
+func newSessionLink(db *store.Store, id int64) (string, error) {
+	folder, err := projectFolder(db, id)
+	if err != nil {
+		return "", err
+	}
+	src := sessionSource(db)
+	switch src {
+	case sessions.None:
+		return "", errors.New("还没有选择会话来源：设置 → 改进点 → 会话来源")
+	case sessions.Codeg:
+		return "", errors.New("codeg 没有提供在某个文件夹新建会话的链接")
+	}
+	return sessions.NewSessionLink(src, folder), nil
+}
+
+// projectFolder is the folder project id is bound to, which must exist.
+func projectFolder(db *store.Store, id int64) (string, error) {
+	p, err := db.Project(id)
+	if err != nil {
+		return "", err
+	}
+	if p.FolderPath == "" {
+		return "", errors.New("这个项目还没有绑定文件夹")
+	}
+	if !p.FolderExists {
+		return "", fmt.Errorf("文件夹不存在：%s", p.FolderPath)
+	}
+	return p.FolderPath, nil
 }
 
 // DeleteProject deletes a project with its modules and items.

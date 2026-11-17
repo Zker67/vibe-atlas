@@ -3,6 +3,7 @@ package sessions
 import (
 	"database/sql"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -418,5 +419,43 @@ func TestLinks(t *testing.T) {
 	}
 	if !IsClaudeLink("Claude-Session:x") || IsClaudeLink("claude://x") {
 		t.Error("IsClaudeLink")
+	}
+}
+
+func TestNewSessionLink(t *testing.T) {
+	for _, c := range []struct {
+		src    Source
+		folder string
+		want   string
+	}{
+		{Claude, `C:\Users\me\repos\koba`, `claude://code/new?folder=C%3A%5CUsers%5Cme%5Crepos%5Ckoba`},
+		// The form codex app PATH opens on Windows.
+		{Codex, `C:\Users\me\repos\koba`, `codex://threads/new?path=C%3A%5CUsers%5Cme%5Crepos%5Ckoba`},
+		{Codex, `D:\我的 项目\a+b&c=d`, `codex://threads/new?path=D%3A%5C%E6%88%91%E7%9A%84%20%E9%A1%B9%E7%9B%AE%5Ca%2Bb%26c%3Dd`},
+		{Claude, "/Users/me/my repo", "claude://code/new?folder=%2FUsers%2Fme%2Fmy%20repo"},
+		{Codeg, `C:\repo`, ""},
+		{None, `C:\repo`, ""},
+	} {
+		got := NewSessionLink(c.src, c.folder)
+		if got != c.want {
+			t.Errorf("NewSessionLink(%q, %q) = %q, want %q", c.src, c.folder, got, c.want)
+			continue
+		}
+		if got == "" {
+			continue
+		}
+		// Reads back as the folder, by query parsing as by plain unescaping.
+		u, err := url.Parse(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range u.Query() {
+			if v[0] != c.folder {
+				t.Errorf("%q reads back as %q", got, v[0])
+			}
+		}
+		if raw, _ := url.PathUnescape(u.RawQuery[strings.Index(u.RawQuery, "=")+1:]); raw != c.folder {
+			t.Errorf("%q unescapes to %q", got, raw)
+		}
 	}
 }

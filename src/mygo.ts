@@ -935,6 +935,15 @@ export const Atlas = {
   moveItemsToProject(ids: number[], projectID: number): Promise<Item[]> {
     return call("Atlas.MoveItemsToProject", ids, projectID);
   },
+  /**
+   * NewSessionInFolder opens a new session of the session source the user
+   * set, working in the project's folder and waiting for the first prompt:
+   * in Claude Desktop for Claude Code, in the Codex app for Codex. codeg has
+   * no link for it.
+   */
+  newSessionInFolder(id: number): Promise<void> {
+    return call("Atlas.NewSessionInFolder", id);
+  },
   /** OpenAttachment opens the file of a card in the app the system has for it. */
   openAttachment(link: string): Promise<void> {
     return call("Atlas.OpenAttachment", link);
