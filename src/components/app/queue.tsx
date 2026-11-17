@@ -496,9 +496,11 @@ function sectionDrop(group: Item[], section: ItemStatus): Drop | null {
  */
 /**
  * How much of a row, from its top and from its bottom, puts the item before
- * or after it; the middle left, 40 %, merges or puts it inside.
+ * or after it; the middle left, 40 %, puts it inside a row with children.
  */
 const EDGE = 0.3;
+/** The same for a row without children, whose narrower middle, 26 %, merges. */
+const MERGE_EDGE = 0.37;
 
 function dropAt(x: number, y: number, dx: number, map: DropMap, group: Item[], moving: ReadonlySet<number>): Drop | null {
   const hit = document.elementFromPoint(x, y);
@@ -520,7 +522,8 @@ function dropAt(x: number, y: number, dx: number, map: DropMap, group: Item[], m
   const r = el.getBoundingClientRect();
   const at = (y - r.top) / r.height;
   const middle: Zone = row.hasChildren ? "inside" : "merge";
-  const zone: Zone = at < EDGE ? "before" : at > 1 - EDGE ? "after" : middle;
+  const edge = row.hasChildren ? EDGE : MERGE_EDGE;
+  const zone: Zone = at < edge ? "before" : at > 1 - edge ? "after" : middle;
   if (zone === "merge" && group.length > 1) return null;
   if (zone === "merge" || zone === "inside") return { kind: "row", overId, zone, status: null, count: 0 };
   const first = zone === "after" && row.hasChildren && !row.collapsed && info.next?.depth === row.depth + 1 ? info.next : undefined;
