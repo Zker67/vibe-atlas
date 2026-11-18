@@ -15,6 +15,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { setProjectStage } from "@/state/atlas";
 
 /** How long the project has been at its stage: 开发中 · 已 12 天. */
@@ -23,6 +24,40 @@ function stageSince(project: Project, now: number): string {
   const span = elapsed(project.stageAt, now);
   if (!span) return label;
   return span === "刚刚" ? `${label} · 刚刚` : `${label} · 已 ${span}`;
+}
+
+/**
+ * On a project's icon in the sidebar: its stage as a small badge at the
+ * bottom right, the stage's icon on its color, set off from the icon by a
+ * ring of the ground. A finished project has none: 已完结 says it. With
+ * tip, the pointer on it tells the stage and how long; in the rail the
+ * row's own tip does. A new stage pops in.
+ */
+export function StageBadge({ project, tip }: { project: Project; tip: boolean }) {
+  const now = useNow();
+  if (project.stage === "finished") return null;
+  const info = stageInfo(project.stage);
+  const badge = (
+    <span
+      key={project.stage}
+      aria-label={`阶段：${info.label}`}
+      className={cn(
+        "absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-background ring-[1.5px] ring-background animate-in duration-200 zoom-in-50 motion-reduce:animate-none",
+        info.chip,
+      )}
+    >
+      <span className="signal-chip grid size-full place-items-center rounded-full">
+        <info.icon className="size-2" strokeWidth={2.75} />
+      </span>
+    </span>
+  );
+  if (!tip) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent side="right">{stageSince(project, now)}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** A stage in a menu: its icon in its color, and its name. */

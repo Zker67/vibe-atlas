@@ -59,7 +59,7 @@ import { IconButton } from "./icon-button";
 import { IconPopover } from "./icon-picker";
 import { useModuleDropOver } from "./queue";
 import { SortableList, SortableRow } from "./sortable";
-import { StageContextSub } from "./stage";
+import { StageBadge, StageContextSub } from "./stage";
 
 export function newProject() {
   askProject();
@@ -372,7 +372,10 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
             <Row
               icon={FolderKanban}
               iconNode={
-                collapsed ? <ProjectIcon project={p} className={rowIcon(active)} /> : <ProjectIconSpot project={p} active={active} />
+                <span className="relative flex shrink-0">
+                  {collapsed ? <ProjectIcon project={p} className={rowIcon(active)} /> : <ProjectIconSpot project={p} active={active} />}
+                  <StageBadge project={p} tip={!collapsed} />
+                </span>
               }
               label={p.name}
               count={p.counts.todo + p.counts.doing}
