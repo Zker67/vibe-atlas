@@ -25,7 +25,7 @@ import type { Item, ItemStatus, ItemType, Session } from "@/mygo";
 import { errorMessage } from "@/lib/api";
 import { useDebouncedSave } from "@/lib/debounce";
 import { isComposing } from "@/lib/keys";
-import { statusInfo, STATUSES, TYPES, UNSORTED } from "@/lib/labels";
+import { finishedLast, statusInfo, STATUSES, TYPES, UNSORTED } from "@/lib/labels";
 import { Glide, useChangedOnce, useEntrance } from "@/lib/motion";
 import { duration, formatTime, fullTime, useNow } from "@/lib/time";
 import { ancestors, buildForest } from "@/lib/tree";
@@ -234,7 +234,7 @@ export function TypePicker({ value, onPick }: { value: ItemType | null; onPick(t
 }
 
 /** A row of segments, the one of value lit in its signal color: a click on another picks it. */
-function Segments<T extends string>({
+export function Segments<T extends string>({
   label,
   options,
   value,
@@ -324,7 +324,7 @@ const STEP_LOOK = {
 /** Moves the item to another project, picked from a menu; gone when there is none. */
 function MoveMenu({ item }: { item: Item }) {
   const projects = useOrgProjects();
-  const others = projects.filter((p) => p.id !== item.projectId);
+  const others = finishedLast(projects).filter((p) => p.id !== item.projectId);
   if (others.length === 0) return null;
   return (
     <DropdownMenu>
@@ -337,7 +337,7 @@ function MoveMenu({ item }: { item: Item }) {
         <DropdownMenuLabel>移到其他项目</DropdownMenuLabel>
         {others.map((p) => (
           <DropdownMenuItem key={p.id} onSelect={() => void moveItemToProject(item.id, p.id)}>
-            <span className="truncate">{p.name}</span>
+            <span className={cn("truncate", p.stage === "finished" && "text-muted-foreground")}>{p.name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

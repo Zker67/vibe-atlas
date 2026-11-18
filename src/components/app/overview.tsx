@@ -1,10 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Boxes, ChevronRight, CircleCheck, FileText, History, Inbox, Layers, Play, Timer, TrendingUp } from "lucide-react";
-import type { Counts, Item, Overview as OverviewData, Project } from "@/mygo";
+import { Boxes, ChevronRight, CircleCheck, FileText, Flag, History, Inbox, Layers, Play, Timer, TrendingUp } from "lucide-react";
+import type { Counts, Item, Overview as OverviewData, Project, StageStep } from "@/mygo";
 import { cn } from "@/lib/utils";
 import { useDebouncedSave } from "@/lib/debounce";
-import { STATUSES, TYPES, UNSORTED } from "@/lib/labels";
-import { dayKey, dayLabel, elapsed, useNow } from "@/lib/time";
+import { stageInfo, STATUSES, TYPES, UNSORTED } from "@/lib/labels";
+import { dayKey, dayLabel, duration, elapsed, fullTime, useNow } from "@/lib/time";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { Scroller } from "@/components/ui/scroller";
@@ -33,6 +33,7 @@ export function Overview({ project }: { project: Project }) {
     <Scroller className="flex-1">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-5">
         <Description key={project.id} project={project} />
+        {overview && <StageHistory project={project} steps={overview.stages} />}
         {!overview ? null : total(overview.totals) === 0 ? (
           <Card className="items-center justify-center gap-2 py-14 text-center text-muted-foreground">
             <div className="grid size-12 place-items-center rounded-full bg-muted">
@@ -50,7 +51,7 @@ export function Overview({ project }: { project: Project }) {
 }
 
 /** A raised block of the page: a small titled header over its content. */
-function Card({
+export function Card({
   icon,
   title,
   aside,
@@ -105,16 +106,99 @@ function Description({ project }: { project: Project }) {
   );
 }
 
-function total(c: Counts): number {
+/** 11月3日, or 2025年11月3日 in another year. */
+function shortDate(ms: number, now: number): string {
+  const d = new Date(ms);
+  const md = `${d.getMonth() + 1}月${d.getDate()}日`;
+  return d.getFullYear() === new Date(now).getFullYear() ? md : `${d.getFullYear()}年${md}`;
+}
+
+/**
+ * 阶段历程: the stages the project went through, as a strip each stage
+ * takes as long a part of as it lasted, the one it is at running up to
+ * now; under it, a step for each, with when it began and how long it took.
+ */
+function StageHistory({ project, steps: kept }: { project: Project; steps: StageStep[] }) {
+  const now = useNow();
+  // Kept from before the history was: the stage the project is at.
+  const steps = kept.length ? kept : [{ stage: project.stage, at: project.stageAt }];
+  const spans = steps.map((st, i) => {
+    const end = steps[i + 1]?.at ?? now;
+    return { ...st, end, current: i === steps.length - 1, info: stageInfo(st.stage) };
+  });
+  const first = steps[0]!.at;
+  return (
+    <Card
+      icon={<Flag />}
+      title="阶段历程"
+      aside={
+        <span className="meta-mono whitespace-nowrap text-muted-foreground" title={`${fullTime(first)} 起`}>
+          {shortDate(first, now)} 起 · {duration(first, now)}
+        </span>
+      }
+    >
+      <div className="flex flex-col gap-4 px-5 pt-1 pb-5">
+        <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-foreground/[0.07]">
+          {spans.map((sp, i) => (
+            <Tooltip key={i}>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    "min-w-1.5 basis-0 rounded-full bg-(--chip) transition-[flex-grow] duration-700 ease-out",
+                    sp.info.chip,
+                    !sp.current && "opacity-70",
+                  )}
+                  style={{ flexGrow: Math.max(sp.end - sp.at, 1) }}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                {sp.info.label}
+                <span className="meta-mono opacity-60">
+                  {shortDate(sp.at, now)} → {sp.current ? "现在" : shortDate(sp.end, now)} · {duration(sp.at, sp.end)}
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+        <ol className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2">
+          {spans.map((sp, i) => (
+            <li
+              key={i}
+              className={cn(
+                "flex min-w-0 flex-col gap-1.5 rounded-lg p-2.5 ring-1 ring-foreground/[0.06]",
+                sp.info.chip,
+                sp.current && "signal-chip",
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium whitespace-nowrap">
+                <span className={cn("signal-chip grid size-5 shrink-0 place-items-center rounded-md", sp.info.chip)}>
+                  <sp.info.icon className="size-3" />
+                </span>
+                <span className={sp.current ? undefined : "text-foreground"}>{sp.info.label}</span>
+                {sp.current && <span className="ml-auto text-[11px] font-normal opacity-80">现在</span>}
+              </span>
+              <span className="meta-mono flex items-center justify-between gap-2 text-muted-foreground" title={fullTime(sp.at)}>
+                <span className="truncate">{shortDate(sp.at, now)}</span>
+                <span className="shrink-0 text-foreground">{sp.current ? `已 ${duration(sp.at, now)}` : duration(sp.at, sp.end)}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </Card>
+  );
+}
+
+export function total(c: Counts): number {
   return c.todo + c.doing + c.done;
 }
 
-function percent(n: number, all: number): number {
+export function percent(n: number, all: number): number {
   return all ? Math.round((n / all) * 100) : 0;
 }
 
 /** 完成 9 · 进行中 2 · 待办 5, for the tooltips of the bars. */
-function countsText(c: Counts): string {
+export function countsText(c: Counts): string {
   return [`完成 ${c.done}`, `进行中 ${c.doing}`, `待办 ${c.todo}`].join(" · ");
 }
 
@@ -122,7 +206,7 @@ function countsText(c: Counts): string {
  * How far a set of items is: done, then doing, over all of them. The
  * segments grow by their counts, with a thin gap between them.
  */
-function ProgressBar({ counts, className }: { counts: Counts; className?: string }) {
+export function ProgressBar({ counts, className }: { counts: Counts; className?: string }) {
   const segments = [
     { n: counts.done, className: "bg-done" },
     { n: counts.doing, className: "bg-doing" },
@@ -192,6 +276,39 @@ function ProgressRing({ counts }: { counts: Counts }) {
   );
 }
 
+/** The ring of a set of items beside how many are in each status. */
+export function ProgressBody({ counts }: { counts: Counts }) {
+  const all = total(counts);
+  return (
+    <div className="flex items-center gap-6 px-5 pt-1 pb-5 max-sm:flex-col max-sm:items-stretch">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="self-center">
+            <ProgressRing counts={counts} />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>{countsText(counts)}</TooltipContent>
+      </Tooltip>
+      <div className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-foreground/[0.07]">
+        {STATUSES.map((s) => {
+          const n = counts[s.value];
+          const Icon = s.icon;
+          return (
+            <div key={s.value} className="flex min-w-0 flex-col gap-1 px-5 first:pl-0 last:pr-0">
+              <span className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
+                <Icon className={cn("size-3.5 shrink-0", s.text)} />
+                {s.label}
+              </span>
+              <span className="text-3xl font-semibold tracking-tight tabular-nums">{n}</span>
+              <span className="meta-mono whitespace-nowrap text-muted-foreground">占 {percent(n, all)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function openQueue(filter: { module?: ModuleFilter; type?: TypeFilter }) {
   setModuleFilter(filter.module ?? "all");
   setTypeFilter(filter.type ?? "all");
@@ -208,32 +325,7 @@ function Summary({ overview }: { overview: OverviewData }) {
         title="进度"
         aside={<span className="meta-mono whitespace-nowrap text-muted-foreground">共 {all} 条</span>}
       >
-        <div className="flex items-center gap-6 px-5 pt-1 pb-5 max-sm:flex-col max-sm:items-stretch">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="self-center">
-                <ProgressRing counts={totals} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>{countsText(totals)}</TooltipContent>
-          </Tooltip>
-          <div className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-foreground/[0.07]">
-            {STATUSES.map((s) => {
-              const n = totals[s.value];
-              const Icon = s.icon;
-              return (
-                <div key={s.value} className="flex min-w-0 flex-col gap-1 px-5 first:pl-0 last:pr-0">
-                  <span className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
-                    <Icon className={cn("size-3.5 shrink-0", s.text)} />
-                    {s.label}
-                  </span>
-                  <span className="text-3xl font-semibold tracking-tight tabular-nums">{n}</span>
-                  <span className="meta-mono whitespace-nowrap text-muted-foreground">占 {percent(n, all)}%</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ProgressBody counts={totals} />
       </Card>
 
       <div className="grid grid-cols-[3fr_2fr] gap-4 max-lg:grid-cols-1">

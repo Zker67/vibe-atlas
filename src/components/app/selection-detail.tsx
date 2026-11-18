@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ArrowRightLeft, CircleDashed, Copy, Folder, ListChecks, Shapes, X } from "lucide-react";
 import type { Item, ItemStatus } from "@/mygo";
-import { STATUSES, statusInfo, UNSORTED } from "@/lib/labels";
+import { finishedLast, STATUSES, statusInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -180,7 +180,7 @@ function ModuleSelect({ ids, items }: { ids: number[]; items: Item[] }) {
 function MoveMenu({ ids }: { ids: number[] }) {
   const projects = useOrgProjects();
   const projectId = useAtlas((s) => s.projectId);
-  const others = projects.filter((p) => p.id !== projectId);
+  const others = finishedLast(projects).filter((p) => p.id !== projectId);
   if (others.length === 0) return null;
   return (
     <DropdownMenu>
@@ -193,7 +193,7 @@ function MoveMenu({ ids }: { ids: number[] }) {
         <DropdownMenuLabel>移到其他项目</DropdownMenuLabel>
         {others.map((p) => (
           <DropdownMenuItem key={p.id} onSelect={() => void moveItemsToProject(ids, p.id)}>
-            <span className="truncate">{p.name}</span>
+            <span className={cn("truncate", p.stage === "finished" && "text-muted-foreground")}>{p.name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

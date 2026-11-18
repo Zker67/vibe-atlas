@@ -51,6 +51,7 @@ import { AgentIcon } from "./agent-icon";
 import { OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { confirmDeleteProject } from "./sidebar";
+import { StageButton, StageDropdownSub } from "./stage";
 
 function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -155,6 +156,7 @@ export function ProjectBar({ project }: { project: Project }) {
             <SquarePen />
             编辑项目
           </DropdownMenuItem>
+          <StageDropdownSub project={project} />
           <DropdownMenuItem onSelect={() => void chooseProjectFolder(project.id)}>
             <FolderPlus />
             {project.folderPath ? "更换文件夹" : "绑定文件夹"}
@@ -188,6 +190,7 @@ export function ProjectBar({ project }: { project: Project }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <StageButton project={project} />
       {/* On the right, before the views. */}
       <div className="ml-auto flex min-w-0 items-center">
         <NewSessionButton project={project} />

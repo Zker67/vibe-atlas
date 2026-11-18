@@ -338,6 +338,11 @@ export interface Overview {
    * that waited and may start now, in the order of the items to do.
    */
   ready: Item[];
+  /**
+   * Stages lists the stages the project came to, the first first: since
+   * it was made, or since the app began to keep them.
+   */
+  stages: StageStep[];
 }
 
 /** Place is where MoveItem puts an item, against its anchor. */
@@ -366,11 +371,26 @@ export interface Project {
   detectedIcon: string;
   /** OrgID is the organization the project is in. */
   orgId: number;
+  stage: ProjectStage;
+  /** StageAt is when the project came to its stage. */
+  stageAt: number;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
   /** Counts are the project's items in each status. */
   counts: Counts;
+}
+
+/** ProjectActivity is how much a project has moved lately, for 全部项目. */
+export interface ProjectActivity {
+  projectId: number;
+  /** LastActive is when the project or one of its items last changed. */
+  lastActive: number;
+  /**
+   * Done lists when each of its items done since the time asked for was
+   * done, the earliest first. The page groups them by local day.
+   */
+  done: number[];
 }
 
 /** ProjectDraft is what the user fills in to add or edit a project. */
@@ -389,7 +409,18 @@ export interface ProjectDraft {
    * EditProject leaves the organization alone: see SetProjectOrg.
    */
   orgId: number;
+  /**
+   * Stage is the project's stage: "" for 立项中 when adding, and for
+   * leaving it as it is when editing.
+   */
+  stage: ProjectStage;
 }
+
+/**
+ * ProjectStage is how far a project has come. The user moves projects
+ * between the stages by hand, in any direction; it holds nothing back.
+ */
+export type ProjectStage = "planning" | "developing" | "testing" | "live" | "finished";
 
 /** Reclaim is what the files no text refers to take. */
 export interface Reclaim {
@@ -524,6 +555,12 @@ export interface Settings {
 
 /** Source identifies a local session store; the picker selects one source. */
 export type Source = "" | "claude" | "codex" | "codeg";
+
+/** StageStep is a stage a project came to, and when. */
+export interface StageStep {
+  stage: ProjectStage;
+  at: number;
+}
 
 /** StorageKind is a part of the data folder. */
 export type StorageKind = "database" | "images" | "files" | "wallpapers" | "other";
@@ -1000,6 +1037,14 @@ export const Atlas = {
   previewWindowOpacity(percent: number): Promise<void> {
     return call("Atlas.PreviewWindowOpacity", percent);
   },
+  /**
+   * ProjectActivity returns how much each project of an organization has
+   * moved lately, for 全部项目: when it last changed, and when each of its
+   * items done since since (Unix milliseconds) was done.
+   */
+  projectActivity(orgID: number, since: number): Promise<ProjectActivity[]> {
+    return call("Atlas.ProjectActivity", orgID, since);
+  },
   /** Projects returns every project, in the user's order. */
   projects(): Promise<Project[]> {
     return call("Atlas.Projects");
@@ -1202,6 +1247,13 @@ export const Atlas = {
    */
   setProjectOrg(id: number, orgID: number): Promise<Project> {
     return call("Atlas.SetProjectOrg", id, orgID);
+  },
+  /**
+   * SetProjectStage moves a project to another stage: planning (立项中),
+   * developing (开发中), testing (测试中), live (上线中) or finished (完结).
+   */
+  setProjectStage(id: number, stage: ProjectStage): Promise<Project> {
+    return call("Atlas.SetProjectStage", id, stage);
   },
   /**
    * SetSessionSource picks where the sessions to link items to are read

@@ -4,7 +4,7 @@ import { Atlas, events, type ItemType, type Module, type Project, type Source } 
 import { errorMessage } from "@/lib/api";
 import { projectIcon } from "@/lib/icons";
 import { isComposing } from "@/lib/keys";
-import { nextType, typeInfo, UNSORTED } from "@/lib/labels";
+import { finishedLast, nextType, typeInfo, UNSORTED } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/ui/kbd";
 import { TypeChip } from "@/components/app/item-marks";
@@ -88,7 +88,8 @@ export function CaptureApp() {
   const loadProjects = useCallback(async (want?: number) => {
     // Not known yet: the settings or the panel showing will tell.
     if (!orgId.current) return;
-    const list = (await Atlas.projects()).filter((p) => p.orgId === orgId.current);
+    // The finished ones last, as everywhere a project is picked.
+    const list = finishedLast((await Atlas.projects()).filter((p) => p.orgId === orgId.current));
     setProjects(list);
     setProjectId((current) => {
       const pick = want || current;
@@ -398,7 +399,14 @@ export function CaptureApp() {
         <Picker
           key="project"
           what="项目"
-          choices={projects.map((p) => ({ id: p.id, name: p.name, icon: FolderKanban, own: projectIcon(p), open: p.counts.todo + p.counts.doing }))}
+          choices={projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            icon: FolderKanban,
+            own: projectIcon(p),
+            open: p.counts.todo + p.counts.doing,
+            faded: p.stage === "finished",
+          }))}
           value={projectId}
           onPick={(id) => {
             pickProject(id);
@@ -629,6 +637,8 @@ interface Choice {
   own?: string;
   /** How many of its items are not done yet. */
   open?: number;
+  /** Drawn faint: a finished project. */
+  faded?: boolean;
 }
 
 interface PickerProps {
@@ -754,7 +764,7 @@ function Picker({ what, choices, value, onPick, onCreate, onClose }: PickerProps
             i,
             <>
               <EntityIcon icon={c.own ?? ""} fallback={c.icon} className="size-3.5 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{c.name}</span>
+              <span className={cn("min-w-0 flex-1 truncate", c.faded && "text-muted-foreground")}>{c.name}</span>
               {!!c.open && (
                 <span className="meta-mono shrink-0 text-muted-foreground" title={`未完成 ${c.open} 条`}>
                   {c.open}
@@ -785,7 +795,7 @@ function Picker({ what, choices, value, onPick, onCreate, onClose }: PickerProps
 
 /** A project added from the panel, to the organization it lists. */
 function newProject(name: string, orgId: number) {
-  return Atlas.addProject({ name, folderPath: "", icon: "", orgId });
+  return Atlas.addProject({ name, folderPath: "", icon: "", orgId, stage: "planning" });
 }
 
 /** What the panel shows before the organization has any project: a field to create the first. */

@@ -40,7 +40,7 @@ import type { Item, ItemStatus, ItemType } from "@/mygo";
 import { useFlip } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { isComposing } from "@/lib/keys";
-import { nextType, statusInfo, UNSORTED } from "@/lib/labels";
+import { finishedLast, nextType, statusInfo, UNSORTED } from "@/lib/labels";
 import { elapsed, formatTime, useNow } from "@/lib/time";
 import { errorMessage, run } from "@/lib/api";
 import { ancestors, applyMove, buildForest, linkSource, subtreeIds, topMost, type Row, type TreeRows } from "@/lib/tree";
@@ -1496,7 +1496,7 @@ export function statusActions(item: Item): StatusAction[] {
 function ItemMenuItems({ item }: { item: Item }) {
   const projects = useOrgProjects();
   const modules = useAtlas((s) => s.modules);
-  const others = projects.filter((p) => p.id !== item.projectId);
+  const others = finishedLast(projects).filter((p) => p.id !== item.projectId);
   const linked = useLinkSource(item.id) !== null;
   return (
     <>
@@ -1555,7 +1555,7 @@ function ItemMenuItems({ item }: { item: Item }) {
         <ContextMenuSubContent className="max-h-80 w-48 overflow-y-auto">
           {others.map((p) => (
             <ContextMenuItem key={p.id} onSelect={() => void moveItemToProject(item.id, p.id)}>
-              <span className="truncate">{p.name}</span>
+              <span className={cn("truncate", p.stage === "finished" && "text-muted-foreground")}>{p.name}</span>
             </ContextMenuItem>
           ))}
         </ContextMenuSubContent>
@@ -1576,7 +1576,7 @@ function SelectionMenuItems() {
   const ids = useMemo(() => inQueueOrder(items, selectedIds), [items, selectedIds]);
   const chosen = items.filter((i) => selectedIds.has(i.id));
   const all = (status: ItemStatus) => chosen.every((i) => i.status === status);
-  const others = projects.filter((p) => p.id !== projectId);
+  const others = finishedLast(projects).filter((p) => p.id !== projectId);
   // The module they are all in, if one.
   const module = chosen.every((i) => i.moduleId === chosen[0]?.moduleId) ? String(chosen[0]?.moduleId ?? "") : "";
   return (
@@ -1645,7 +1645,7 @@ function SelectionMenuItems() {
         <ContextMenuSubContent className="max-h-80 w-48 overflow-y-auto">
           {others.map((p) => (
             <ContextMenuItem key={p.id} onSelect={() => void moveItemsToProject(ids, p.id)}>
-              <span className="truncate">{p.name}</span>
+              <span className={cn("truncate", p.stage === "finished" && "text-muted-foreground")}>{p.name}</span>
             </ContextMenuItem>
           ))}
         </ContextMenuSubContent>

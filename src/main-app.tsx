@@ -34,6 +34,7 @@ import { SettingsDialog } from "@/components/app/settings-dialog";
 import { newProject, Sidebar } from "@/components/app/sidebar";
 import { TitleBar } from "@/components/app/title-bar";
 import { TrashView } from "@/components/app/trash";
+import { ProjectsBoard } from "@/components/app/projects-board";
 import { UpdateToast } from "@/components/app/update-toast";
 import { purgeHeld } from "@/lib/purge-key";
 import {
@@ -75,10 +76,10 @@ export function MainApp() {
   }, []);
   useShortcuts();
   const effects = useEffects();
-  // The panel fades in as another project or the trash opens in it; the
+  // The panel fades in as another project, the trash or 全部项目 opens in it; the
   // queue and the overview fade in on their own as they switch.
   const content = useRef<HTMLDivElement>(null);
-  useEntrance(content, view === "trash" ? "trash" : `project-${project?.id ?? 0}`);
+  useEntrance(content, view === "trash" || view === "projects" ? view : `project-${project?.id ?? 0}`);
 
   return (
     <TooltipProvider delayDuration={500}>
@@ -94,6 +95,8 @@ export function MainApp() {
               <div ref={content} className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {!ready ? null : view === "trash" ? (
                   <TrashView />
+                ) : view === "projects" ? (
+                  <ProjectsBoard />
                 ) : project ? (
                   view === "queue" ? (
                     <QueueLayout project={project} />

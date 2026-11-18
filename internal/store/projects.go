@@ -15,6 +15,57 @@ type Counts struct {
 	Done  int `json:"done"`
 }
 
+// ProjectStage is how far a project has come. The user moves projects
+// between the stages by hand, in any direction; it holds nothing back.
+type ProjectStage string
+
+// The stages of projects.
+const (
+	StagePlanning   ProjectStage = "planning"   // 立项中
+	StageDeveloping ProjectStage = "developing" // 开发中
+	StageTesting    ProjectStage = "testing"    // 测试中
+	StageLive       ProjectStage = "live"       // 上线中
+	StageFinished   ProjectStage = "finished"   // 完结
+)
+
+// StageStep is a stage a project came to, and when.
+type StageStep struct {
+	Stage ProjectStage `json:"stage"`
+	At    int64        `json:"at"`
+}
+
+// logStage records that the project came to stage at at.
+func logStage(tx *sql.Tx, id int64, stage ProjectStage, at int64) error {
+	_, err := tx.Exec(`INSERT INTO project_stages (project_id, stage, at) VALUES (?, ?, ?)`, id, stage, at)
+	return err
+}
+
+// StageHistory returns the stages the project came to, the first first.
+func (s *Store) StageHistory(id int64) ([]StageStep, error) {
+	rows, err := s.db.Query(`SELECT stage, at FROM project_stages WHERE project_id = ? ORDER BY at, id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	steps := []StageStep{}
+	for rows.Next() {
+		var st StageStep
+		if err := rows.Scan(&st.Stage, &st.At); err != nil {
+			return nil, err
+		}
+		steps = append(steps, st)
+	}
+	return steps, rows.Err()
+}
+
+func (st ProjectStage) valid() bool {
+	switch st {
+	case StagePlanning, StageDeveloping, StageTesting, StageLive, StageFinished:
+		return true
+	}
+	return false
+}
+
 // Project is a whole project, such as a game, with its modules and items.
 type Project struct {
 	ID int64 `json:"id"`
@@ -33,7 +84,10 @@ type Project struct {
 	// "image:<name>" picture, or "".
 	DetectedIcon string `json:"detectedIcon"`
 	// OrgID is the organization the project is in.
-	OrgID     int64 `json:"orgId"`
+	OrgID int64        `json:"orgId"`
+	Stage ProjectStage `json:"stage"`
+	// StageAt is when the project came to its stage.
+	StageAt   int64 `json:"stageAt"`
 	SortOrder int64 `json:"sortOrder"`
 	CreatedAt int64 `json:"createdAt"`
 	UpdatedAt int64 `json:"updatedAt"`
@@ -41,14 +95,14 @@ type Project struct {
 	Counts Counts `json:"counts"`
 }
 
-const projectColumns = `p.id, p.name, p.description, p.folder_path, p.icon, p.detected_icon, p.org_id, p.sort_order, p.created_at, p.updated_at,
+const projectColumns = `p.id, p.name, p.description, p.folder_path, p.icon, p.detected_icon, p.org_id, p.stage, p.stage_at, p.sort_order, p.created_at, p.updated_at,
 	COALESCE(SUM(i.status = 'todo'), 0), COALESCE(SUM(i.status = 'doing'), 0), COALESCE(SUM(i.status = 'done'), 0)`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanProject(row scanner) (Project, error) {
 	var p Project
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.FolderPath, &p.Icon, &p.DetectedIcon, &p.OrgID, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.FolderPath, &p.Icon, &p.DetectedIcon, &p.OrgID, &p.Stage, &p.StageAt, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
 		&p.Counts.Todo, &p.Counts.Doing, &p.Counts.Done)
 	if err != nil {
 		return p, err
@@ -141,6 +195,9 @@ type ProjectDraft struct {
 	// OrgID is the organization a new project goes to, 0 for 个人.
 	// EditProject leaves the organization alone: see SetProjectOrg.
 	OrgID int64 `json:"orgId"`
+	// Stage is the project's stage: "" for 立项中 when adding, and for
+	// leaving it as it is when editing.
+	Stage ProjectStage `json:"stage"`
 }
 
 // clean checks the draft and fills in the name from the folder.
@@ -161,6 +218,9 @@ func (d ProjectDraft) clean() (ProjectDraft, error) {
 	d.Name = name
 	if err := checkIcon(d.Icon); err != nil {
 		return d, err
+	}
+	if d.Stage != "" && !d.Stage.valid() {
+		return d, userErr("未知的阶段：%s", d.Stage)
 	}
 	return d, nil
 }
@@ -192,6 +252,10 @@ func (s *Store) AddProject(d ProjectDraft, detected string) (Project, error) {
 	if org == 0 {
 		org = PersonalOrg
 	}
+	stage := d.Stage
+	if stage == "" {
+		stage = StagePlanning
+	}
 	var p Project
 	err = s.inTx(func(tx *sql.Tx) error {
 		if _, err := orgIn(tx, org); err != nil {
@@ -201,14 +265,17 @@ func (s *Store) AddProject(d ProjectDraft, detected string) (Project, error) {
 			return err
 		}
 		now := s.millis()
-		res, err := tx.Exec(`INSERT INTO projects (name, folder_path, icon, detected_icon, org_id, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM projects), ?, ?)`,
-			d.Name, d.FolderPath, d.Icon, detected, org, now, now)
+		res, err := tx.Exec(`INSERT INTO projects (name, folder_path, icon, detected_icon, org_id, stage, stage_at, sort_order, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM projects), ?, ?)`,
+			d.Name, d.FolderPath, d.Icon, detected, org, stage, now, now, now)
 		if err != nil {
 			return err
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
+			return err
+		}
+		if err := logStage(tx, id, stage, now); err != nil {
 			return err
 		}
 		p, err = projectIn(tx, id)
@@ -218,7 +285,8 @@ func (s *Store) AddProject(d ProjectDraft, detected string) (Project, error) {
 }
 
 // EditProject replaces the name, folder and icon of the project with id,
-// and the icon detected in its folder.
+// and the icon detected in its folder; and its stage, when the draft has
+// one.
 func (s *Store) EditProject(id int64, d ProjectDraft, detected string) (Project, error) {
 	d, err := d.clean()
 	if err != nil {
@@ -236,8 +304,44 @@ func (s *Store) EditProject(id int64, d ProjectDraft, detected string) (Project,
 		if err := projectNameFree(tx, d.Name, id, cur.OrgID); err != nil {
 			return err
 		}
+		now := s.millis()
 		if _, err := tx.Exec(`UPDATE projects SET name = ?, folder_path = ?, icon = ?, detected_icon = ?, updated_at = ?
-			WHERE id = ?`, d.Name, d.FolderPath, d.Icon, detected, s.millis(), id); err != nil {
+			WHERE id = ?`, d.Name, d.FolderPath, d.Icon, detected, now, id); err != nil {
+			return err
+		}
+		if d.Stage != "" && d.Stage != cur.Stage {
+			if _, err := tx.Exec(`UPDATE projects SET stage = ?, stage_at = ? WHERE id = ?`, d.Stage, now, id); err != nil {
+				return err
+			}
+			if err := logStage(tx, id, d.Stage, now); err != nil {
+				return err
+			}
+		}
+		p, err = projectIn(tx, id)
+		return err
+	})
+	return p, err
+}
+
+// SetProjectStage moves the project to stage, from now on. Set to the
+// stage it is at, it is left as it was.
+func (s *Store) SetProjectStage(id int64, stage ProjectStage) (Project, error) {
+	if !stage.valid() {
+		return Project{}, userErr("未知的阶段：%s", stage)
+	}
+	var p Project
+	err := s.inTx(func(tx *sql.Tx) error {
+		now := s.millis()
+		res, err := tx.Exec(`UPDATE projects SET stage = ?1, stage_at = ?2, updated_at = ?2 WHERE id = ?3 AND stage != ?1`, stage, now, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			// The same stage, or no such project.
+			if _, err := projectIn(tx, id); err != nil {
+				return err
+			}
+		} else if err := logStage(tx, id, stage, now); err != nil {
 			return err
 		}
 		p, err = projectIn(tx, id)

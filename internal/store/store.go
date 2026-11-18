@@ -122,7 +122,7 @@ func (s *Store) millis() int64 { return s.now().UnixMilli() }
 
 // schemaVersion is the structure this code reads and writes, kept in the
 // database's user_version.
-const schemaVersion = 7
+const schemaVersion = 9
 
 // migrations[v] brings a database from version v to v+1.
 var migrations = []string{
@@ -251,6 +251,25 @@ CREATE TABLE orgs (
 INSERT INTO orgs (id, name, created_at) VALUES (1, '个人', CAST(strftime('%s', 'now') AS INTEGER) * 1000);
 ALTER TABLE projects ADD COLUMN org_id INTEGER NOT NULL DEFAULT 1;
 CREATE INDEX projects_by_org ON projects (org_id);`,
+	// Project stages, which the user moves a project through by hand: the
+	// projects so far are under way, since they hold items. stage_at is
+	// when the project came to its stage, their creation for those.
+	7: `
+ALTER TABLE projects ADD COLUMN stage TEXT NOT NULL DEFAULT 'developing'
+	CHECK (stage IN ('planning', 'developing', 'testing', 'live', 'finished'));
+ALTER TABLE projects ADD COLUMN stage_at INTEGER NOT NULL DEFAULT 0;
+UPDATE projects SET stage_at = created_at;`,
+	// The stages each project went through, one row each time it came to
+	// one; the projects so far start from where they are.
+	8: `
+CREATE TABLE project_stages (
+	id         INTEGER PRIMARY KEY,
+	project_id INTEGER NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+	stage      TEXT    NOT NULL CHECK (stage IN ('planning', 'developing', 'testing', 'live', 'finished')),
+	at         INTEGER NOT NULL
+);
+CREATE INDEX project_stages_by_project ON project_stages (project_id, at);
+INSERT INTO project_stages (project_id, stage, at) SELECT id, stage, stage_at FROM projects;`,
 }
 
 // migrate applies the migrations the database lacks, each in a transaction

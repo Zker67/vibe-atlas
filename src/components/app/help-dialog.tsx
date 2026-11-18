@@ -7,12 +7,14 @@ import {
   Copy,
   CornerDownRight,
   FileText,
+  Flag,
   FolderOpen,
   Globe,
   Hourglass,
   Images,
   Keyboard,
   LayoutDashboard,
+  LayoutGrid,
   Lightbulb,
   Link2,
   ListChecks,
@@ -527,6 +529,12 @@ function OverviewSection() {
       </Feature>
       <Feature icon={Smile} title="图标">
         点侧栏里项目或模块的图标就能换，右键「编辑项目」「编辑模块」里也能改：内置图标、emoji 或一张本机图片。项目选「自动」就用文件夹里检测到的图标。
+      </Feature>
+      <Feature icon={Flag} title="项目阶段">
+        每个项目有一个阶段：立项中、开发中、测试中、上线中、完结，只由你自己切换。点项目名右边的阶段标签，或右键项目「阶段」就能改；总览里的「阶段历程」画出每个阶段用了多久。完结的项目收进侧栏底部的「已完结」，点一下展开。
+      </Feature>
+      <Feature icon={LayoutGrid} title="全部项目">
+        点侧栏项目列表最上面的「全部项目」，一页看当前组织的所有项目：各阶段有几个、改进点进度、近 28 天每天完成多少，以及每个项目的卡片。点一个阶段只看它，点卡片打开项目，右键卡片改阶段；<Kbd>Esc</Kbd> 返回。
       </Feature>
     </Section>
   );

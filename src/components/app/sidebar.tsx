@@ -1,10 +1,13 @@
 import {
+  Archive,
   ArrowRightLeft,
   BookOpen,
   Boxes,
+  ChevronRight,
   CornerDownRight,
   FolderKanban,
   Inbox,
+  LayoutGrid,
   LayoutList,
   Plus,
   Settings,
@@ -18,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { run } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { Glide } from "@/lib/motion";
-import { UNSORTED } from "@/lib/labels";
+import { stageInfo, UNSORTED } from "@/lib/labels";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -50,12 +53,13 @@ import {
   type ModuleFilter,
 } from "@/state/atlas";
 import { askConfirm, askModule, askProject, openHelp, openSettings } from "@/state/dialogs";
-import { useSidebar } from "@/state/sidebar";
+import { toggleFinished, useSidebar } from "@/state/sidebar";
 import { ModuleIcon, OrgIcon, ProjectIcon } from "./entity-icon";
 import { IconButton } from "./icon-button";
 import { IconPopover } from "./icon-picker";
 import { useModuleDropOver } from "./queue";
 import { SortableList, SortableRow } from "./sortable";
+import { StageContextSub } from "./stage";
 
 export function newProject() {
   askProject();
@@ -192,6 +196,8 @@ interface RowProps {
   onClick(): void;
   /** Shown before the count: the project has something doing. */
   doing?: boolean;
+  /** In the rail, said after the name as the pointer rests on the row: a project's stage. */
+  tipNote?: string;
   onDoubleClick?(): void;
   /** Takes the label's place: the field that renames the row. */
   editor?: ReactNode;
@@ -205,7 +211,7 @@ const SIDEBAR_GLIDE = { className: "bg-sidebar-accent in-[.dragging-rows]:invisi
 /** The classes of a row's icon. */
 const rowIcon = (active: boolean) => cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground");
 
-function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDoubleClick, editor, dropModule }: RowProps) {
+function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, tipNote, onDoubleClick, editor, dropModule }: RowProps) {
   const collapsed = useSidebar((s) => s.collapsed);
   const Tag = editor ? "div" : "button";
   const dropOver = useModuleDropOver(dropModule ?? -1);
@@ -214,7 +220,16 @@ function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDou
   // room for a field, so no renaming there.
   if (collapsed) {
     return (
-      <RailTip show tip={<>{label}{count !== undefined && count > 0 && tipMeta(count)}</>}>
+      <RailTip
+        show
+        tip={
+          <>
+            {label}
+            {tipNote && <span className="opacity-60">{tipNote}</span>}
+            {count !== undefined && count > 0 && tipMeta(count)}
+          </>
+        }
+      >
         <button
           type="button"
           aria-label={label}
@@ -265,21 +280,80 @@ function Row({ icon: Icon, iconNode, label, count, active, onClick, doing, onDou
   );
 }
 
+/**
+ * 全部项目 first, then the organization's projects in the user's order,
+ * the finished ones in their own list at the bottom under 已完结 N, folded
+ * away until opened; the project open shows there even so. Each list is
+ * dragged on its own.
+ */
 function Projects() {
   const projects = useOrgProjects();
-  const projectId = useAtlas((s) => s.projectId);
+  const board = useAtlas((s) => s.view === "projects");
+  // On 全部项目, its row is the one picked.
+  const projectId = useAtlas((s) => (s.view === "projects" ? 0 : s.projectId));
+  const openId = useAtlas((s) => s.projectId);
+  const finishedOpen = useSidebar((s) => s.finishedOpen);
+  const going = projects.filter((p) => p.stage !== "finished");
+  const finished = projects.filter((p) => p.stage === "finished");
+  const finishedShown = finishedOpen ? finished : finished.filter((p) => p.id === openId);
   return (
     <section className="flex max-h-[45%] min-h-0 flex-col">
       <SectionHeader title="项目" addLabel="新建项目" onAdd={newProject} />
       <Scroller viewportClassName="relative flex-initial px-2 pb-2">
         <Glide {...SIDEBAR_GLIDE} />
-        <SortableList ids={projects.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
-          {projects.map((p) => (
+        {projects.length > 0 && (
+          <Row
+            icon={LayoutGrid}
+            label="全部项目"
+            count={going.length}
+            active={board}
+            onClick={() => setView(board ? "queue" : "projects")}
+          />
+        )}
+        <SortableList ids={going.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
+          {going.map((p) => (
+            <ProjectRow key={p.id} project={p} active={p.id === projectId} />
+          ))}
+        </SortableList>
+        {finished.length > 0 && <FinishedHeader count={finished.length} open={finishedOpen} />}
+        <SortableList ids={finishedShown.map((p) => p.id)} onMove={(id, overId) => moveProject(id, overId)}>
+          {finishedShown.map((p) => (
             <ProjectRow key={p.id} project={p} active={p.id === projectId} />
           ))}
         </SortableList>
       </Scroller>
     </section>
+  );
+}
+
+/** 已完结 N, over the finished projects: a click shows them or folds them away. */
+function FinishedHeader({ count, open }: { count: number; open: boolean }) {
+  const collapsed = useSidebar((s) => s.collapsed);
+  const label = open ? "收起已完结的项目" : "展开已完结的项目";
+  return (
+    <RailTip show={collapsed} tip={<>{label}{tipMeta(count)}</>}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={collapsed ? label : undefined}
+        onClick={toggleFinished}
+        className={cn(
+          "signal-row mt-1 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground",
+          collapsed && "justify-center px-0",
+          collapsed && open && "text-foreground",
+        )}
+      >
+        {collapsed ? (
+          <Archive className="size-4 shrink-0" />
+        ) : (
+          <>
+            <ChevronRight className={cn("size-3.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
+            <span className="flex-1">已完结</span>
+            <span className="meta-mono opacity-70">{count}</span>
+          </>
+        )}
+      </button>
+    </RailTip>
   );
 }
 
@@ -303,6 +377,7 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
               label={p.name}
               count={p.counts.todo + p.counts.doing}
               doing={p.counts.doing > 0}
+              tipNote={stageInfo(p.stage).label}
               active={active}
               onClick={() => openProject(p.id)}
               onDoubleClick={renaming ? undefined : () => setRenaming(true)}
@@ -325,6 +400,7 @@ function ProjectRow({ project: p, active }: { project: Project; active: boolean 
             <SquarePen />
             编辑项目
           </ContextMenuItem>
+          <StageContextSub project={p} />
           {otherOrgs.length > 0 && (
             <ContextMenuSub>
               <ContextMenuSubTrigger>

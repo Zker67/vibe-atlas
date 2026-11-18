@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Boxes, FolderKanban, FolderOpen, FolderPlus, Info, LoaderCircle, Pencil, Wand, X } from "lucide-react";
-import { Atlas } from "@/mygo";
+import { Atlas, type ProjectStage } from "@/mygo";
 import { errorMessage, run } from "@/lib/api";
 import { isComposing } from "@/lib/keys";
 import { cn } from "@/lib/utils";
+import { STAGES } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,12 +13,13 @@ import { addProject, createModule, createOrg, detectProjectIcon, editOrg, editPr
 import { useDialogs, type ModuleRequest, type OrgRequest, type ProjectRequest } from "@/state/dialogs";
 import { EntityIcon, orgFallback } from "./entity-icon";
 import { IconPopover } from "./icon-picker";
+import { Segments } from "./item-detail";
 
 const closeProject = () => useDialogs.setState({ project: null });
 const closeModule = () => useDialogs.setState({ module: null });
 const closeOrg = () => useDialogs.setState({ org: null });
 
-/** The dialog that adds a project, or edits its icon, name and folder. */
+/** The dialog that adds a project, or edits its icon, name, folder and stage. */
 export function ProjectDialog() {
   const request = useDialogs((s) => s.project);
   return (
@@ -37,6 +39,7 @@ function ProjectForm({ request }: { request: ProjectRequest }) {
   const [folderExists, setFolderExists] = useState(editing ? editing.folderExists : true);
   const [icon, setIcon] = useState(editing?.icon ?? "");
   const [detected, setDetected] = useState(editing?.detectedIcon ?? "");
+  const [stage, setStage] = useState<ProjectStage>(editing?.stage ?? "planning");
   const [picking, setPicking] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState("");
@@ -62,7 +65,7 @@ function ProjectForm({ request }: { request: ProjectRequest }) {
     if (busy) return;
     setBusy(true);
     try {
-      const draft = { name, folderPath: folder, icon };
+      const draft = { name, folderPath: folder, icon, stage };
       if (editing) await editProject(editing.id, draft);
       else await addProject(draft);
       closeProject();
@@ -198,6 +201,11 @@ function ProjectForm({ request }: { request: ProjectRequest }) {
           )}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="w-16 shrink-0 text-center text-xs text-muted-foreground">阶段</span>
+        <Segments<ProjectStage> label="项目阶段" options={STAGES} value={stage} onPick={setStage} />
       </div>
 
       <DialogFooter>

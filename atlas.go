@@ -242,6 +242,23 @@ func (a *Atlas) SetProjectDescription(id int64, description string) (store.Proje
 	return do(a, id, func(db *store.Store) (store.Project, error) { return db.SetProjectDescription(id, description) })
 }
 
+// SetProjectStage moves a project to another stage: planning (立项中),
+// developing (开发中), testing (测试中), live (上线中) or finished (完结).
+func (a *Atlas) SetProjectStage(id int64, stage store.ProjectStage) (store.Project, error) {
+	return do(a, 0, func(db *store.Store) (store.Project, error) { return db.SetProjectStage(id, stage) })
+}
+
+// ProjectActivity returns how much each project of an organization has
+// moved lately, for 全部项目: when it last changed, and when each of its
+// items done since since (Unix milliseconds) was done.
+func (a *Atlas) ProjectActivity(orgID, since int64) ([]store.ProjectActivity, error) {
+	db, err := a.store()
+	if err != nil {
+		return nil, err
+	}
+	return db.ProjectActivity(orgID, since)
+}
+
 // ChooseProjectFolder asks for a folder and binds the project to it, with
 // the project's own icon found there. It returns the project unchanged
 // when the user cancels.

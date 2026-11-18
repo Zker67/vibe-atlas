@@ -31,6 +31,9 @@ type Overview struct {
 	// Ready lists the items to do that have prerequisites, all done: those
 	// that waited and may start now, in the order of the items to do.
 	Ready []Item `json:"ready"`
+	// Stages lists the stages the project came to, the first first: since
+	// it was made, or since the app began to keep them.
+	Stages []StageStep `json:"stages"`
 }
 
 func (c *Counts) add(status ItemStatus) {
@@ -61,6 +64,10 @@ func (s *Store) Overview(projectID int64) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	stages, err := s.StageHistory(projectID)
+	if err != nil {
+		return Overview{}, err
+	}
 	o := Overview{
 		ProjectID: projectID,
 		Modules:   make([]ModuleStats, 0, len(modules)+1),
@@ -68,6 +75,7 @@ func (s *Store) Overview(projectID int64) (Overview, error) {
 		Doing:     []Item{},
 		Done:      []Item{},
 		Ready:     []Item{},
+		Stages:    stages,
 	}
 	status := make(map[int64]ItemStatus, len(items))
 	for _, it := range items {

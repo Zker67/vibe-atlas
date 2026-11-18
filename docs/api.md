@@ -14,9 +14,9 @@
 | 分组 | 方法 | 说明 |
 |---|---|---|
 | 组织 | `orgs`、`createOrg`、`editOrg`、`deleteOrg`、`setProjectOrg`、`setCurrentOrg` | `orgs` 是全部组织，「个人」（`personal` 为真）在最前，其余按建立的先后。`createOrg(draft)` / `editOrg(id, draft)` 收 `OrgDraft`（`name`、`icon`），重名报错。`deleteOrg(id)` 把它的项目移到「个人」并返回个数，删「个人」报错。`setProjectOrg(id, orgId)` 把项目移到另一个组织的最后，返回项目。`setCurrentOrg` 记下主窗口的当前组织（快速记录小窗跟着它），不发 `changed`；其余都发 `changed`（`projectId` 为 `0`） |
-| 项目 | `projects`、`createProject`、`renameProject`、`setProjectDescription`、`deleteProject`、`reorderProjects` | `projects` 是所有组织的项目，按用户排序，前端按 `orgId` 筛出当前组织的；`createProject(name)` 放进当前组织；重名报错（跨所有组织检查，在别的组织时提示里写出组织名） |
+| 项目 | `projects`、`createProject`、`renameProject`、`setProjectDescription`、`setProjectStage`、`deleteProject`、`reorderProjects` | `projects` 是所有组织的项目，按用户排序，前端按 `orgId` 筛出当前组织的，再把完结的放到侧栏底部；`createProject(name)` 放进当前组织，阶段是立项中；重名报错（跨所有组织检查，在别的组织时提示里写出组织名）。`setProjectStage(id, stage)` 收 `ProjectStage`，切到别的阶段时记下 `stageAt` 并追加一步阶段历程，切到当前阶段原样返回，未知的阶段报错。`projectActivity(orgId, since)` 给「全部项目」用：组织里每个项目（按用户排序）的 `ProjectActivity`，只读，不发 `changed`；组织不存在时报错 |
 | 项目文件夹 | `chooseProjectFolder`、`clearProjectFolder`、`openProjectFolder`、`newSessionInFolder` | 选择时弹出系统对话框，取消时原样返回项目；绑定时检测项目自己的图标，解除时清空检测结果；`newSessionInFolder` 按会话来源打开在这个文件夹新建会话的链接（Claude Code、Codex），没绑定、文件夹不存在、来源是 codeg 或不使用时报错 |
-| 项目弹窗与图标 | `chooseFolder`、`addProject`、`editProject`、`setProjectIcon`、`detectProjectIcon`、`setModuleIcon`、`chooseIconImage` | `chooseFolder(current)` 只弹系统对话框并检测，不保存：返回 `FolderChoice`（`path`，取消时为空；`name` 文件夹名；`icon` 检测到的图标或空）。`addProject(draft)` / `editProject(id, draft)` 收 `ProjectDraft`（`name`、`folderPath`、`icon`、`orgId`：新建时放进的组织，`0` 是「个人」，编辑时不看），名称为空且有文件夹时用文件夹名，文件夹变了时 Go 重新检测图标。`detectProjectIcon(id)` 重新检测并返回项目。`chooseIconImage()` 选一张本机图片（PNG、JPG、WebP、GIF、SVG），PNG / JPG / GIF 缩到 128 像素以内存成 PNG，WebP 和 SVG 原样，返回 `image:<文件名>`，取消时返回空；不写进任何项目或模块 |
+| 项目弹窗与图标 | `chooseFolder`、`addProject`、`editProject`、`setProjectIcon`、`detectProjectIcon`、`setModuleIcon`、`chooseIconImage` | `chooseFolder(current)` 只弹系统对话框并检测，不保存：返回 `FolderChoice`（`path`，取消时为空；`name` 文件夹名；`icon` 检测到的图标或空）。`addProject(draft)` / `editProject(id, draft)` 收 `ProjectDraft`（`name`、`folderPath`、`icon`、`orgId`：新建时放进的组织，`0` 是「个人」，编辑时不看；`stage`：新建时为空是立项中，编辑时为空不改，和原来不同时记下 `stageAt`），名称为空且有文件夹时用文件夹名，文件夹变了时 Go 重新检测图标。`detectProjectIcon(id)` 重新检测并返回项目。`chooseIconImage()` 选一张本机图片（PNG、JPG、WebP、GIF、SVG），PNG / JPG / GIF 缩到 128 像素以内存成 PNG，WebP 和 SVG 原样，返回 `image:<文件名>`，取消时返回空；不写进任何项目或模块 |
 | 模块 | `modules`、`createModule`、`renameModule`、`deleteModule`、`reorderModules` | `deleteModule` 返回变成「未分类」的改进点条数 |
 | 改进点 | `items`、`createItem`、`setItemTitle`、`setItemType`、`setItemModule`、`setItemNote`、`setItemDeeplink`、`setItemStatus`、`reopenItem`、`moveItem`、`mergeItems`、`moveItemToProject`、`deleteItem` | `items` 是项目的全部改进点（含子改进点），前端按 `parentId` 和 `sortOrder` 建树。`moveItem(id, anchorId, place)`：`place` 为 `before` / `after`（放到 anchor 同一层的前后）或 `inside`（成为 anchor 的最后一个子改进点）。`mergeItems(id, targetId)` 在 target 的位置新建父改进点并返回它；`unmergeItems(parentId)` 撤回最近一次合并（只认这一次，程序重启后就没有了），两条放回原处、删掉父改进点并返回这两条，父改进点合并后又加了子改进点、备注、链接、前置或改了状态时拒绝。`moveItemToProject` 带上子孙；`deleteItem` 让子改进点上移一层 |
 | 多条改进点 | `setItemsType`、`setItemsModule`、`moveItemsToProject`、`deleteItems` | 队列多选用：参数是 `ids`，每个方法在一个事务里完成，任何一条失败整组都不改，成功后每个涉及的项目只发一次 `changed`。`setItemsModule` 只改这些条目本身；`moveItemsToProject` 按 `ids` 的顺序排到目标项目最后，在另一条下面的跟着上级走、保持层级；`deleteItems` 让没删的子改进点上移到最近一层没删的上级的位置。批量改状态和拖动不新增接口，前端依次调用 `setItemStatus` / `reopenItem` / `moveItem` |
@@ -49,13 +49,15 @@
 
 | 结构 | 主要字段 |
 |---|---|
-| `Project` | `id`、`name`、`description`（Markdown）、`folderPath`、`folderExists`、`icon`（用户选的，`""` 是自动）、`detectedIcon`（文件夹里检测到的，`image:<文件名>` 或空）、`orgId`（所在的组织）、`sortOrder`、`counts` |
+| `Project` | `id`、`name`、`description`（Markdown）、`folderPath`、`folderExists`、`icon`（用户选的，`""` 是自动）、`detectedIcon`（文件夹里检测到的，`image:<文件名>` 或空）、`orgId`（所在的组织）、`stage`（`planning` 立项中 / `developing` 开发中 / `testing` 测试中 / `live` 上线中 / `finished` 完结）、`stageAt`（到这个阶段的时间）、`sortOrder`、`counts` |
 | `Org` | `id`、`name`、`icon`（`""` 是默认图标）、`personal`（是不是「个人」）、`createdAt` |
 | `Module` | `id`、`projectId`、`name`、`icon`（`""` 是默认图标）、`sortOrder`、`counts` |
 | 图标的取值 | `""`（默认）、`lucide:<名称>`（内置图标，名称同 lucide-react）、`emoji:<emoji>`（最多 12 个码位）、`image:<文件名>`（数据目录 `images/` 里的图片，图标可以是 `.svg`，备注里的图片不收 SVG）。Go 端 `internal/store/icons.go` 校验，前端 `src/lib/icons.ts` 解析；不认识的内置图标名显示成默认图标 |
 | `Item` | `id`、`projectId`、`parentId`（`0` 是顶层）、`moduleId`（`0` 是未分类）、`type`（`improve` / `bug` / `feature`）、`status`（`todo` / `doing` / `done`）、`title`、`note`、`deeplink`、`sortOrder`、`createdAt`、`startedAt`、`doneAt`、`updatedAt` |
 | `Session` | `agent`（图标用：`claude`、`codex`、`gemini`，或 codeg 里其他 agent 的名字）、`id`、`title`、`cwd`、`updatedAt`、`link`（`codeg://session/<id>`、`codex://threads/<id>` 或 `claude-session:<id>`） |
-| `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done`、`ready`（设了前置、前置都已完成的待办，按待办的顺序） |
+| `Overview` | `totals`、`modules`（每个模块的数量，最后是未分类）、`types`、`doing`、`done`、`ready`（设了前置、前置都已完成的待办，按待办的顺序）、`stages`（阶段历程，`StageStep` 列表，最早的在前） |
+| `StageStep` | `stage`、`at`（到这个阶段的时间） |
+| `ProjectActivity` | `projectId`、`lastActive`（项目本身或它的改进点最近一次改动的时间）、`done`（`since` 以来每条已完成改进点的完成时间，最早的在前；按天分组由前端按本地时间做） |
 | `Dep` | `fromId`（前置，先做的那条）、`toId`（等它的那条）、`createdAt` |
 | `CanvasSpot` | `itemId`、`x`、`y`：方块左上角在流程图上的坐标（像素） |
 | `TrashEntry` | `id`（条目的 id）、`batch`（同一次删除的条目相同）、`deletedAt`、`item`（删除时的 `Item`，`parentId` 是当时的上级）、`lifted`（当时上移的子改进点条数） |
@@ -80,7 +82,8 @@ SQLite 文件，表结构在 [`internal/store/store.go`](../internal/store/store
 | 表 | 说明 |
 |---|---|
 | `orgs` | 组织：`name` 不区分英文大小写唯一，`icon` 是用户选的图标；`id = 1` 是「个人」，建表时插入，不能删除 |
-| `projects` | 项目名不区分英文大小写唯一（跨所有组织）；`org_id` 是所在的组织（默认 1，不设外键：SQLite 开着外键时加带 `REFERENCES` 的列只能默认空值，由 `internal/store/orgs.go` 保证指向存在的组织，删除组织时先把项目移到「个人」）；`icon` 是用户选的图标，`detected_icon` 是文件夹里检测到的（换文件夹时清空） |
+| `projects` | 项目名不区分英文大小写唯一（跨所有组织）；`org_id` 是所在的组织（默认 1，不设外键：SQLite 开着外键时加带 `REFERENCES` 的列只能默认空值，由 `internal/store/orgs.go` 保证指向存在的组织，删除组织时先把项目移到「个人」）；`icon` 是用户选的图标，`detected_icon` 是文件夹里检测到的（换文件夹时清空）；`stage` 是阶段（`CHECK` 只收五个值），`stage_at` 是到这个阶段的时间 |
+| `project_stages` | 阶段历程：每次到一个阶段一行（`project_id`、`stage`、`at`）；删除项目时一起删除；升级到版本 9 时每个项目写入当前阶段一行 |
 | `modules` | 同一项目内模块名唯一；删除项目时一起删除；`icon` 是用户选的图标 |
 | `items` | 删除项目时一起删除；删除模块时 `module_id` 置空（未分类）；`type`、`status` 有取值约束。`parent_id` 指向上级改进点（空是顶层），`sort_order` 是同一个上级下的顺序；`auto_title` 为 1 表示标题由程序按子改进点生成，用户改名后为 0；`done_with` 指向带着它一起完成的上级改进点（空表示不是跟着完成的），那条上级撤回完成时它跟着撤回，手动改状态或上级删除时清空 |
 | `trash` | 回收站：删除时的整行内容，加上 `batch`、`deleted_at`、`item_id`（恢复时用回这个 id；新改进点的 id 跳过回收站里的，所以不会被占用）、当时的上级 `parent_id` 和它的 `parent_created`（创建时间，分辨后来占用同一 id 的条目）、在同级里的位置 `place`、`lifted`（上移的子改进点）和 `carried`（它带着完成的条目），后两项是 `{"id","created"}` 的 JSON 列表；`deps` 是它的前置和后续（`{"id","created","next"}`，`next` 为真表示对方等它），`canvas_x`、`canvas_y` 是它在流程图上的位置（没存过时为空）。删除项目时一起删除；模块、上级不设外键，恢复时检查还在不在 |
@@ -92,6 +95,6 @@ SQLite 文件，表结构在 [`internal/store/store.go`](../internal/store/store
 
 ## 变更规则
 
-- 结构版本记在 SQLite 的 `user_version`（当前为 7；版本 2 加了 `parent_id`、`auto_title`，版本 3 加了 `done_with`，版本 4 加了 `trash` 表，版本 5 加了项目的 `icon`、`detected_icon` 和模块的 `icon`，版本 6 加了 `item_deps`、`item_canvas` 表和回收站的 `deps`、`canvas_x`、`canvas_y`，版本 7 加了 `orgs` 表和项目的 `org_id`，原有项目都归到「个人」）。改表结构时在 `migrations` 末尾追加一段迁移，每段迁移和版本号在同一个事务里提交，失败时数据库保持原样。
+- 结构版本记在 SQLite 的 `user_version`（当前为 9；版本 2 加了 `parent_id`、`auto_title`，版本 3 加了 `done_with`，版本 4 加了 `trash` 表，版本 5 加了项目的 `icon`、`detected_icon` 和模块的 `icon`，版本 6 加了 `item_deps`、`item_canvas` 表和回收站的 `deps`、`canvas_x`、`canvas_y`，版本 7 加了 `orgs` 表和项目的 `org_id`，原有项目都归到「个人」，版本 8 加了项目的 `stage`、`stage_at`，原有项目都是开发中、`stage_at` 取创建时间，版本 9 加了 `project_stages` 表）。改表结构时在 `migrations` 末尾追加一段迁移，每段迁移和版本号在同一个事务里提交，失败时数据库保持原样。
 - 数据文件的版本比程序新时拒绝打开，不覆盖。
 - 计划阶段的草案写入 `plans/`；确定后的长期合同同步到本文件。

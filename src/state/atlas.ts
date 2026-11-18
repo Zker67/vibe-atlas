@@ -14,12 +14,15 @@ import {
   type Overview,
   type Place,
   type Project,
+  type ProjectActivity,
   type ProjectDraft,
+  type ProjectStage,
   type Settings,
   type TrashEntry,
 } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
 import { brokenByMove } from "@/lib/deps";
+import { stageInfo } from "@/lib/labels";
 import {
   ancestors,
   applyMove,
@@ -33,8 +36,11 @@ import {
   type TreeNode,
 } from "@/lib/tree";
 
-/** What the panel shows: the open project's queue, flow chart or overview, or the trash of every project. */
-export type View = "queue" | "flow" | "overview" | "trash";
+/**
+ * What the panel shows: the open project's queue, flow chart or overview,
+ * the trash of every project, or 全部项目, the organization's projects.
+ */
+export type View = "queue" | "flow" | "overview" | "trash" | "projects";
 export type TypeFilter = ItemType | "all";
 /** A module's id, 0 for the items without a module, or all. */
 export type ModuleFilter = number | "all";
@@ -84,6 +90,9 @@ interface AtlasState {
   trashCount: number;
   /** What the trash holds, the last deleted first; fetched while it shows. */
   trash: TrashEntry[];
+  /** For 全部项目: how much each project of the organization activityOrg has moved lately. */
+  activity: ProjectActivity[];
+  activityOrg: number;
 }
 
 const COLLAPSED_KEY = "vibe-atlas-collapsed";
@@ -140,6 +149,8 @@ export const useAtlas = create<AtlasState>(() => ({
   newChildFor: 0,
   trashCount: 0,
   trash: [],
+  activity: [],
+  activityOrg: 0,
 }));
 
 const get = useAtlas.getState;
@@ -231,6 +242,7 @@ async function load() {
   let items: Item[] = [];
   let deps: Dep[] = [];
   let overview: Overview | null = null;
+  const activity = get().view === "projects" && orgId ? Atlas.projectActivity(orgId, activitySince()) : null;
   if (projectId) {
     [modules, items, deps] = await Promise.all([Atlas.modules(projectId), Atlas.items(projectId), Atlas.deps(projectId)]);
     if (get().view === "overview") overview = await Atlas.overview(projectId);
@@ -239,8 +251,11 @@ async function load() {
     // The user opened another project or organization meanwhile: fetch that one.
     again = true;
     set({ orgs, projects, trashCount, ...(trash ? { trash } : {}) });
+    // Fetched again with the rest; its failure then is the one to show.
+    activity?.catch(() => undefined);
     return;
   }
+  const fresh = activity ? { activity: await activity, activityOrg: orgId } : {};
   const present = new Set(items.map((i) => i.id));
   set((s) => ({
     ready: true,
@@ -250,6 +265,7 @@ async function load() {
     projects,
     trashCount,
     ...(trash ? { trash } : {}),
+    ...fresh,
     projectId,
     modules,
     items,
@@ -327,11 +343,11 @@ function rememberProject(orgId: number, projectId: number) {
   localStorage.setItem(ORG_PROJECTS_KEY, JSON.stringify({ ...last, [orgId]: projectId }));
 }
 
-/** The project to open in an organization: the one last open there, else its first; 0 when it has none. */
+/** The project to open in an organization: the one last open there, else its first not finished, else its first; 0 when it has none. */
 function projectToOpen(projects: Project[], orgId: number): number {
   const mine = projects.filter((p) => p.orgId === orgId);
   const last = lastProjects()[orgId];
-  return (mine.find((p) => p.id === last) ?? mine[0])?.id ?? 0;
+  return (mine.find((p) => p.id === last) ?? mine.find((p) => p.stage !== "finished") ?? mine[0])?.id ?? 0;
 }
 
 /** The open organization's projects, in the user's order. */
@@ -339,8 +355,9 @@ export function useOrgProjects(): Project[] {
   return useAtlas(useShallow((s) => s.projects.filter((p) => p.orgId === s.orgId)));
 }
 
-/** Opens an organization, at the project last open there. */
+/** Opens an organization, at the project last open there; 全部项目 stays, showing the organization's. */
 export function switchOrg(id: number) {
+  const board = get().view === "projects";
   leaveTrash();
   if (id === get().orgId) return;
   set({ orgId: id });
@@ -348,16 +365,29 @@ export function switchOrg(id: number) {
   const next = projectToOpen(get().projects, id);
   if (next) openProject(next);
   else closeProject();
+  if (board) set({ view: "projects" });
 }
 
 export function setView(view: View) {
   set({ view });
-  if (view === "overview" || view === "trash") void refresh();
+  if (view === "overview" || view === "trash" || view === "projects") void refresh();
 }
 
-/** Back to the project's queue from the trash, as picking a project or module in the sidebar does. */
+/** Back to the project's queue from the trash or 全部项目, as picking a project or module in the sidebar does. */
 function leaveTrash() {
-  if (get().view === "trash") set({ view: "queue" });
+  const view = get().view;
+  if (view === "trash" || view === "projects") set({ view: "queue" });
+}
+
+/** How many days 全部项目 counts the items done in, today included. */
+export const ACTIVITY_DAYS = 28;
+
+/** The start of the first day 全部项目 counts, in local time. */
+export function activitySince(now = Date.now()): number {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - (ACTIVITY_DAYS - 1));
+  return d.getTime();
 }
 
 /** Selects the item alone, or nothing for 0. */
@@ -561,6 +591,17 @@ export async function editProject(id: number, draft: Omit<ProjectDraft, "orgId">
   const p = await Atlas.editProject(id, { ...draft, orgId: 0 });
   mergeProject(p);
   return p;
+}
+
+/** Moves a project to another stage; finished, it goes to 已完结 at the bottom of the sidebar. */
+export async function setProjectStage(id: number, stage: ProjectStage) {
+  const before = get().projects.find((p) => p.id === id);
+  if (!before || before.stage === stage) return;
+  const p = await run(Atlas.setProjectStage(id, stage));
+  if (!p) return;
+  mergeProject(p);
+  if (stage === "finished") toast.success(`「${p.name}」已完结，收进侧栏底部的「已完结」`);
+  else if (before.stage === "finished") toast.success(`「${p.name}」改为${stageInfo(stage).label}，回到项目列表`);
 }
 
 /** Sets the icon chosen for a project, "" for 自动. */
