@@ -308,7 +308,9 @@ func sameOrigin(a, b string) bool {
 }
 
 func (a *app) makeTray() {
-	tray, err := mygo.NewTray(mygo.TrayOptions{ID: "vibe-atlas", Icon: trayIcon, ToolTip: "Vibe Atlas"})
+	// No ID: MyGo numbers an ID'd icon with the high bit set, which
+	// MyDockFinder's top bar draws blank. The only icon gets number 1.
+	tray, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon, ToolTip: "Vibe Atlas"})
 	if err != nil {
 		log.Println("tray:", err)
 		return
