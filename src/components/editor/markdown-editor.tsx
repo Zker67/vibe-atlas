@@ -15,6 +15,7 @@ import { autopair } from "./autopair";
 import { images } from "./images";
 import { type ImmersiveOptions, immersiveExtensions } from "./immersive";
 import { linkAt, livePreview } from "./live-preview";
+import { dashIsRule } from "./setext";
 import { slashMenu } from "./slash";
 import { tables } from "./tables";
 
@@ -107,7 +108,7 @@ export function MarkdownEditor({
           history(),
           drawSelection(),
           EditorView.lineWrapping,
-          markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false }),
+          markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false, extensions: dashIsRule }),
           syntaxHighlighting(codeColors),
           livePreview,
           images,
