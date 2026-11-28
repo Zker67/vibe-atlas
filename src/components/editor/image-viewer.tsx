@@ -79,10 +79,20 @@ function ImageViewer({ names, start, base, onClosed }: { names: string[]; start:
   const fit = natural ? fitScale(natural.w, natural.h) : 1;
   const fitting = Math.abs(view.scale - fit) < 0.001 && view.x === 0 && view.y === 0;
 
-  const close = useCallback(() => {
-    setClosing(true);
-    setTimeout(onClosed, 170);
-  }, [onClosed]);
+  const close = useCallback(() => setClosing(true), []);
+
+  // Closing, it goes once its fade-out ends: at once where motion is
+  // reduced, and in a second at the latest should the fade never end.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!closing || !el) return;
+    const animations = el.getAnimations();
+    if (!animations.length) return onClosed();
+    void Promise.race([
+      Promise.allSettled(animations.map((a) => a.finished)),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]).then(onClosed);
+  }, [closing, onClosed]);
 
   const go = useCallback(
     (step: number) => {

@@ -28,6 +28,7 @@ bun run build    # 之后可按 operations.md 跑打包后冒烟测试，务必�
 - **进行中不设上限**：同一时间可以有多条进行中，不要加「只能有一条」之类的限制。
 - **记录要快**：从全局快捷键呼出到能输入，是第一体验指标；任何改动都不能拖慢这一步。
 - **跨平台**：Windows 先行，但选用的技术和写的代码不能堵死 macOS。
+- **浏览器支持**：Windows 以 WebView2 常青版（最新 Chromium）为准；macOS 跟随系统自带的 WKWebView，最低系统版本等做 macOS 版时再定。在那之前，用到 Safari 还不支持、或还不是 Baseline「广泛可用」的 Web 特性，要做特性检测并留兜底；已有的 Safari 兜底（如输入法判断里的 `keyCode === 229`、`-webkit-backdrop-filter`）不要删。
 - **范围守卫**：当前计划只做第一期。[docs/archive/dropped-ideas.md](./docs/archive/dropped-ideas.md) 里已放弃的功能，用户没有明确要求时不要加回来；想新增功能时，先写进 [docs/backlog.md](./docs/backlog.md)，不要直接加进当前计划。
 
 ## 启动流程

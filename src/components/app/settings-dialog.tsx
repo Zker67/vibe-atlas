@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { Atlas, type AttachMode, type Settings, type Source, type Theme, type UpdateCheck } from "@/mygo";
 import { errorMessage, run, runOk } from "@/lib/api";
-import { acceleratorKeys, acceleratorOf } from "@/lib/keys";
+import { acceleratorKeys, acceleratorOf, isMac } from "@/lib/keys";
 import { SOURCE_NAMES } from "@/lib/session-link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -455,7 +455,7 @@ function heldModifiers(e: KeyboardEvent): string[] {
   if (e.ctrlKey) mods.push("Ctrl");
   if (e.altKey) mods.push("Alt");
   if (e.shiftKey) mods.push("Shift");
-  if (e.metaKey) mods.push(navigator.platform.startsWith("Mac") ? "Cmd" : "Win");
+  if (e.metaKey) mods.push(isMac() ? "Cmd" : "Win");
   return mods;
 }
 

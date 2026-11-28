@@ -1,6 +1,15 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { isMyGo, runtime } from "mygo-runtime";
 
 type AnyKeyboardEvent = KeyboardEvent | ReactKeyboardEvent;
+
+/**
+ * Whether the app runs on macOS, where the ⌘ key is Cmd. MyGo tells; a page
+ * opened in a plain browser (bun run dev:web) falls back on what it says.
+ */
+export function isMac(): boolean {
+  return isMyGo() ? runtime().platform === "darwin" : navigator.platform.startsWith("Mac");
+}
 
 function native(e: AnyKeyboardEvent): KeyboardEvent {
   return "nativeEvent" in e ? e.nativeEvent : e;
@@ -81,7 +90,7 @@ export function acceleratorOf(e: AnyKeyboardEvent): string {
   if (n.ctrlKey) mods.push("Ctrl");
   if (n.altKey) mods.push("Alt");
   if (n.shiftKey) mods.push("Shift");
-  if (n.metaKey) mods.push(navigator.platform.startsWith("Mac") ? "Cmd" : "Win");
+  if (n.metaKey) mods.push(isMac() ? "Cmd" : "Win");
   return [...mods, key].join("+");
 }
 

@@ -7,6 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
+import { toast } from "sonner";
 import { isCardPicture, onPictureLine } from "./images";
 
 const hidden = Decoration.replace({});
@@ -36,18 +37,35 @@ class RuleWidget extends WidgetType {
   }
 }
 
-/** Copies text from a click, falling back on the old way where the page may not use the clipboard. */
-export async function copyText(text: string): Promise<void> {
+/**
+ * Copies text from a click, falling back on the old way where the page may
+ * not use the clipboard. Whether it copied; where neither way did, it says so.
+ */
+export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    const field = document.createElement("textarea");
-    field.value = text;
-    field.style.cssText = "position:fixed;opacity:0;pointer-events:none";
-    document.body.append(field);
-    field.select();
-    document.execCommand("copy");
+    if (legacyCopy(text)) return true;
+    toast.error("复制失败");
+    return false;
+  }
+}
+
+/** Copies through a hidden field, the focus going back to where it was. */
+function legacyCopy(text: string): boolean {
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.readOnly = true;
+  field.style.cssText = "position:fixed;top:0;opacity:0;pointer-events:none";
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
     field.remove();
+    focused?.focus({ preventScroll: true });
   }
 }
 
@@ -80,7 +98,8 @@ class CodeHeaderWidget extends WidgetType {
     // Clicking the button neither moves the cursor nor takes the focus.
     copy.addEventListener("mousedown", (e) => e.preventDefault());
     copy.addEventListener("click", () => {
-      void copyText(this.code).then(() => {
+      void copyText(this.code).then((copied) => {
+        if (!copied) return;
         copy.textContent = "已复制";
         copy.dataset.copied = "";
         window.clearTimeout(timer);

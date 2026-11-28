@@ -349,7 +349,7 @@ function webCard(view: EditorView, box: HTMLElement, url: string, index: number)
       load: show,
       save: () => void saveWebPicture(view, box, index, url),
       open: () => void Atlas.openLink(url).catch((err: unknown) => toast.error(errorMessage(err))),
-      copy: () => void copyText(url).then(() => toast.success("已复制图片地址")),
+      copy: () => void copyText(url).then((copied) => copied && toast.success("已复制图片地址")),
       remove: () => box.isConnected && removePicture(view, box, index),
     });
   });
